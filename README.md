@@ -16,7 +16,7 @@ $build = Join-Path $env:UE_ROOT 'Engine\Build\BatchFiles\Build.bat'
 & $build GameAnimationSample Win64 Development "-Project=$project" -WaitMutex
 ```
 
-The descriptor declares no additional plugin dependencies. [Architecture and verification](Docs/Architecture.md)
+The project uses Enhanced Input, which ships with Unreal Engine 5.9. [Architecture and verification](Docs/Architecture.md)
 
 ## Development
 

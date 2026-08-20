@@ -1,6 +1,6 @@
 # Architecture
 
-`GameAnimationSample.uproject` selects the UE 5.9 Launcher installation and loads the `GameAnimationSample` runtime module. The `GameAnimationSample` and `GameAnimationSampleEditor` targets share that module. The module registers Unreal's default game module implementation and depends on Core, CoreUObject, and Engine. The Game and Editor startup maps resolve to the engine Open World template.
+`GameAnimationSample.uproject` selects the UE 5.9 Launcher installation and loads the `GameAnimationSample` runtime module. The `GameAnimationSample` and `GameAnimationSampleEditor` targets share that module. The module registers Unreal's default game module implementation and depends on Core, CoreUObject, and Engine. The Game and Editor startup maps resolve to the engine Open World template. Project input classes use the engine's Enhanced Input plugin.
 
 Gameplay migration will follow a reference inventory. Shared gameplay and animation behavior should live in C++ wherever practical. Retained asset-driven graphs should have a documented authoring or runtime requirement.
 
