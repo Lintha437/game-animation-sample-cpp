@@ -1,0 +1,13 @@
+{
+  "FileVersion": 3,
+  "EngineAssociation": "5.9",
+  "Category": "Games",
+  "Description": "Native Game Animation Sample project",
+  "Modules": [
+    {
+      "Name": "GameAnimationSample",
+      "Type": "Runtime",
+      "LoadingPhase": "Default"
+    }
+  ]
+}

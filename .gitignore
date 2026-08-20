@@ -1,0 +1,23 @@
+# Unreal-generated output at any depth
+Binaries/
+Intermediate/
+Saved/
+DerivedDataCache/
+
+# Generated IDE state
+.vs/
+.vscode/
+.idea/
+*.sln
+*.suo
+*.user
+*.VC.db
+*.VC.opendb
+*.xcodeproj/
+*.xcworkspace/
+compile_commands.json
+
+# Python caches and OS metadata
+__pycache__/
+.DS_Store
+Thumbs.db
