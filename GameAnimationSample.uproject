@@ -12,6 +12,10 @@
   ],
   "Plugins": [
     {
+      "Name": "SampleLocomotion",
+      "Enabled": true
+    },
+    {
       "Name": "EnhancedInput",
       "Enabled": true
     }
