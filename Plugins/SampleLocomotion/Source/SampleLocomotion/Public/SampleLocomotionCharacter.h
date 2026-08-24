@@ -1,5 +1,7 @@
 #pragma once
 
+/** @file SampleLocomotionCharacter.h */
+
 #include "GameFramework/Character.h"
 #include "SampleLocomotionCharacter.generated.h"
 
@@ -10,9 +12,9 @@ struct FInputActionValue;
 UENUM(BlueprintType)
 enum class ESampleGait : uint8
 {
-    Walk,
-    Run,
-    Sprint
+    Walk,   /**< Low standing speed. */
+    Run,    /**< Default standing speed. */
+    Sprint  /**< High standing speed requested until released. */
 };
 
 /**
@@ -47,6 +49,7 @@ public:
     /**
      * Sets the requested standing gait and updates the CMC speed cap immediately.
      * While crouched, the CMC continues to use MaxWalkSpeedCrouched.
+     * @param Gait Requested gait. Unknown enum values leave the current gait unchanged.
      */
     UFUNCTION(BlueprintCallable, Category = "Locomotion")
     void SetRequestedGait(ESampleGait Gait);
@@ -55,7 +58,10 @@ public:
     UFUNCTION(BlueprintPure, Category = "Locomotion")
     ESampleGait GetRequestedGait() const { return RequestedGait; }
 
-    /** Uses controller yaw while strafing and acceleration-driven yaw otherwise. */
+    /**
+     * Uses controller yaw while strafing and acceleration-driven yaw otherwise.
+     * @param bEnabled Whether to follow controller yaw.
+     */
     UFUNCTION(BlueprintCallable, Category = "Locomotion")
     void SetStrafing(bool bEnabled);
 
@@ -64,7 +70,10 @@ public:
     bool IsStrafing() const { return bStrafing; }
 
 protected:
-    /** Registers callbacks for any non-null action assigned on the character defaults. */
+    /**
+     * Registers callbacks for any non-null action assigned on the character defaults.
+     * @param PlayerInputComponent Pawn-owned input component. Enhanced Input is required.
+     */
     virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 
 private:

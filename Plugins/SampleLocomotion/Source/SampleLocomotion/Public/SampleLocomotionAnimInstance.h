@@ -26,15 +26,19 @@ struct SAMPLELOCOMOTION_API FSampleLocomotionSnapshot
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Locomotion")
     bool bHasAcceleration = false;
 
+    /** The movement component is in its falling mode at capture time. */
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Locomotion")
     bool bIsFalling = false;
 
+    /** The character is physically crouched. A request blocked by geometry can differ. */
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Locomotion")
     bool bIsCrouched = false;
 
+    /** The native pawn requests controller-relative facing. */
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Locomotion")
     bool bIsStrafing = false;
 
+    /** Requested standing gait. Crouching or falling can result in a different actual speed. */
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Locomotion")
     ESampleGait RequestedGait = ESampleGait::Run;
 
@@ -42,6 +46,8 @@ struct SAMPLELOCOMOTION_API FSampleLocomotionSnapshot
      * Captures movement state without retaining an actor reference.
      * Any Character supplies velocity, stance and falling state. The native subclass
      * also supplies gait and rotation intent. A missing character yields a neutral sample.
+     * @param Character Observed character. May be null during preview or owner changes.
+     * @return A fresh value snapshot that does not need the character to remain alive.
      * @pre Call on the game thread.
      */
     static FSampleLocomotionSnapshot Capture(const ACharacter* Character);
@@ -64,7 +70,10 @@ public:
     /** Clears transient data when an animation instance is initialized or reused. */
     virtual void NativeInitializeAnimation() override;
 
-    /** Captures the current skeletal mesh owner before graph update. */
+    /**
+     * Captures the current skeletal mesh owner before graph update.
+     * @param DeltaSeconds Animation update interval used by the base class.
+     */
     virtual void NativeUpdateAnimation(float DeltaSeconds) override;
 
 protected:
