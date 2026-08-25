@@ -17,6 +17,10 @@ Prepare an isolated workspace as described in the [README](../README.md). Its ma
 
 The copied sample continues to run its existing gameplay Blueprints. The plugin is loaded alongside them. A parity comparison still requires binding the native implementation to a test pawn and comparing against the sample under equivalent inputs.
 
+The isolated workspace built its Win64 Development Editor target. In unattended `UnrealEditor-Cmd.exe -game -NullRHI` smoke runs, all five level worlds started for play and exited with code zero. A content-only control run of `DefaultLevel` reproduced the 39 widget Blueprint compiler messages in the native workspace with no difference in the compiler messages. Headless startup verifies package loading and world initialization. Rendered gameplay and widget behavior are **Not run**.
+
+SHA-256 comparison matched all 3,899 files under the installed sample's `Content/` and `Build/` directories with the isolated workspace. On this machine, selecting `-CompilerVersion=14.44.35207` avoided a missing linker library in another installed toolchain.
+
 ## Retained authoring
 
 - Animation Blueprints, Pose Search, Chooser, curves, IK rigs, retargeters and Control Rigs encode authored pose behavior and dependencies. Preserve their interfaces while migrating reusable calculations.
