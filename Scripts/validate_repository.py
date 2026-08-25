@@ -102,7 +102,8 @@ def check_ignore_and_lfs(project, paths, errors):
 def check_text(paths, errors):
     for path in sorted(paths):
         is_config = path.startswith("Config/") and path.endswith(".ini")
-        is_cpp = path.startswith("Source/") and PurePosixPath(path).suffix in {".cpp", ".h", ".hpp", ".inl"}
+        is_source = path.startswith("Source/") or re.match(r"^Plugins/[^/]+/Source/", path)
+        is_cpp = is_source and PurePosixPath(path).suffix in {".cpp", ".h", ".hpp", ".inl"}
         if not (is_config or is_cpp):
             continue
         try:
