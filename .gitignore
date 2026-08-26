@@ -6,6 +6,7 @@ DerivedDataCache/
 
 # Generated IDE state
 .vs/
+/.vsconfig
 .vscode/
 .idea/
 *.sln
