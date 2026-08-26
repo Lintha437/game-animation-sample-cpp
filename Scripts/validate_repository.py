@@ -77,6 +77,7 @@ def check_ignore_and_lfs(project, paths, errors):
         for name in ("Binaries", "Intermediate", "Saved", "DerivedDataCache")
     ]
     generated = [path.removeprefix("./") for path in generated]
+    generated.extend([".vsconfig", f"{project}.sln", f"{project}.slnx"])
     for path in ignored(keep):
         errors.append(f"Project input is ignored: {path}")
     for path in sorted(set(generated) - set(ignored(generated))):
