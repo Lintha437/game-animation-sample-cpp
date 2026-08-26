@@ -1,0 +1,13 @@
+PROJECT_NAME           = "Sample Locomotion"
+OUTPUT_DIRECTORY       = Saved/Doxygen
+INPUT                  = Plugins/SampleLocomotion/Source/SampleLocomotion/Public
+FILE_PATTERNS          = *.h
+RECURSIVE              = YES
+GENERATE_LATEX          = NO
+QUIET                  = YES
+WARN_AS_ERROR          = FAIL_ON_WARNINGS
+JAVADOC_AUTOBRIEF      = YES
+MACRO_EXPANSION        = YES
+EXPAND_ONLY_PREDEF     = YES
+PREDEFINED             = SAMPLELOCOMOTION_API= "UCLASS(...)=" "USTRUCT(...)=" "UENUM(...)=" \
+                         "UPROPERTY(...)=" "UFUNCTION(...)=" "GENERATED_BODY()="

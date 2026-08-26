@@ -1,0 +1,22 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "0.1",
+  "FriendlyName": "Sample Locomotion",
+  "Description": "Native capsule locomotion with an authorable input and animation interface.",
+  "Category": "Gameplay",
+  "CanContainContent": false,
+  "Modules": [
+    {
+      "Name": "SampleLocomotion",
+      "Type": "Runtime",
+      "LoadingPhase": "Default"
+    }
+  ],
+  "Plugins": [
+    {
+      "Name": "EnhancedInput",
+      "Enabled": true
+    }
+  ]
+}
