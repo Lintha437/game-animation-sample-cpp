@@ -130,7 +130,7 @@ def main():
         parser.error("run from the repository root")
 
     paths = set(nul_fields(git("ls-files", "-z")))
-    required = {".gitignore", ".gitattributes", ".editorconfig", "README.md", "AGENTS.md", "Docs/Architecture.md"}
+    required = {".gitignore", ".gitattributes", ".editorconfig", "README.md", "CONTRIBUTING.md", "Docs/Architecture.md"}
     errors = [f"Missing indexed file: {path}" for path in sorted(required - paths)]
     check_project(args.project, paths, args.bootstrap, errors)
     check_ignore_and_lfs(args.project, paths, errors)
