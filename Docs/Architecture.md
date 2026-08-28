@@ -1,10 +1,10 @@
 # Architecture
 
-`GameAnimationSample.uproject` selects the UE 5.9 Launcher installation and loads the `GameAnimationSample` runtime module. The `GameAnimationSample` and `GameAnimationSampleEditor` targets share that module. The module registers Unreal's default game module implementation and depends on Core, CoreUObject, and Engine. The Game and Editor startup maps resolve to the engine Open World template. Project input classes use the engine's Enhanced Input plugin.
+`GameAnimSampleCpp.uproject` selects the UE 5.9 Launcher installation and loads the `GameAnimationSampleCpp` runtime module. The `GameAnimationSampleCpp` and `GameAnimationSampleCppEditor` targets share that module. The module registers Unreal's default game module implementation and depends on Core, CoreUObject, and Engine. The default configuration opens the engine Open World template. The local sample import uses Unreal's project-level `User*.ini` overrides to open the sample's `DefaultLevel` and preserve its animation, input and collision settings. Project input classes use the engine's Enhanced Input plugin.
 
 `SampleLocomotion` owns reusable capsule movement intent, the game-thread animation snapshot, and synchronous ledge probes. Its runtime dependencies are Core, CoreUObject, Engine and Enhanced Input. It owns no input contexts, maps or animation packages. The host project owns player input contexts, character presentation, animation graphs and action execution. See the [migration guide](Migration.md) for the integration boundaries.
 
-The [local reference workspace](../README.md#local-reference-workspace) adds the sample's configuration and packages to an isolated copy of the native project. Its original gameplay entry points continue to use their authored graphs. [Reference behavior](ReferenceBehavior.md) records the features retained in that copy and the checks needed for parity.
+The [local sample import](../README.md#local-reference-workspace) adds the sample's configuration and packages to this checkout or an isolated workspace. The project module's `USampleAnimationTickComponent` runs the pre-movement and post-animation dispatch in the two migrated component assets. The portable plugin and remaining authored graphs continue to use the host's input and asset setup. [Reference behavior](ReferenceBehavior.md) records the migration procedure and parity checks.
 
 ## Verification
 
