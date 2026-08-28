@@ -1,8 +1,8 @@
 using UnrealBuildTool;
 
-public class GameAnimationSample : ModuleRules
+public class GameAnimationSampleCpp : ModuleRules
 {
-    public GameAnimationSample(ReadOnlyTargetRules target) : base(target)
+    public GameAnimationSampleCpp(ReadOnlyTargetRules target) : base(target)
     {
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
         PrivateDependencyModuleNames.AddRange(new[] { "Core", "CoreUObject", "Engine" });

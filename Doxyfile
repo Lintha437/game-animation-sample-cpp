@@ -1,6 +1,6 @@
-PROJECT_NAME           = "Sample Locomotion"
+PROJECT_NAME           = "GameAnimationSampleCpp"
 OUTPUT_DIRECTORY       = Saved/Doxygen
-INPUT                  = Plugins/SampleLocomotion/Source/SampleLocomotion/Public
+INPUT                  = Source/GameAnimationSampleCpp Plugins/SampleLocomotion/Source/SampleLocomotion/Public
 FILE_PATTERNS          = *.h
 RECURSIVE              = YES
 GENERATE_LATEX          = NO
@@ -9,5 +9,5 @@ WARN_AS_ERROR          = FAIL_ON_WARNINGS
 JAVADOC_AUTOBRIEF      = YES
 MACRO_EXPANSION        = YES
 EXPAND_ONLY_PREDEF     = YES
-PREDEFINED             = SAMPLELOCOMOTION_API= "UCLASS(...)=" "USTRUCT(...)=" "UENUM(...)=" \
+PREDEFINED             = GAMEANIMATIONSAMPLECPP_API= SAMPLELOCOMOTION_API= "UCLASS(...)=" "USTRUCT(...)=" "UENUM(...)=" \
                          "UPROPERTY(...)=" "UFUNCTION(...)=" "GENERATED_BODY()="
