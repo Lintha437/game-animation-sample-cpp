@@ -39,7 +39,7 @@ Player and NPC behavior need separate coverage. When replacing a generated class
 
 Audit tick groups and prerequisites for character movement and animation. Verify pose queries, StateTree decisions, root motion, motion warping and IK at the same update phase. Test cancellation and cleanup for interrupted montages, lost targets, unpossession and level travel. Run identical inputs in the reference and destination and record observable results such as state transitions, montage sections and selected poses.
 
-Identify every retained asset individually. Animation clips, meshes, skeletons, sound, curves, databases and tunable values are asset data. The stated full migration also requires replacing executable Animation Blueprint state machines, graph logic, notifies, Control Rig logic, widget event graphs and level scripts, or documenting a specific scope exception approved by the project owner. A data-only Blueprint is still a Blueprint class dependency and must be tracked until its data and references have moved.
+Keep animation clips, skeletons, retargeters, Pose Search data, authored pose graphs, blending, animation playback decisions and rig evaluation in Unreal assets. Move all other runtime logic into C++, including input handling, character state, movement, traversal, and player and NPC interaction requests, eligibility, execution and cleanup. Feed native character state into the retained animation graphs. Preserve the graph interfaces, update phase and authored tuning. Record each migrated entry point and any non-animation logic still executed by a Blueprint.
 
 ### Animation tick dispatch
 
@@ -84,5 +84,19 @@ $script = (Resolve-Path Scripts/migrate_level_teleporter.py).Path
 ```
 
 The script backs up the original local package under `Saved/BlueprintMigration/LevelTeleporter/`. On UE 5.9.0 build 60738873, `GameAnimationSampleCpp.Migration.LevelTeleporter` passed. It verified the authored components, label, and queued travel URL through the overlap delegate, and checked that a missing map or actor queues no travel. Rendered transitions and multiplayer client travel are **Not run**.
+
+### CMC character crouch speed
+
+The local `SandboxCharacter_CMC` asset inherits from `ASampleCmcCharacter`. Its existing pre-movement path calls the native crouch-speed calculation, which uses its authored strafe curve and forward, lateral and backward speeds. The jump gate for the `DefaultSlot` montage remains in its original Blueprint graph. The Animation Blueprints, animation data and remaining character graphs stay in place.
+
+After building the Editor target, close the destination Editor and run these commands from the repository root.
+
+```powershell
+$script = (Resolve-Path Scripts/migrate_cmc_crouch_speed.py).Path
+& $editor $project -run=PythonScript "-script=$script" -Unattended -NullRHI
+& $editor $project -Unattended -NullRHI '-ExecCmds=Automation RunTests GameAnimationSampleCpp.Migration.CmcCrouchSpeed' '-TestExit=Automation Test Queue Empty'
+```
+
+The script verifies the reference package and backs it up under `Saved/BlueprintMigration/CmcCrouchSpeed/`. It checks that the curve reference and crouch speeds survive reparenting. On UE 5.9.0 build 60738873, `GameAnimationSampleCpp.Migration.CmcCrouchSpeed` passed for the saved class, the retained Blueprint gate, directional speeds and orient-to-movement. The CMC and Mover Animation Blueprint packages still match the installed reference by SHA-256. Interactive montage and rendered movement comparisons are **Not run**.
 
 See the [Epic sample documentation](https://dev.epicgames.com/documentation/unreal-engine/game-animation-sample-project-in-unreal-engine) for the sample's public controls and architecture.
