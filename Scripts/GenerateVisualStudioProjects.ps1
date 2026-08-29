@@ -10,7 +10,7 @@ if (-not $EngineRoot) {
 }
 
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$project = Join-Path $repositoryRoot 'GameAnimationSample.uproject'
+$project = Join-Path $repositoryRoot 'GameAnimSampleCpp.uproject'
 $engine = Join-Path (Resolve-Path -LiteralPath $EngineRoot).Path 'Engine'
 $version = Get-Content -Raw -LiteralPath (Join-Path $engine 'Build/Build.version') | ConvertFrom-Json
 if ($version.MajorVersion -ne 5 -or $version.MinorVersion -ne 9) {
@@ -24,10 +24,10 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $solutions = @(
-    'GameAnimationSample.sln',
-    'GameAnimationSample.slnx',
-    'Automation_GameAnimationSample.sln',
-    'Automation_GameAnimationSample.slnx'
+    'GameAnimSampleCpp.sln',
+    'GameAnimSampleCpp.slnx',
+    'Automation_GameAnimSampleCpp.sln',
+    'Automation_GameAnimSampleCpp.slnx'
 )
 
 foreach ($name in $solutions) {
@@ -55,7 +55,7 @@ foreach ($name in $solutions) {
     Write-Output $path
 }
 
-$nativeProject = Join-Path $repositoryRoot 'Intermediate/ProjectFiles/GameAnimationSample.vcxproj'
+$nativeProject = Join-Path $repositoryRoot 'Intermediate/ProjectFiles/GameAnimSampleCpp.vcxproj'
 foreach ($file in @('SampleLocomotionCharacter.cpp', 'SampleLocomotionAnimInstance.cpp',
                     'SampleTraversalProbeComponent.cpp')) {
     if (-not (Select-String -LiteralPath $nativeProject -SimpleMatch $file -Quiet)) {

@@ -1,4 +1,4 @@
-# GameAnimationSample Development Instructions
+# GameAnimationSampleCpp Development Instructions
 
 - Read [README.md](README.md) and [the architecture notes](Docs/Architecture.md). Inspect Git status and the existing implementation before changing it.
 - Preserve the PascalCase Unreal project, runtime module, target names, and asset paths. Use English in source, documentation, and concise commit summaries.

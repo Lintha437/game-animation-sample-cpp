@@ -32,6 +32,8 @@ def ignored(paths):
 
 
 def check_project(project, paths, bootstrap, errors):
+    if len(project) > 20:
+        errors.append("Unreal project descriptor names must contain at most 20 characters.")
     descriptor = f"{project}.uproject"
     descriptors = {path for path in paths if "/" not in path and path.endswith(".uproject")}
     if bootstrap:

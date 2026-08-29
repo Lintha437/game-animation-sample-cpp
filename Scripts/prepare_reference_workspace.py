@@ -1,14 +1,17 @@
 """Prepare an independent, local Unreal project with a licensed reference sample."""
 
 import argparse
+import filecmp
 import json
 from pathlib import Path
 import re
 import shutil
+import subprocess
 import tempfile
 
 
-PROJECT = "GameAnimationSample.uproject"
+PROJECT = "GameAnimSampleCpp.uproject"
+REFERENCE_PROJECT = "GameAnimationSample.uproject"
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -25,13 +28,75 @@ def copy_source(source, destination):
     )
 
 
-def prepare(reference, workspace_root, name):
-    descriptor = reference / PROJECT
+def check_reference(reference):
+    descriptor = reference / REFERENCE_PROJECT
     startup_map = reference / "Content" / "Levels" / "DefaultLevel.umap"
     if not descriptor.is_file() or not startup_map.is_file() or not (reference / "Config").is_dir():
         raise ValueError("Select an installed Game Animation Sample project with its original Config and Content.")
     if reference == ROOT or ROOT in reference.parents or reference in ROOT.parents:
         raise ValueError("The installed sample must be in a directory separate from this checkout.")
+    return descriptor
+
+
+def install_locally(reference):
+    check_reference(reference)
+    assets = sorted(path.relative_to(reference) for path in (reference / "Content").rglob("*") if path.is_file())
+    configs = {}
+    for path in (reference / "Config").glob("Default*.ini"):
+        data = path.read_text(encoding="utf-8-sig")
+        if path.name == "DefaultEngine.ini":
+            data = re.sub(r"(?ms)^\[/Script/AndroidFileServerEditor\.AndroidFileServerRuntimeSettings\]\n.*?(?=^\[|\Z)", "", data)
+        if path.name == "DefaultGame.ini":
+            data = re.sub(r"(?m)^(?:ProjectID|ProjectName)=[^\n]*\n?", "", data)
+        configs[Path("Config") / ("User" + path.name.removeprefix("Default"))] = data.encode("utf-8")
+
+    tracked = subprocess.check_output(
+        ["git", "ls-files", "-z", "--", "Content", "Config"], cwd=ROOT, encoding="utf-8"
+    ).split("\0")
+    paths = set(assets) | configs.keys()
+    if any(not (ROOT / path).resolve().is_relative_to(ROOT) for path in paths):
+        raise ValueError("An imported path resolves outside this checkout.")
+    conflicts = {Path(path) for path in tracked} & paths
+    if conflicts:
+        raise ValueError(f"An imported path is tracked: {min(conflicts)}")
+
+    for path in assets:
+        source = reference / path
+        destination = ROOT / path
+        if destination.exists() and not filecmp.cmp(source, destination, shallow=False):
+            raise ValueError(f"An existing local asset differs: {path}")
+    for path, data in configs.items():
+        destination = ROOT / path
+        if destination.exists() and destination.read_bytes() != data:
+            raise ValueError(f"An existing local configuration differs: {path}")
+
+    exclude = Path(subprocess.check_output(
+        ["git", "rev-parse", "--path-format=absolute", "--git-path", "info/exclude"],
+        cwd=ROOT, encoding="utf-8"
+    ).strip())
+    exclude.parent.mkdir(parents=True, exist_ok=True)
+    current = set(exclude.read_text(encoding="utf-8").splitlines()) if exclude.exists() else set()
+    patterns = [
+        "/" + re.sub(r"([\\\[\]*?])", r"\\\1", path.as_posix()) for path in sorted(paths)
+    ]
+    with exclude.open("a", encoding="utf-8") as handle:
+        handle.write("".join("\n" + pattern for pattern in patterns if pattern not in current))
+        handle.write("\n")
+
+    for path in assets:
+        destination = ROOT / path
+        if not destination.exists():
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(reference / path, destination)
+    for path, data in configs.items():
+        destination = ROOT / path
+        if not destination.exists():
+            destination.write_bytes(data)
+    return ROOT / PROJECT
+
+
+def prepare(reference, workspace_root, name):
+    descriptor = check_reference(reference)
 
     workspace_root = workspace_root.resolve()
     generated_root = (ROOT / "Saved" / "ReferenceWorkspaces").resolve()
@@ -77,12 +142,15 @@ def main():
     parser.add_argument("--workspace-root", type=Path, default=Path(tempfile.gettempdir()) / "GAS",
                         help="Parent of the new workspace. Choose a short path for Windows builds.")
     parser.add_argument("--name", default="Reference", help="Name of the new workspace.")
+    parser.add_argument("--install-here", action="store_true",
+                        help="Copy sample assets and local configuration into this checkout.")
     args = parser.parse_args()
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,47}", args.name):
         parser.error("--name must use up to 48 ASCII letters, digits, underscores or hyphens")
     try:
-        print(prepare(args.reference.resolve(), args.workspace_root, args.name))
-    except (OSError, ValueError, KeyError) as error:
+        reference = args.reference.resolve()
+        print(install_locally(reference) if args.install_here else prepare(reference, args.workspace_root, args.name))
+    except (OSError, ValueError, KeyError, subprocess.CalledProcessError) as error:
         parser.exit(1, f"{error}\n")
 
 
