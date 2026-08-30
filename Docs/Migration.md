@@ -1,6 +1,12 @@
 # Migrate Sample Locomotion into another UE5 project
 
-The source plugin provides a native CMC character, a game-thread animation snapshot, and a traversal geometry probe. The reference sandbox is a separate, local test project. Use Unreal Engine 5.9 and a C++ project built with the associated toolchain.
+Use Unreal Engine 5.9 and a C++ project built with the associated toolchain. Start with the portable plugin if your project already owns possession, input, and animation. Use the licensed reference sandbox as a comparison level if you need to carry over the sample's authored animation stack.
+
+| Source | Destination responsibility |
+| --- | --- |
+| `SampleLocomotion` runtime plugin | Install the plugin and integrate its CMC pawn, animation snapshot, or traversal geometry probe independently. |
+| Project runtime module `GameAnimationSampleCpp` | Review the sample-specific character, tick, notify, and travel adapters before porting any of them. Their existing integrations use imported sample package paths and interfaces. |
+| Locally imported Epic packages | Acquire and migrate the licensed assets separately. Keep the authored animation interfaces and verify each asset's dependencies in the destination. |
 
 ## Install the runtime plugin
 
@@ -12,6 +18,14 @@ The source plugin provides a native CMC character, a game-thread animation snaps
 6. Use `USampleLocomotionAnimInstance` as the parent of a new or compatible Animation Blueprint, or capture `FSampleLocomotionSnapshot` in a host animation instance on the game thread. Use Property Access for worker-thread graph evaluation. The snapshot provides horizontal speed, signed local direction, velocity, acceleration activity, crouch and fall state. The native character also supplies gait and rotation intent.
 7. For a traversal experiment, attach `USampleTraversalProbeComponent` to the pawn and pass its capsule and the desired heading. Choose a collision channel that blocks traversable geometry and headroom. Resolve the result through your own Chooser or gameplay action and recheck collision before playback. The probe does a top and destination clearance check. It does not establish a clear swept path, select a montage, drive motion warping, or manage movement mode.
 
+## Integrate with an existing production character
+
+1. Decide where input, authoritative movement, and interaction state live in the destination. Route input through its existing possession lifecycle. Keep one writer for movement intent and one owner for applying movement settings each tick.
+2. Add an adapter from gameplay state to the Animation Blueprint's existing inputs before replacing its pawn references. Preserve the meaning of all enum values and booleans and record when each value is produced relative to movement and animation evaluation. Run any `UObject` lookups on the game thread and pass value snapshots to worker-thread graph evaluation.
+3. If you are porting the sample-specific CMC pawn, map the standing and crouching speeds, strafe curve, gait, and input state to typed fields in the destination. The reference adapter resolves fields on the original imported Blueprint so its local defaults and callers can survive migration. Use the destination's own state and tuning types for a new pawn.
+4. Record the existing movement and animation tick prerequisites before replacing any dispatchers. Check floor, falling, possession, and movement mode transitions in PIE. Confirm the Animation Blueprint still receives the intended frame's state when parallel animation evaluation is enabled.
+5. Keep authored montage gates, phase transitions, blending, and poses in animation assets. Give the gameplay action a clear owner for claiming targets, validating movement and collision, and releasing state on interruption. Check each action at both its success boundary and its cleanup boundary.
+
 ## Bring in licensed animation data
 
 When using the Epic sample assets, acquire the sample under the applicable terms. In a scratch branch of the destination project, use Content Browser → Asset Actions → Migrate, review Asset Report dependencies, and target the destination's `Content/` directory. Review package name conflicts before accepting an overwrite. Preserve referenced package paths and enable required plugins for each migrated feature. For instance, a Motion Matching graph needs Pose Search assets and may also depend on Chooser, Motion Warping, Animation Warping, and Control Rig.
@@ -20,10 +34,12 @@ Skeleton, IK Rig, retargeter, Pose Search schema, databases and tuning curves fo
 
 ## Verify in the destination
 
+- Establish a reference capture before wiring the new code. Record the test level, movement component, input device, initial transform, and the expected state, montage, and interruption outcome for each replay.
 - Build the Editor and Game targets and cook a representative map.
 - Use the intended controller to compare walking, running, sprint release, crouch clearance, falling, landing, and camera-relative input with your target behavior. Repeat with digital and analog input.
 - Exercise possession changes and input context changes with keys held. If your project uses multiplayer, implement and test prediction and reconciliation for gait and rotation intent before relying on them.
 - Check Motion Matching selections, traversal failure paths, and retargeted characters under the destination's collision and animation configuration.
+- Exercise interaction rejection and interruption before, during, and after playback. Check that input, movement mode, collision, warp targets, and any claimed slot return to their expected state on loss of possession, actor destruction, and level travel.
 - Package the representative map and repeat input, asset loading, and performance checks under the target platform budget.
 
 The plugin has no runtime dependency on the sample project or its assets. See [Reference behavior](ReferenceBehavior.md) for remaining equivalence work.

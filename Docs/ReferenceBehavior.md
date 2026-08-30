@@ -99,4 +99,20 @@ $script = (Resolve-Path Scripts/migrate_cmc_crouch_speed.py).Path
 
 The script verifies the reference package and backs it up under `Saved/BlueprintMigration/CmcCrouchSpeed/`. It checks that the curve reference and crouch speeds survive reparenting. On UE 5.9.0 build 60738873, `GameAnimationSampleCpp.Migration.CmcCrouchSpeed` passed for the saved class, the retained Blueprint gate, directional speeds and orient-to-movement. The CMC and Mover Animation Blueprint packages still match the installed reference by SHA-256. Interactive montage and rendered movement comparisons are **Not run**.
 
+### CMC movement settings
+
+The crouch migration is a prerequisite. The next migration switches input scaling, sprint eligibility, pre-CMC rotation, acceleration, ground friction, and standing speed to the inherited native functions. The sample's gait selection, input writers, and pre-CMC dispatcher continue to invoke those functions through the existing interfaces. The imported Blueprint still owns the gait and input state fields and the movement tuning. Animation playback and its montage gate stay authored.
+
+After building the Editor target, close the destination Editor and run the movement migration from the repository root.
+
+```powershell
+$script = (Resolve-Path Scripts/migrate_cmc_movement.py).Path
+& $editor $project -run=PythonScript "-script=$script" -Unattended -NullRHI
+& $editor $project -Unattended -NullRHI '-ExecCmds=Automation RunTests GameAnimationSampleCpp.Migration.CmcMovement' '-TestExit=Automation Test Queue Empty'
+```
+
+The movement script preserves a separate pre-change package in `Saved/BlueprintMigration/CmcMovement/`. To roll back this step locally, close the destination Editor and restore that package to `Content/Blueprints/SandboxCharacter_CMC.uasset` along with the matching prior code revision. The original installed sample is a separate project.
+
+On UE 5.9.0 build 60738873, both Win64 Development targets built successfully. The movement script rerun made no edits and all five `GameAnimationSampleCpp.Migration` tests passed. The movement test loads the saved CMC class and checks native function resolution, fixed and variable input, planar sprint acceleration and ground friction, rotation under aim and falling, and sprint intent. The installed CMC and Mover Animation Blueprints still match the original samples by SHA-256. Rendered, multiplayer and packaged behavior are **Not run**.
+
 See the [Epic sample documentation](https://dev.epicgames.com/documentation/unreal-engine/game-animation-sample-project-in-unreal-engine) for the sample's public controls and architecture.
