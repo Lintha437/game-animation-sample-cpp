@@ -8,6 +8,11 @@
       "Name": "GameAnimationSampleCpp",
       "Type": "Runtime",
       "LoadingPhase": "Default"
+    },
+    {
+      "Name": "GameAnimationSampleCppEditor",
+      "Type": "Editor",
+      "LoadingPhase": "Default"
     }
   ],
   "Plugins": [

@@ -1,6 +1,6 @@
 PROJECT_NAME           = "GameAnimationSampleCpp"
 OUTPUT_DIRECTORY       = Saved/Doxygen
-INPUT                  = Source/GameAnimationSampleCpp Plugins/SampleLocomotion/Source/SampleLocomotion/Public
+INPUT                  = Source/GameAnimationSampleCpp Source/GameAnimationSampleCppEditor Plugins/SampleLocomotion/Source/SampleLocomotion/Public
 FILE_PATTERNS          = *.h
 RECURSIVE              = YES
 GENERATE_LATEX          = NO

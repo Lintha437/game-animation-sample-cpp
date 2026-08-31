@@ -1,6 +1,8 @@
 # Architecture
 
-`GameAnimSampleCpp.uproject` selects the UE 5.9 Launcher installation and loads the `GameAnimationSampleCpp` runtime module. The `GameAnimationSampleCpp` and `GameAnimationSampleCppEditor` targets share that module. The module registers Unreal's default game module implementation and depends on Core, CoreUObject, and Engine. The default configuration opens the engine Open World template. The local sample import uses Unreal's project-level `User*.ini` overrides to open the sample's `DefaultLevel` and preserve its animation, input and collision settings. Project input classes use the engine's Enhanced Input plugin.
+`GameAnimSampleCpp.uproject` selects the UE 5.9 Launcher installation and loads the `GameAnimationSampleCpp` runtime module. Both targets share that module, which depends on Core, CoreUObject, Engine, AnimGraphRuntime and Enhanced Input. The Editor target also loads `GameAnimationSampleCppEditor` for local asset migration. Its graph operations preserve existing Blueprint connections while switching call sites to native functions. Game targets exclude the Editor module.
+
+The default configuration opens the engine Open World template. The local sample import uses Unreal's project-level `User*.ini` overrides to open the sample's `DefaultLevel` and preserve its animation, input and collision settings.
 
 `SampleLocomotion` owns reusable capsule movement intent, the game-thread animation snapshot, and synchronous ledge probes. Its runtime dependencies are Core, CoreUObject, Engine and Enhanced Input. It owns no input contexts, maps or animation packages. The host project owns player input contexts, character presentation, animation graphs and action execution. See the [migration guide](Migration.md) for the integration boundaries.
 
