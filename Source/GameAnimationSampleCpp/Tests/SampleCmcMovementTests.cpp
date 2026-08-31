@@ -2,8 +2,15 @@
 
 #if WITH_DEV_AUTOMATION_TESTS
 
+#include "EnhancedInputComponent.h"
+#include "EnhancedPlayerInput.h"
+#include "Engine/Engine.h"
+#include "Engine/LocalPlayer.h"
+#include "Engine/EngineBaseTypes.h"
 #include "Engine/World.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/PlayerController.h"
+#include "InputAction.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/ScopeExit.h"
 #include "UObject/UnrealType.h"
@@ -24,6 +31,20 @@ namespace
             return true;
         }
         return false;
+    }
+
+    int64 GetEnumValue(const UObject& Owner, FName Name)
+    {
+        const FProperty* Property = Owner.GetClass()->FindPropertyByName(Name);
+        if (const FEnumProperty* Enum = CastField<FEnumProperty>(Property))
+        {
+            return Enum->GetUnderlyingProperty()->GetSignedIntPropertyValue(Enum->ContainerPtrToValuePtr<void>(&Owner));
+        }
+        if (const FByteProperty* Byte = CastField<FByteProperty>(Property))
+        {
+            return Byte->GetPropertyValue_InContainer(&Owner);
+        }
+        return INDEX_NONE;
     }
 }
 
@@ -117,6 +138,100 @@ bool FSampleCmcMovementMigrationTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Ordinary movement orients to input"), Movement->bOrientRotationToMovement);
     TestEqual(TEXT("Grounded turns are immediate"), Movement->RotationRate.Yaw, -1.0);
     TestTrue(TEXT("Orient-to-movement allows requested sprint"), Character->CanSprint());
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FSampleCmcGaitMigrationTest,
+    "GameAnimationSampleCpp.Migration.CmcGait",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FSampleCmcGaitMigrationTest::RunTest(const FString& Parameters)
+{
+    UClass* Class = LoadClass<ASampleCmcCharacter>(
+        nullptr, TEXT("/Game/Blueprints/SandboxCharacter_CMC.SandboxCharacter_CMC_C"));
+    if (!TestNotNull(TEXT("Saved CMC class"), Class))
+    {
+        return false;
+    }
+    const UFunction* Update = Class->FindFunctionByName(TEXT("UpdateMovementBeforeSimulation"));
+    TestTrue(TEXT("Pre-movement update resolves to native code"),
+        Update && Update->GetOuter() == ASampleCmcCharacter::StaticClass());
+    TestNull(TEXT("Original gait graph was removed"), Class->FindFunctionByName(TEXT("GetDesiredGait")));
+
+    UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
+    if (!TestNotNull(TEXT("Transient game world"), World))
+    {
+        return false;
+    }
+    ON_SCOPE_EXIT { World->DestroyWorld(false); };
+    World->InitializeActorsForPlay(FURL());
+    ASampleCmcCharacter* Character = World->SpawnActor<ASampleCmcCharacter>(Class);
+    APlayerController* Controller = World->SpawnActor<APlayerController>();
+    if (!TestNotNull(TEXT("CMC character"), Character) || !TestNotNull(TEXT("Local controller"), Controller))
+    {
+        return false;
+    }
+    const FName Gait(TEXT("Gait"));
+    const FName StickMode(TEXT("MovementStickMode"));
+    UCharacterMovementComponent* Movement = Character->GetCharacterMovement();
+    SetEnumValue(*Character, StickMode, 0);
+    Character->UpdateMovementBeforeSimulation();
+    TestEqual(TEXT("Fixed single-gait mode runs without an input component"), GetEnumValue(*Character, Gait), int64(1));
+    TestEqual(TEXT("Idle walking deceleration"), Movement->BrakingDecelerationWalking, 2000.0f);
+
+    Controller->Player = NewObject<ULocalPlayer>(GEngine);
+    Controller->Possess(Character);
+    Character->PawnClientRestart();
+    UEnhancedInputComponent* Input = Cast<UEnhancedInputComponent>(Character->InputComponent);
+    UInputAction* CameraMove = LoadObject<UInputAction>(nullptr, TEXT("/Game/Input/IA_Move.IA_Move"));
+    UInputAction* WorldMove = LoadObject<UInputAction>(nullptr, TEXT("/Game/Input/IA_Move_WorldSpace.IA_Move_WorldSpace"));
+    UFunction* PreTick = Class->FindFunctionByName(TEXT("PreCMCTick"));
+    if (!TestNotNull(TEXT("Possession creates an Enhanced Input component"), Input) ||
+        !TestNotNull(TEXT("Camera-relative action"), CameraMove) ||
+        !TestNotNull(TEXT("World-relative action"), WorldMove) ||
+        !TestNotNull(TEXT("Pre-CMC dispatch entry"), PreTick))
+    {
+        return false;
+    }
+
+    UEnhancedPlayerInput* PlayerInput = NewObject<UEnhancedPlayerInput>(Controller);
+    Controller->PlayerInput = PlayerInput;
+    const TArray<UInputComponent*> Stack{Input};
+    const auto ApplyMove = [&](const UInputAction* Action, double Strength)
+    {
+        PlayerInput->InjectInputForAction(Action, FInputActionValue(FVector2D(0.0, Strength)));
+        PlayerInput->ProcessInputStack(Stack, 1.0f / 60.0f, false);
+        TestTrue(TEXT("Enhanced Input updates the bound raw action value"),
+            FMath::IsNearlyEqual(Input->GetBoundActionValue(Action).Get<FVector2D>().Size(), Strength, 1.e-4));
+        Character->ProcessEvent(PreTick, nullptr);
+    };
+
+    TestTrue(TEXT("Select fixed dual-gait mode"), SetEnumValue(*Character, StickMode, 1));
+    Character->ProcessEvent(PreTick, nullptr);
+    TestEqual(TEXT("Pre-CMC dispatch applies gait at zero action magnitude"), GetEnumValue(*Character, Gait), int64(0));
+    ApplyMove(CameraMove, 0.3);
+    TestEqual(TEXT("Fixed dual-gait mode walks at below-threshold raw input"), GetEnumValue(*Character, Gait), int64(0));
+    TestEqual(TEXT("Queued input reduces walking deceleration"), Movement->BrakingDecelerationWalking, 500.0f);
+    ApplyMove(WorldMove, 0.9);
+    TestEqual(TEXT("World-relative input above threshold runs"), GetEnumValue(*Character, Gait), int64(1));
+    TestEqual(TEXT("Pre-CMC update sets the standing speed"), Movement->MaxWalkSpeed,
+        static_cast<float>(Character->CalculateMaxSpeed()));
+
+    FStructProperty* State = FindFProperty<FStructProperty>(Class, TEXT("CharacterInputState"));
+    FBoolProperty* Sprint = State ? FindFProperty<FBoolProperty>(
+        State->Struct, TEXT("WantsToSprint_1_840C190D4B23289C5C46E0B5A4C5C936")) : nullptr;
+    if (!TestNotNull(TEXT("Sprint intent"), Sprint))
+    {
+        return false;
+    }
+    Sprint->SetPropertyValue_InContainer(State->ContainerPtrToValuePtr<void>(Character), true);
+    SetEnumValue(*Character, StickMode, 3);
+    Character->ConsumeMovementInputVector();
+    ApplyMove(CameraMove, 0.2);
+    TestEqual(TEXT("Sprint intent with partial movement runs"), GetEnumValue(*Character, Gait), int64(1));
+    ApplyMove(CameraMove, 0.9);
+    TestEqual(TEXT("Sprint intent with full movement sprints"), GetEnumValue(*Character, Gait), int64(2));
     return true;
 }
 

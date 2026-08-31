@@ -6,7 +6,7 @@ Install the assets into the native checkout or prepare an isolated workspace as 
 
 | Area | Local evidence | Native implementation and parity criterion |
 | --- | --- | --- |
-| Capsule locomotion | `SandboxCharacter_CMC`, `IMC_Sandbox` | The plugin implements camera/world-space input, walk/run/sprint, jump, crouch, and strafe on CMC. Compare the sample's input timing, analog response, acceleration, direction, camera and gait transitions after wiring the native pawn. |
+| Capsule locomotion | `SandboxCharacter_CMC`, `IMC_Sandbox` | The sample pawn uses native gait selection, movement settings, braking and pre-movement rotation. Input event handling and replication still use the reference graphs. Compare them under identical inputs as those graphs migrate. |
 | Mover and ragdoll | `SandboxCharacter_Mover`, `SandboxCharacter_Mover_Ragdoll`, `MovementModes`, `RagdollLevel` | Reference avatars and modes remain. Compare slide entry/exit, transitions through air, ragdoll start, recovery, and movement prediction. |
 | Animation selection | CMC and Mover Animation Blueprints and Chooser/Pose Search assets | The native snapshot provides inputs for an authored graph. Validate pose-search selections, trajectory, blending, root motion, locomotion layering, and IK in an integrated graph. |
 | Traversal and paired actions | `AC_TraversalLogic`, traversal actions and montage notify states | Native geometry probe covers a facing surface, reachable top and standing clearance. Compare traversal variants, aborts, montage alignment, moving targets, and blend-out after integration. |
@@ -85,34 +85,22 @@ $script = (Resolve-Path Scripts/migrate_level_teleporter.py).Path
 
 The script backs up the original local package under `Saved/BlueprintMigration/LevelTeleporter/`. On UE 5.9.0 build 60738873, `GameAnimationSampleCpp.Migration.LevelTeleporter` passed. It verified the authored components, label, and queued travel URL through the overlap delegate, and checked that a missing map or actor queues no travel. Rendered transitions and multiplayer client travel are **Not run**.
 
-### CMC character crouch speed
+### CMC movement and gait
 
-The local `SandboxCharacter_CMC` asset inherits from `ASampleCmcCharacter`. Its existing pre-movement path calls the native crouch-speed calculation, which uses its authored strafe curve and forward, lateral and backward speeds. The jump gate for the `DefaultSlot` montage remains in its original Blueprint graph. The Animation Blueprints, animation data and remaining character graphs stay in place.
+The local `SandboxCharacter_CMC` asset inherits from `ASampleCmcCharacter`. Its existing pre-movement dispatcher calls native rotation and movement updates. The movement update selects gait from raw Enhanced Input action values and the existing walk and sprint intent, then sets acceleration, braking deceleration, ground friction, standing speed and crouch speed. Input event handlers continue to call the native stick-scaling function. The class samples both movement actions through its possession input component, so direction handling and analog thresholds stay independent of input normalization.
 
-After building the Editor target, close the destination Editor and run these commands from the repository root.
+The Blueprint continues to own authored values and serialize `Gait` and `CharacterInputState` for the existing animation interfaces. Input events still manage those intents and their replication. The `DefaultSlot` montage gate remains authored.
 
-```powershell
-$script = (Resolve-Path Scripts/migrate_cmc_crouch_speed.py).Path
-& $editor $project -run=PythonScript "-script=$script" -Unattended -NullRHI
-& $editor $project -Unattended -NullRHI '-ExecCmds=Automation RunTests GameAnimationSampleCpp.Migration.CmcCrouchSpeed' '-TestExit=Automation Test Queue Empty'
-```
-
-The script verifies the reference package and backs it up under `Saved/BlueprintMigration/CmcCrouchSpeed/`. It checks that the curve reference and crouch speeds survive reparenting. On UE 5.9.0 build 60738873, `GameAnimationSampleCpp.Migration.CmcCrouchSpeed` passed for the saved class, the retained Blueprint gate, directional speeds and orient-to-movement. The CMC and Mover Animation Blueprint packages still match the installed reference by SHA-256. Interactive montage and rendered movement comparisons are **Not run**.
-
-### CMC movement settings
-
-The crouch migration is a prerequisite. The next migration switches input scaling, sprint eligibility, pre-CMC rotation, acceleration, ground friction, and standing speed to the inherited native functions. The sample's gait selection, input writers, and pre-CMC dispatcher continue to invoke those functions through the existing interfaces. The imported Blueprint still owns the gait and input state fields and the movement tuning. Animation playback and its montage gate stay authored.
-
-After building the Editor target, close the destination Editor and run the movement migration from the repository root.
+Build the Editor target and close the destination Editor. The script accepts the stock reference character or a character with the earlier movement migration already applied. If your local copy only has the older crouch-speed migration, use its stock package backup under `Saved/BlueprintMigration/CmcCrouchSpeed/` as the starting file. Run the script from the repository root.
 
 ```powershell
-$script = (Resolve-Path Scripts/migrate_cmc_movement.py).Path
+$script = (Resolve-Path Scripts/migrate_cmc_gait.py).Path
 & $editor $project -run=PythonScript "-script=$script" -Unattended -NullRHI
-& $editor $project -Unattended -NullRHI '-ExecCmds=Automation RunTests GameAnimationSampleCpp.Migration.CmcMovement' '-TestExit=Automation Test Queue Empty'
+& $editor $project -Unattended -NullRHI '-ExecCmds=Automation RunTests GameAnimationSampleCpp.Migration' '-TestExit=Automation Test Queue Empty'
 ```
 
-The movement script preserves a separate pre-change package in `Saved/BlueprintMigration/CmcMovement/`. To roll back this step locally, close the destination Editor and restore that package to `Content/Blueprints/SandboxCharacter_CMC.uasset` along with the matching prior code revision. The original installed sample is a separate project.
+The script verifies authored defaults and saves a pre-change package in `Saved/BlueprintMigration/CmcGait/<starting stage>/`. To roll back locally, close the destination Editor and restore that package to `Content/Blueprints/SandboxCharacter_CMC.uasset` with the matching code revision. The original installed sample is a separate project.
 
-On UE 5.9.0 build 60738873, both Win64 Development targets built successfully. The movement script rerun made no edits and all five `GameAnimationSampleCpp.Migration` tests passed. The movement test loads the saved CMC class and checks native function resolution, fixed and variable input, planar sprint acceleration and ground friction, rotation under aim and falling, and sprint intent. The installed CMC and Mover Animation Blueprints still match the original samples by SHA-256. Rendered, multiplayer and packaged behavior are **Not run**.
+UE 5.9.0 build 60738873 compiled both Win64 Development targets. The script installed from both supported starting packages with zero errors, and a rerun preserved the installed package hash. All six `GameAnimationSampleCpp.Migration` tests passed. The gait test injects raw camera-relative and world-relative Enhanced Input values into a possessed copy of the saved character. It invokes the original pre-CMC event and verifies gait, braking, and speed updates. The CMC and Mover Animation Blueprints match the original packages by SHA-256. Rendered, multiplayer and packaged comparisons are **Not run**.
 
 See the [Epic sample documentation](https://dev.epicgames.com/documentation/unreal-engine/game-animation-sample-project-in-unreal-engine) for the sample's public controls and architecture.
