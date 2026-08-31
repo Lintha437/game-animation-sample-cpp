@@ -26,6 +26,10 @@ Use Unreal Engine 5.9 and a C++ project built with the associated toolchain. Sta
 4. Record the existing movement and animation tick prerequisites before replacing any dispatchers. Check floor, falling, possession, and movement mode transitions in PIE. Confirm the Animation Blueprint still receives the intended frame's state when parallel animation evaluation is enabled.
 5. Keep authored montage gates, phase transitions, blending, and poses in animation assets. Give the gameplay action a clear owner for claiming targets, validating movement and collision, and releasing state on interruption. Check each action at both its success boundary and its cleanup boundary.
 
+### Preserve analog gait thresholds
+
+Read the movement action values before applying any normalization for fixed-speed movement. The reference CMC pawn binds Enhanced Input action values during possession and treats either camera-relative or world-relative input reaching the authored magnitude threshold as full input in dual-gait modes. The authority and simulated proxies can lack a local input component, so define their behavior explicitly. If the destination predicts movement on clients, include the state required by its prediction model and verify that server corrections preserve gait and rotation transitions. Test below, at, and above the threshold, with and without walk or sprint intent.
+
 ## Bring in licensed animation data
 
 When using the Epic sample assets, acquire the sample under the applicable terms. In a scratch branch of the destination project, use Content Browser → Asset Actions → Migrate, review Asset Report dependencies, and target the destination's `Content/` directory. Review package name conflicts before accepting an overwrite. Preserve referenced package paths and enable required plugins for each migrated feature. For instance, a Motion Matching graph needs Pose Search assets and may also depend on Chooser, Motion Warping, Animation Warping, and Control Rig.

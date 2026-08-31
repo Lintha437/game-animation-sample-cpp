@@ -3,6 +3,8 @@
 #include "GameFramework/Character.h"
 #include "SampleCmcCharacter.generated.h"
 
+class UInputAction;
+
 /** Native parent for the reference CMC character and its authored movement settings. */
 UCLASS(Abstract, Blueprintable)
 class GAMEANIMATIONSAMPLECPP_API ASampleCmcCharacter : public ACharacter
@@ -10,6 +12,17 @@ class GAMEANIMATIONSAMPLECPP_API ASampleCmcCharacter : public ACharacter
     GENERATED_BODY()
 
 public:
+    ASampleCmcCharacter();
+
+    /**
+     * Selects gait and applies movement settings immediately before CMC simulation.
+     * Polls Enhanced Input's raw movement actions and updates the serialized gait
+     * consumed by the reference Animation Blueprint. An unpossessed pawn has zero
+     * action magnitude and continues to use its existing movement and input state.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Movement")
+    void UpdateMovementBeforeSimulation();
+
     /**
      * Applies the authored stick mode to movement input before it reaches CMC.
      * Fixed-speed modes normalize nonzero input. Variable modes preserve its magnitude.
@@ -62,7 +75,25 @@ public:
     UFUNCTION(BlueprintPure, Category = "Sample|Movement")
     double CalculateMaxCrouchSpeed() const;
 
+protected:
+    /** Binds action values to the local input component created for this possession. */
+    virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
+
 private:
+    /** @return Walking deceleration in cm/s², with lighter braking while input remains queued. */
+    double CalculateBrakingDeceleration() const;
+
+    /** Authored camera-relative move action, sampled before CMC consumes queued input. */
+    UPROPERTY(EditDefaultsOnly, Category = "Sample|Input")
+    TSoftObjectPtr<UInputAction> CameraRelativeMoveAction;
+
+    /** Authored world-relative move action, sampled independently of camera-relative move. */
+    UPROPERTY(EditDefaultsOnly, Category = "Sample|Input")
+    TSoftObjectPtr<UInputAction> WorldRelativeMoveAction;
+
+    /** @return The reference gait index, determined from intent and raw input amplitude. */
+    int64 SelectGait() const;
+
     /** Reads serialized tuning owned by the subclass. The class also owns the curve. */
     double CalculateDirectionalSpeed(FName SpeedsName, double Fallback, bool bUseStrafeCurve) const;
 };
