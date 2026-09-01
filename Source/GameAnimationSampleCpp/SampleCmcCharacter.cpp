@@ -2,10 +2,12 @@
 
 #include "Curves/CurveFloat.h"
 #include "EnhancedInputComponent.h"
+#include "Engine/World.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "InputAction.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "KismetAnimationLibrary.h"
+#include "Math/RotationMatrix.h"
 #include "UObject/UnrealType.h"
 
 namespace
@@ -68,6 +70,9 @@ namespace
 ASampleCmcCharacter::ASampleCmcCharacter()
     : CameraRelativeMoveAction(FSoftObjectPath(TEXT("/Game/Input/IA_Move.IA_Move")))
     , WorldRelativeMoveAction(FSoftObjectPath(TEXT("/Game/Input/IA_Move_WorldSpace.IA_Move_WorldSpace")))
+    , LookAction(FSoftObjectPath(TEXT("/Game/Input/IA_Look.IA_Look")))
+    , GamepadLookAction(FSoftObjectPath(TEXT("/Game/Input/IA_Look_Gamepad.IA_Look_Gamepad")))
+    , CrouchAction(FSoftObjectPath(TEXT("/Game/Input/IA_Crouch.IA_Crouch")))
 {
 }
 
@@ -79,13 +84,79 @@ void ASampleCmcCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInput
     {
         return;
     }
-    if (const UInputAction* Action = CameraRelativeMoveAction.LoadSynchronous())
+    const UInputAction* CameraMove = CameraRelativeMoveAction.LoadSynchronous();
+    const UInputAction* WorldMove = WorldRelativeMoveAction.LoadSynchronous();
+    if (CameraMove)
     {
-        Input->BindActionValue(Action);
+        Input->BindActionValue(CameraMove);
     }
-    if (const UInputAction* Action = WorldRelativeMoveAction.LoadSynchronous())
+    if (WorldMove)
     {
-        Input->BindActionValue(Action);
+        Input->BindActionValue(WorldMove);
+    }
+    if (!bUseNativeInputHandlers)
+    {
+        return;
+    }
+
+    const auto Bind = [this, Input](const UInputAction* Action, auto Handler)
+    {
+        if (Action)
+        {
+            Input->BindAction(Action, ETriggerEvent::Triggered, this, Handler);
+        }
+    };
+    Bind(CameraMove, &ASampleCmcCharacter::HandleCameraRelativeMove);
+    Bind(WorldMove, &ASampleCmcCharacter::HandleWorldRelativeMove);
+    Bind(LookAction.LoadSynchronous(), &ASampleCmcCharacter::HandleLook);
+    Bind(GamepadLookAction.LoadSynchronous(), &ASampleCmcCharacter::HandleGamepadLook);
+    Bind(CrouchAction.LoadSynchronous(), &ASampleCmcCharacter::HandleCrouch);
+}
+
+void ASampleCmcCharacter::HandleCameraRelativeMove(const FInputActionValue& Value)
+{
+    const FVector2D Scaled = GetMovementInputScaleValue(Value.Get<FVector2D>());
+    const FRotationMatrix View(FRotator(0.0, GetControlRotation().Yaw, 0.0));
+    AddMovementInput(View.GetUnitAxis(EAxis::Y), Scaled.X);
+    AddMovementInput(View.GetUnitAxis(EAxis::X), Scaled.Y);
+}
+
+void ASampleCmcCharacter::HandleWorldRelativeMove(const FInputActionValue& Value)
+{
+    const FVector2D Scaled = Value.Get<FVector2D>().GetSafeNormal();
+    AddMovementInput(FVector::RightVector, Scaled.X);
+    AddMovementInput(FVector::ForwardVector, Scaled.Y);
+}
+
+void ASampleCmcCharacter::HandleLook(const FInputActionValue& Value)
+{
+    AddLookInput(Value.Get<FVector2D>());
+}
+
+void ASampleCmcCharacter::HandleGamepadLook(const FInputActionValue& Value)
+{
+    AddLookInput(Value.Get<FVector2D>() * GetWorld()->GetDeltaSeconds());
+}
+
+void ASampleCmcCharacter::AddLookInput(const FVector2D& Delta)
+{
+    AddControllerYawInput(Delta.X);
+    AddControllerPitchInput(Delta.Y);
+}
+
+void ASampleCmcCharacter::HandleCrouch()
+{
+    if (GetCharacterMovement()->IsFalling())
+    {
+        return;
+    }
+    if (bIsCrouched)
+    {
+        UnCrouch();
+    }
+    else
+    {
+        Crouch();
     }
 }
 
