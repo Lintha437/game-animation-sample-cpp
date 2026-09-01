@@ -235,4 +235,111 @@ bool FSampleCmcGaitMigrationTest::RunTest(const FString& Parameters)
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FSampleCmcInputMigrationTest,
+    "GameAnimationSampleCpp.Migration.CmcInput",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FSampleCmcInputMigrationTest::RunTest(const FString& Parameters)
+{
+    UClass* Class = LoadClass<ASampleCmcCharacter>(
+        nullptr, TEXT("/Game/Blueprints/SandboxCharacter_CMC.SandboxCharacter_CMC_C"));
+    if (!TestNotNull(TEXT("Saved CMC class"), Class))
+    {
+        return false;
+    }
+    const FBoolProperty* NativeInput = FindFProperty<FBoolProperty>(Class, TEXT("bUseNativeInputHandlers"));
+    TestTrue(TEXT("The saved pawn enables native action handlers"),
+        NativeInput && NativeInput->GetPropertyValue_InContainer(Class->GetDefaultObject()));
+    UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
+    if (!TestNotNull(TEXT("Transient game world"), World))
+    {
+        return false;
+    }
+    ON_SCOPE_EXIT { World->DestroyWorld(false); };
+    World->InitializeActorsForPlay(FURL());
+    ASampleCmcCharacter* Character = World->SpawnActor<ASampleCmcCharacter>(Class);
+    APlayerController* Controller = World->SpawnActor<APlayerController>();
+    if (!TestNotNull(TEXT("CMC character"), Character) || !TestNotNull(TEXT("Local controller"), Controller))
+    {
+        return false;
+    }
+
+    Controller->Player = NewObject<ULocalPlayer>(GEngine);
+    Controller->Possess(Character);
+    Character->PawnClientRestart();
+    UEnhancedInputComponent* Input = Cast<UEnhancedInputComponent>(Character->InputComponent);
+    if (!TestNotNull(TEXT("Possession creates Enhanced Input"), Input))
+    {
+        return false;
+    }
+    UEnhancedPlayerInput* PlayerInput = NewObject<UEnhancedPlayerInput>(Controller);
+    Controller->PlayerInput = PlayerInput;
+    const TArray<UInputComponent*> Stack{Input};
+    const auto FindAction = [&](const TCHAR* Name)
+    {
+        const FString Path = FString::Printf(TEXT("/Game/Input/%s.%s"), Name, Name);
+        const UInputAction* Action = LoadObject<UInputAction>(nullptr, *Path);
+        int32 Bindings = 0;
+        for (const auto& Binding : Input->GetActionEventBindings())
+        {
+            Bindings += Binding->GetAction() == Action && Binding->GetTriggerEvent() == ETriggerEvent::Triggered &&
+                Binding->IsBoundToObject(Character);
+        }
+        TestEqual(FString::Printf(TEXT("%s has exactly one pawn-owned Triggered binding"), Name), Bindings, 1);
+        return Action;
+    };
+    const UInputAction* CameraMove = FindAction(TEXT("IA_Move"));
+    const UInputAction* WorldMove = FindAction(TEXT("IA_Move_WorldSpace"));
+    const UInputAction* Look = FindAction(TEXT("IA_Look"));
+    const UInputAction* GamepadLook = FindAction(TEXT("IA_Look_Gamepad"));
+    const UInputAction* Crouch = FindAction(TEXT("IA_Crouch"));
+    const UInputAction* Jump = FindAction(TEXT("IA_Jump"));
+    if (!CameraMove || !WorldMove || !Look || !GamepadLook || !Crouch || !Jump)
+    {
+        AddError(TEXT("An authored input action is missing."));
+        return false;
+    }
+    const auto ApplyAction = [&](const UInputAction* Action, FInputActionValue Value)
+    {
+        PlayerInput->InjectInputForAction(Action, Value);
+        PlayerInput->ProcessInputStack(Stack, 1.0f / 60.0f, false);
+    };
+
+    SetEnumValue(*Character, TEXT("MovementStickMode"), 2);
+    Controller->SetControlRotation(FRotator(0.0, 90.0, 0.0));
+    Character->ConsumeMovementInputVector();
+    ApplyAction(CameraMove, FVector2D(0.0, 0.3));
+    TestTrue(TEXT("Camera-relative input uses control yaw and retains analog strength"),
+        Character->ConsumeMovementInputVector().Equals(FVector(0.0, 0.3, 0.0), 1.e-4));
+    ApplyAction(WorldMove, FVector2D(0.0, 0.3));
+    TestTrue(TEXT("World-relative input uses world axes at full strength"),
+        Character->ConsumeMovementInputVector().Equals(FVector::ForwardVector, 1.e-4));
+
+    const FVector2D LookValue(2.0, -3.0);
+    Controller->RotationInput = FRotator::ZeroRotator;
+    Controller->AddYawInput(LookValue.X);
+    Controller->AddPitchInput(LookValue.Y);
+    const FRotator ExpectedLook = Controller->RotationInput;
+    TestFalse(TEXT("The local controller accepts look input"), ExpectedLook.IsNearlyZero());
+    Controller->RotationInput = FRotator::ZeroRotator;
+    ApplyAction(Look, LookValue);
+    TestTrue(TEXT("Mouse deltas reach the controller once"), Controller->RotationInput.Equals(ExpectedLook, 1.e-4));
+    World->DeltaTimeSeconds = 0.02f;
+    Controller->RotationInput = FRotator::ZeroRotator;
+    ApplyAction(GamepadLook, LookValue);
+    TestTrue(TEXT("Gamepad rate uses world delta time"),
+        Controller->RotationInput.Equals(ExpectedLook * World->GetDeltaSeconds(), 1.e-4));
+
+    UCharacterMovementComponent* Movement = Character->GetCharacterMovement();
+    Movement->SetMovementMode(MOVE_Falling);
+    ApplyAction(Crouch, true);
+    TestFalse(TEXT("Falling rejects a crouch request"), Movement->bWantsToCrouch);
+    ApplyAction(Crouch, false);
+    Movement->SetMovementMode(MOVE_Walking);
+    ApplyAction(Crouch, true);
+    TestTrue(TEXT("Grounded input requests crouch"), Movement->bWantsToCrouch);
+    return true;
+}
+
 #endif
