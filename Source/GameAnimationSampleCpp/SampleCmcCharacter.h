@@ -4,6 +4,7 @@
 #include "SampleCmcCharacter.generated.h"
 
 class UInputAction;
+struct FInputActionValue;
 
 /** Native parent for the reference CMC character and its authored movement settings. */
 UCLASS(Abstract, Blueprintable)
@@ -76,10 +77,17 @@ public:
     double CalculateMaxCrouchSpeed() const;
 
 protected:
-    /** Binds action values to the local input component created for this possession. */
+    /** Binds raw action values and the installed native handlers on local possession. */
     virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 
 private:
+    /**
+     * Enables native event bindings after the corresponding Blueprint events are removed.
+     * The migration sets this on the reference pawn's class defaults.
+     */
+    UPROPERTY(EditDefaultsOnly, Category = "Sample|Input")
+    bool bUseNativeInputHandlers = false;
+
     /** @return Walking deceleration in cm/s², with lighter braking while input remains queued. */
     double CalculateBrakingDeceleration() const;
 
@@ -90,6 +98,36 @@ private:
     /** Authored world-relative move action, sampled independently of camera-relative move. */
     UPROPERTY(EditDefaultsOnly, Category = "Sample|Input")
     TSoftObjectPtr<UInputAction> WorldRelativeMoveAction;
+
+    /** Mouse-style look deltas, in degrees per input update. */
+    UPROPERTY(EditDefaultsOnly, Category = "Sample|Input")
+    TSoftObjectPtr<UInputAction> LookAction;
+
+    /** Gamepad turn rates, in degrees per second before frame scaling. */
+    UPROPERTY(EditDefaultsOnly, Category = "Sample|Input")
+    TSoftObjectPtr<UInputAction> GamepadLookAction;
+
+    /** Authored toggle action for grounded crouching. */
+    UPROPERTY(EditDefaultsOnly, Category = "Sample|Input")
+    TSoftObjectPtr<UInputAction> CrouchAction;
+
+    /** Queues camera-relative movement using the authored stick mode. */
+    void HandleCameraRelativeMove(const FInputActionValue& Value);
+
+    /** Queues normalized movement on the world's horizontal axes. */
+    void HandleWorldRelativeMove(const FInputActionValue& Value);
+
+    /** Applies a look delta directly to the local controller. */
+    void HandleLook(const FInputActionValue& Value);
+
+    /** Converts gamepad turn rate to an angular delta for the frame. */
+    void HandleGamepadLook(const FInputActionValue& Value);
+
+    /** Toggles crouching while grounded or in another non-falling movement mode. */
+    void HandleCrouch();
+
+    /** Sends an angular delta to the owning local player controller. */
+    void AddLookInput(const FVector2D& Delta);
 
     /** @return The reference gait index, determined from intent and raw input amplitude. */
     int64 SelectGait() const;
