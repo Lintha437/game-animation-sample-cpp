@@ -40,4 +40,20 @@ public:
      */
     UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
     static bool RemoveEnhancedInputActions(UBlueprint* Blueprint, UEdGraph* Graph, const TArray<FString>& ActionPaths);
+
+    /**
+     * Reads compiled function flags before an authored function or event is replaced.
+     * @param Blueprint Blueprint whose generated class owns the function.
+     * @param FunctionName Name of the compiled function.
+     * @return Unreal function flags, or zero if the function does not exist.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
+    static int64 GetCompiledFunctionFlags(const UBlueprint* Blueprint, FName FunctionName);
+
+    /**
+     * Removes one custom event and its isolated chain from the given graph.
+     * @return True if the event was uniquely identified and no other entry shares its nodes.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
+    static bool RemoveCustomEvent(UBlueprint* Blueprint, UEdGraph* Graph, FName EventName);
 };

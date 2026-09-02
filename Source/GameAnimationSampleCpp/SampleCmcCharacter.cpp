@@ -8,6 +8,7 @@
 #include "Kismet/KismetMathLibrary.h"
 #include "KismetAnimationLibrary.h"
 #include "Math/RotationMatrix.h"
+#include "Net/Core/PushModel/PushModel.h"
 #include "UObject/UnrealType.h"
 
 namespace
@@ -18,6 +19,25 @@ namespace
     constexpr int64 SprintGait = 2;
     const FName GaitName(TEXT("Gait"));
     const FName StickModeName(TEXT("MovementStickMode"));
+    const FName InputStateName(TEXT("CharacterInputState"));
+    const FName SprintIntent(TEXT("WantsToSprint_1_840C190D4B23289C5C46E0B5A4C5C936"));
+    const FName WalkIntent(TEXT("WantsToWalk_3_78963B154975E3BDE244A3BE438473E3"));
+    const FName StrafeIntent(TEXT("WantsToStrafe_5_64E842184F7691CD179DFCBA7158A4D9"));
+    const FName AimIntent(TEXT("WantsToAim_7_3A4AA0AA4DE529A3B213E68BECD246F8"));
+    const FName CrouchIntent(TEXT("WantsToCrouch_9_47D0791142F36BB93FFD9EA12F96F2B9"));
+
+    struct FInputIntentField
+    {
+        FName Name;
+        bool FSampleCmcInputIntent::* Member;
+    };
+    const FInputIntentField InputIntentFields[] = {
+        {SprintIntent, &FSampleCmcInputIntent::bWantsToSprint},
+        {WalkIntent, &FSampleCmcInputIntent::bWantsToWalk},
+        {StrafeIntent, &FSampleCmcInputIntent::bWantsToStrafe},
+        {AimIntent, &FSampleCmcInputIntent::bWantsToAim},
+        {CrouchIntent, &FSampleCmcInputIntent::bWantsToCrouch},
+    };
 
     int64 ReadEnumValue(const UObject& Owner, FName Name, int64 DefaultValue)
     {
@@ -36,7 +56,6 @@ namespace
 
     bool ReadInputIntent(const UObject& Owner, FName Name)
     {
-        static const FName InputStateName(TEXT("CharacterInputState"));
         const FStructProperty* InputState = FindFProperty<FStructProperty>(Owner.GetClass(), InputStateName);
         const FBoolProperty* Intent = InputState ? FindFProperty<FBoolProperty>(InputState->Struct, Name) : nullptr;
         return Intent && Intent->GetPropertyValue_InContainer(InputState->ContainerPtrToValuePtr<void>(&Owner));
@@ -73,6 +92,10 @@ ASampleCmcCharacter::ASampleCmcCharacter()
     , LookAction(FSoftObjectPath(TEXT("/Game/Input/IA_Look.IA_Look")))
     , GamepadLookAction(FSoftObjectPath(TEXT("/Game/Input/IA_Look_Gamepad.IA_Look_Gamepad")))
     , CrouchAction(FSoftObjectPath(TEXT("/Game/Input/IA_Crouch.IA_Crouch")))
+    , WalkAction(FSoftObjectPath(TEXT("/Game/Input/IA_Walk.IA_Walk")))
+    , SprintAction(FSoftObjectPath(TEXT("/Game/Input/IA_Sprint.IA_Sprint")))
+    , StrafeAction(FSoftObjectPath(TEXT("/Game/Input/IA_Strafe.IA_Strafe")))
+    , AimAction(FSoftObjectPath(TEXT("/Game/Input/IA_Aim.IA_Aim")))
 {
 }
 
@@ -111,6 +134,13 @@ void ASampleCmcCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInput
     Bind(LookAction.LoadSynchronous(), &ASampleCmcCharacter::HandleLook);
     Bind(GamepadLookAction.LoadSynchronous(), &ASampleCmcCharacter::HandleGamepadLook);
     Bind(CrouchAction.LoadSynchronous(), &ASampleCmcCharacter::HandleCrouch);
+    if (bUseNativeInputIntentHandlers)
+    {
+        Bind(WalkAction.LoadSynchronous(), &ASampleCmcCharacter::HandleWalkIntent);
+        Bind(SprintAction.LoadSynchronous(), &ASampleCmcCharacter::HandleSprintIntent);
+        Bind(StrafeAction.LoadSynchronous(), &ASampleCmcCharacter::HandleStrafeIntent);
+        Bind(AimAction.LoadSynchronous(), &ASampleCmcCharacter::HandleAimIntent);
+    }
 }
 
 void ASampleCmcCharacter::HandleCameraRelativeMove(const FInputActionValue& Value)
@@ -160,10 +190,96 @@ void ASampleCmcCharacter::HandleCrouch()
     }
 }
 
+void ASampleCmcCharacter::HandleWalkIntent()
+{
+    FSampleCmcInputIntent Intent = ReadInputIntentSnapshot();
+    if (!Intent.bWantsToSprint)
+    {
+        Intent.bWantsToWalk = !Intent.bWantsToWalk;
+        CommitInputIntent(Intent);
+    }
+}
+
+void ASampleCmcCharacter::HandleSprintIntent(const FInputActionValue& Value)
+{
+    FSampleCmcInputIntent Intent = ReadInputIntentSnapshot();
+    Intent.bWantsToSprint = Value.Get<bool>();
+    Intent.bWantsToWalk = false;
+    CommitInputIntent(Intent);
+}
+
+void ASampleCmcCharacter::HandleStrafeIntent()
+{
+    FSampleCmcInputIntent Intent = ReadInputIntentSnapshot();
+    Intent.bWantsToStrafe = !Intent.bWantsToStrafe;
+    CommitInputIntent(Intent);
+}
+
+void ASampleCmcCharacter::HandleAimIntent(const FInputActionValue& Value)
+{
+    FSampleCmcInputIntent Intent = ReadInputIntentSnapshot();
+    Intent.bWantsToAim = Value.Get<bool>();
+    CommitInputIntent(Intent);
+}
+
+FSampleCmcInputIntent ASampleCmcCharacter::ReadInputIntentSnapshot() const
+{
+    FSampleCmcInputIntent Intent;
+    for (const FInputIntentField& Field : InputIntentFields)
+    {
+        Intent.*Field.Member = ReadInputIntent(*this, Field.Name);
+    }
+    return Intent;
+}
+
+bool ASampleCmcCharacter::WriteInputIntentSnapshot(const FSampleCmcInputIntent& Intent)
+{
+    const FStructProperty* InputState = FindFProperty<FStructProperty>(GetClass(), InputStateName);
+    if (!InputState)
+    {
+        return false;
+    }
+    const FBoolProperty* Fields[UE_ARRAY_COUNT(InputIntentFields)];
+    for (int32 Index = 0; Index < UE_ARRAY_COUNT(InputIntentFields); ++Index)
+    {
+        Fields[Index] = FindFProperty<FBoolProperty>(InputState->Struct, InputIntentFields[Index].Name);
+        if (!Fields[Index])
+        {
+            return false;
+        }
+    }
+
+    void* Data = InputState->ContainerPtrToValuePtr<void>(this);
+    for (int32 Index = 0; Index < UE_ARRAY_COUNT(InputIntentFields); ++Index)
+    {
+        Fields[Index]->SetPropertyValue_InContainer(Data, Intent.*InputIntentFields[Index].Member);
+    }
+    if (HasAuthority())
+    {
+        MARK_PROPERTY_DIRTY(this, InputState);
+    }
+    return true;
+}
+
+void ASampleCmcCharacter::CommitInputIntent(const FSampleCmcInputIntent& Intent)
+{
+    if (WriteInputIntentSnapshot(Intent) && !HasAuthority())
+    {
+        ServerCommitInputIntent(Intent);
+    }
+}
+
+void ASampleCmcCharacter::ServerCommitInputIntent_Implementation(FSampleCmcInputIntent Intent)
+{
+    if (bUseNativeInputIntentHandlers)
+    {
+        WriteInputIntentSnapshot(Intent);
+    }
+}
+
 int64 ASampleCmcCharacter::SelectGait() const
 {
     static const FName ThresholdName(TEXT("AnalogWalk/RunThreshold"));
-    static const FName WalkIntent(TEXT("WantsToWalk_3_78963B154975E3BDE244A3BE438473E3"));
     const int64 StickMode = ReadEnumValue(*this, StickModeName, 2);
     const UEnhancedInputComponent* Input = Cast<UEnhancedInputComponent>(InputComponent);
     const FNumericProperty* ThresholdProperty = FindFProperty<FNumericProperty>(GetClass(), ThresholdName);
@@ -206,7 +322,6 @@ FVector2D ASampleCmcCharacter::GetMovementInputScaleValue(FVector2D Input) const
 
 bool ASampleCmcCharacter::CanSprint() const
 {
-    static const FName SprintIntent(TEXT("WantsToSprint_1_840C190D4B23289C5C46E0B5A4C5C936"));
     if (!ReadInputIntent(*this, SprintIntent))
     {
         return false;
@@ -223,8 +338,6 @@ bool ASampleCmcCharacter::CanSprint() const
 
 void ASampleCmcCharacter::UpdateRotation_PreCMC()
 {
-    static const FName StrafeIntent(TEXT("WantsToStrafe_5_64E842184F7691CD179DFCBA7158A4D9"));
-    static const FName AimIntent(TEXT("WantsToAim_7_3A4AA0AA4DE529A3B213E68BECD246F8"));
     const bool bUseControllerRotation = ReadInputIntent(*this, StrafeIntent) || ReadInputIntent(*this, AimIntent);
     UCharacterMovementComponent* Movement = GetCharacterMovement();
     Movement->bUseControllerDesiredRotation = bUseControllerRotation;

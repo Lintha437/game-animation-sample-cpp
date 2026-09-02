@@ -1,6 +1,6 @@
 # Architecture
 
-`GameAnimSampleCpp.uproject` selects the UE 5.9 Launcher installation and loads the `GameAnimationSampleCpp` runtime module. Both targets share that module, which depends on Core, CoreUObject, Engine, AnimGraphRuntime and Enhanced Input. The Editor target also loads `GameAnimationSampleCppEditor` for local asset migration. Its graph operations preserve existing Blueprint connections while switching call sites to native functions. Game targets exclude the Editor module.
+`GameAnimSampleCpp.uproject` selects the UE 5.9 Launcher installation and loads the `GameAnimationSampleCpp` runtime module. Both targets share that module, which depends on Core, CoreUObject, Engine, AnimGraphRuntime, Enhanced Input and NetCore. The Editor target also loads `GameAnimationSampleCppEditor` for local asset migration. Its graph operations preserve existing Blueprint connections while switching call sites to native functions. Game targets exclude the Editor module.
 
 The default configuration opens the engine Open World template. The local sample import uses Unreal's project-level `User*.ini` overrides to open the sample's `DefaultLevel` and preserve its animation, input and collision settings.
 

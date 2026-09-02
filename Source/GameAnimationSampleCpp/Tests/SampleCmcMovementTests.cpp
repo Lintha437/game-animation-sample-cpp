@@ -13,6 +13,7 @@
 #include "InputAction.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/ScopeExit.h"
+#include "UObject/StructOnScope.h"
 #include "UObject/UnrealType.h"
 
 namespace
@@ -251,6 +252,10 @@ bool FSampleCmcInputMigrationTest::RunTest(const FString& Parameters)
     const FBoolProperty* NativeInput = FindFProperty<FBoolProperty>(Class, TEXT("bUseNativeInputHandlers"));
     TestTrue(TEXT("The saved pawn enables native action handlers"),
         NativeInput && NativeInput->GetPropertyValue_InContainer(Class->GetDefaultObject()));
+    const FBoolProperty* NativeIntent = FindFProperty<FBoolProperty>(Class, TEXT("bUseNativeInputIntentHandlers"));
+    TestTrue(TEXT("The saved pawn enables native intent handlers"),
+        NativeIntent && NativeIntent->GetPropertyValue_InContainer(Class->GetDefaultObject()));
+    TestNull(TEXT("The authored server event was removed"), Class->FindFunctionByName(TEXT("UpdateInputState_Server")));
     UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
     if (!TestNotNull(TEXT("Transient game world"), World))
     {
@@ -295,7 +300,12 @@ bool FSampleCmcInputMigrationTest::RunTest(const FString& Parameters)
     const UInputAction* GamepadLook = FindAction(TEXT("IA_Look_Gamepad"));
     const UInputAction* Crouch = FindAction(TEXT("IA_Crouch"));
     const UInputAction* Jump = FindAction(TEXT("IA_Jump"));
-    if (!CameraMove || !WorldMove || !Look || !GamepadLook || !Crouch || !Jump)
+    const UInputAction* Walk = FindAction(TEXT("IA_Walk"));
+    const UInputAction* Sprint = FindAction(TEXT("IA_Sprint"));
+    const UInputAction* Strafe = FindAction(TEXT("IA_Strafe"));
+    const UInputAction* Aim = FindAction(TEXT("IA_Aim"));
+    if (!CameraMove || !WorldMove || !Look || !GamepadLook || !Crouch || !Jump ||
+        !Walk || !Sprint || !Strafe || !Aim)
     {
         AddError(TEXT("An authored input action is missing."));
         return false;
@@ -339,6 +349,67 @@ bool FSampleCmcInputMigrationTest::RunTest(const FString& Parameters)
     Movement->SetMovementMode(MOVE_Walking);
     ApplyAction(Crouch, true);
     TestTrue(TEXT("Grounded input requests crouch"), Movement->bWantsToCrouch);
+
+    const FStructProperty* InputState = FindFProperty<FStructProperty>(Class, TEXT("CharacterInputState"));
+    if (!TestNotNull(TEXT("Shared input state"), InputState))
+    {
+        return false;
+    }
+    TestTrue(TEXT("The authored state is replicated"), InputState->HasAnyPropertyFlags(CPF_Net));
+    const auto FindIntent = [&](const TCHAR* Name)
+    {
+        const FBoolProperty* Property = FindFProperty<FBoolProperty>(InputState->Struct, Name);
+        TestNotNull(Name, Property);
+        return Property;
+    };
+    const FBoolProperty* WantsWalk = FindIntent(TEXT("WantsToWalk_3_78963B154975E3BDE244A3BE438473E3"));
+    const FBoolProperty* WantsSprint = FindIntent(TEXT("WantsToSprint_1_840C190D4B23289C5C46E0B5A4C5C936"));
+    const FBoolProperty* WantsStrafe = FindIntent(TEXT("WantsToStrafe_5_64E842184F7691CD179DFCBA7158A4D9"));
+    const FBoolProperty* WantsAim = FindIntent(TEXT("WantsToAim_7_3A4AA0AA4DE529A3B213E68BECD246F8"));
+    const FBoolProperty* WantsCrouch = FindIntent(TEXT("WantsToCrouch_9_47D0791142F36BB93FFD9EA12F96F2B9"));
+    if (!WantsWalk || !WantsSprint || !WantsStrafe || !WantsAim || !WantsCrouch)
+    {
+        return false;
+    }
+    void* State = InputState->ContainerPtrToValuePtr<void>(Character);
+    WantsCrouch->SetPropertyValue_InContainer(State, true);
+    ApplyAction(Walk, true);
+    TestTrue(TEXT("The walk press sets walk intent"), WantsWalk->GetPropertyValue_InContainer(State));
+    ApplyAction(Walk, false);
+    ApplyAction(Sprint, true);
+    TestTrue(TEXT("The sprint press sets sprint intent"), WantsSprint->GetPropertyValue_InContainer(State));
+    TestFalse(TEXT("Sprint clears the walk toggle"), WantsWalk->GetPropertyValue_InContainer(State));
+    ApplyAction(Walk, true);
+    TestFalse(TEXT("Walking cannot be enabled during sprint"), WantsWalk->GetPropertyValue_InContainer(State));
+    ApplyAction(Sprint, false);
+    TestFalse(TEXT("The sprint release clears sprint intent"), WantsSprint->GetPropertyValue_InContainer(State));
+    const bool bWasStrafing = WantsStrafe->GetPropertyValue_InContainer(State);
+    ApplyAction(Strafe, true);
+    TestEqual(TEXT("The strafe press toggles strafe intent"), WantsStrafe->GetPropertyValue_InContainer(State), !bWasStrafing);
+    ApplyAction(Aim, true);
+    TestTrue(TEXT("The aim press sets aim intent"), WantsAim->GetPropertyValue_InContainer(State));
+    ApplyAction(Aim, false);
+    TestFalse(TEXT("The aim release clears aim intent"), WantsAim->GetPropertyValue_InContainer(State));
+    TestTrue(TEXT("The other actions preserve crouch intent"), WantsCrouch->GetPropertyValue_InContainer(State));
+
+    UFunction* Commit = Class->FindFunctionByName(TEXT("ServerCommitInputIntent"));
+    if (!TestNotNull(TEXT("Native input intent RPC"), Commit))
+    {
+        return false;
+    }
+    TestEqual(TEXT("The native RPC preserves unreliable server dispatch"),
+        Commit->FunctionFlags & FUNC_NetFuncFlags, FUNC_Net | FUNC_NetServer);
+    const FStructProperty* IntentParameter = FindFProperty<FStructProperty>(Commit, TEXT("Intent"));
+    if (!TestNotNull(TEXT("Native input intent parameter"), IntentParameter))
+    {
+        return false;
+    }
+    FStructOnScope CallParams(Commit);
+    auto& Submitted = *IntentParameter->ContainerPtrToValuePtr<FSampleCmcInputIntent>(CallParams.GetStructMemory());
+    Submitted.bWantsToAim = true;
+    Character->ProcessEvent(Commit, CallParams.GetStructMemory());
+    TestTrue(TEXT("Authority writes submitted aim into the shared state"), WantsAim->GetPropertyValue_InContainer(State));
+    TestFalse(TEXT("The RPC carries crouch intent as part of the snapshot"), WantsCrouch->GetPropertyValue_InContainer(State));
     return true;
 }
 

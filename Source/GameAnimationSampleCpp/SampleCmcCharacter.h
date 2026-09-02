@@ -6,6 +6,36 @@
 class UInputAction;
 struct FInputActionValue;
 
+/**
+ * Input intent carried to the authority.
+ * The imported pawn retains the replicated state read by animation and camera graphs.
+ */
+USTRUCT()
+struct FSampleCmcInputIntent
+{
+    GENERATED_BODY()
+
+    /** Sprint input is held or latched by its authored action. */
+    UPROPERTY()
+    bool bWantsToSprint = false;
+
+    /** The player selected walk gait. Sprint clears this selection. */
+    UPROPERTY()
+    bool bWantsToWalk = false;
+
+    /** The player selected camera-relative facing. */
+    UPROPERTY()
+    bool bWantsToStrafe = false;
+
+    /** The aim action's current value. */
+    UPROPERTY()
+    bool bWantsToAim = false;
+
+    /** Preserved intent from the authored character interface. */
+    UPROPERTY()
+    bool bWantsToCrouch = false;
+};
+
 /** Native parent for the reference CMC character and its authored movement settings. */
 UCLASS(Abstract, Blueprintable)
 class GAMEANIMATIONSAMPLECPP_API ASampleCmcCharacter : public ACharacter
@@ -88,6 +118,10 @@ private:
     UPROPERTY(EditDefaultsOnly, Category = "Sample|Input")
     bool bUseNativeInputHandlers = false;
 
+    /** Enables native intent bindings after the matching Blueprint events are removed. */
+    UPROPERTY(EditDefaultsOnly, Category = "Sample|Input")
+    bool bUseNativeInputIntentHandlers = false;
+
     /** @return Walking deceleration in cm/s², with lighter braking while input remains queued. */
     double CalculateBrakingDeceleration() const;
 
@@ -111,6 +145,22 @@ private:
     UPROPERTY(EditDefaultsOnly, Category = "Sample|Input")
     TSoftObjectPtr<UInputAction> CrouchAction;
 
+    /** Authored walk toggle action. */
+    UPROPERTY(EditDefaultsOnly, Category = "Sample|Input")
+    TSoftObjectPtr<UInputAction> WalkAction;
+
+    /** Authored sprint state action. */
+    UPROPERTY(EditDefaultsOnly, Category = "Sample|Input")
+    TSoftObjectPtr<UInputAction> SprintAction;
+
+    /** Authored strafe toggle action. */
+    UPROPERTY(EditDefaultsOnly, Category = "Sample|Input")
+    TSoftObjectPtr<UInputAction> StrafeAction;
+
+    /** Authored aim state action. */
+    UPROPERTY(EditDefaultsOnly, Category = "Sample|Input")
+    TSoftObjectPtr<UInputAction> AimAction;
+
     /** Queues camera-relative movement using the authored stick mode. */
     void HandleCameraRelativeMove(const FInputActionValue& Value);
 
@@ -125,6 +175,31 @@ private:
 
     /** Toggles crouching while grounded or in another non-falling movement mode. */
     void HandleCrouch();
+
+    /** Toggles walking if sprint is inactive. */
+    void HandleWalkIntent();
+
+    /** Applies sprint intent and clears the walk toggle. */
+    void HandleSprintIntent(const FInputActionValue& Value);
+
+    /** Toggles controller-facing movement. */
+    void HandleStrafeIntent();
+
+    /** Applies aim intent without affecting the walk or sprint state. */
+    void HandleAimIntent(const FInputActionValue& Value);
+
+    /** Reads the shared asset-owned state. No separate copy persists on the pawn. */
+    FSampleCmcInputIntent ReadInputIntentSnapshot() const;
+
+    /** Applies all intent fields to the compatible asset state and marks replication dirty. */
+    bool WriteInputIntentSnapshot(const FSampleCmcInputIntent& Intent);
+
+    /** Applies intent locally and sends a complete snapshot from the owning client. */
+    void CommitInputIntent(const FSampleCmcInputIntent& Intent);
+
+    /** Updates the authoritative state from the owning player's pawn channel. */
+    UFUNCTION(Server, Unreliable)
+    void ServerCommitInputIntent(FSampleCmcInputIntent Intent);
 
     /** Sends an angular delta to the owning local player controller. */
     void AddLookInput(const FVector2D& Delta);
