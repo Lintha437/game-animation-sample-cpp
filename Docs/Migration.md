@@ -34,6 +34,8 @@ Read the movement action values before applying any normalization for fixed-spee
 
 Bind movement and look on the pawn's local input component during possession. Keep the host's mapping contexts in their existing owner and preserve each action's trigger phase, dead zone and modifiers. If moving an existing Blueprint pawn to native bindings, switch each action's handler at the same time as removing its original event chain. In the editor, verify one callback per trigger phase after possession and after a pawn swap. Test mouse look as a per-update delta and stick look as a turn rate evaluated at several frame rates.
 
+When adapting the sample's input intent for networking, keep one authoritative state and feed the same state to camera and animation consumers. Inspect both the press and release rules on each action. The reference CMC pawn applies intent locally, sends an unreliable snapshot to the server, and replicates the shared state to observers. In the destination, verify press and release under latency and packet loss, especially the final release. Select a delivery rule that matches the destination's movement prediction and correction requirements.
+
 ## Bring in licensed animation data
 
 When using the Epic sample assets, acquire the sample under the applicable terms. In a scratch branch of the destination project, use Content Browser → Asset Actions → Migrate, review Asset Report dependencies, and target the destination's `Content/` directory. Review package name conflicts before accepting an overwrite. Preserve referenced package paths and enable required plugins for each migrated feature. For instance, a Motion Matching graph needs Pose Search assets and may also depend on Chooser, Motion Warping, Animation Warping, and Control Rig.

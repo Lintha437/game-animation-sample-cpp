@@ -6,7 +6,7 @@ Install the assets into the native checkout or prepare an isolated workspace as 
 
 | Area | Local evidence | Native implementation and parity criterion |
 | --- | --- | --- |
-| Capsule locomotion | `SandboxCharacter_CMC`, `IMC_Sandbox` | The sample pawn uses native gait selection, braking, pre-movement rotation, and handlers for movement, look, and crouch. The input intents for walk, sprint, strafe and aim still use the reference replication path. |
+| Capsule locomotion | `SandboxCharacter_CMC`, `IMC_Sandbox` | The sample pawn uses native gait selection, braking, pre-movement rotation, movement and look handlers, crouch input, and replicated input intent. The existing character state property still supplies the authored animation and camera interfaces. |
 | Mover and ragdoll | `SandboxCharacter_Mover`, `SandboxCharacter_Mover_Ragdoll`, `MovementModes`, `RagdollLevel` | Reference avatars and modes remain. Compare slide entry/exit, transitions through air, ragdoll start, recovery, and movement prediction. |
 | Animation selection | CMC and Mover Animation Blueprints and Chooser/Pose Search assets | The native snapshot provides inputs for an authored graph. Validate pose-search selections, trajectory, blending, root motion, locomotion layering, and IK in an integrated graph. |
 | Traversal and paired actions | `AC_TraversalLogic`, traversal actions and montage notify states | Native geometry probe covers a facing surface, reachable top and standing clearance. Compare traversal variants, aborts, montage alignment, moving targets, and blend-out after integration. |
@@ -89,7 +89,7 @@ The script backs up the original local package under `Saved/BlueprintMigration/L
 
 The local `SandboxCharacter_CMC` asset inherits from `ASampleCmcCharacter`. Its existing pre-movement dispatcher calls native rotation and movement updates. The movement update selects gait from raw Enhanced Input action values and the existing walk and sprint intent, then sets acceleration, braking deceleration, ground friction, standing speed and crouch speed. The class samples both movement actions through its possession input component, so direction handling and analog thresholds stay independent of input normalization.
 
-The Blueprint continues to own authored values and serialize `Gait` and `CharacterInputState` for the existing animation interfaces. Input events still manage those intents and their replication. The `DefaultSlot` montage gate remains authored.
+The Blueprint continues to own authored values and serialize `Gait` and `CharacterInputState` for the existing animation interfaces. The `DefaultSlot` montage gate remains authored.
 
 Build the Editor target and close the destination Editor. The script accepts the stock reference character or a character with the earlier movement migration already applied. If your local copy only has the older crouch-speed migration, use its stock package backup under `Saved/BlueprintMigration/CmcCrouchSpeed/` as the starting file. Run the script from the repository root.
 
@@ -104,18 +104,33 @@ UE 5.9.0 build 60738873 compiled both Win64 Development targets. The script inst
 
 ### CMC movement, look, and crouch input
 
-After the gait migration, five `Triggered` callbacks are installed during local input setup. Camera-relative movement uses the controller's yaw and the authored stick mode. World-relative movement stays normalized on the world axes. Mouse look supplies a per-update delta and gamepad look applies the world's frame delta to the turn rate. Crouch continues to toggle outside falling. The existing mapping context, default actions, jump and traversal callbacks, input intent events, and animation packages remain in place.
+After the gait migration, five `Triggered` callbacks are installed during local input setup. Camera-relative movement uses the controller's yaw and the authored stick mode. World-relative movement stays normalized on the world axes. Mouse look supplies a per-update delta and gamepad look applies the world's frame delta to the turn rate. Crouch continues to toggle outside falling. The existing mapping context, default actions, jump and traversal callbacks, and animation packages remain in place.
 
-With the destination Editor closed, run the input migration and the complete migration suite.
+With the destination Editor closed, run the movement input migration.
 
 ```powershell
 $script = (Resolve-Path Scripts/migrate_cmc_input.py).Path
 & $editor $project -run=PythonScript "-script=$script" -Unattended -NullRHI
-& $editor $project -Unattended -NullRHI '-ExecCmds=Automation RunTests GameAnimationSampleCpp.Migration' '-TestExit=Automation Test Queue Empty'
 ```
 
 The script replaces isolated input event chains, enables native bindings on the local pawn class, and saves a pre-change package under `Saved/BlueprintMigration/CmcInput/`. Unmigrated pawns still use their existing Blueprint handlers.
 
 Both Win64 Development targets built and all seven migration tests passed on UE 5.9.0 build 60738873. The input test verifies the saved pawn's single handler per migrated trigger, analog camera-relative movement, normalized world-relative movement, mouse and gamepad look, and crouch gating. The independent Smart Object component retains its movement action subscription. The installation script reran without changing the package hash. Rendered and multiplayer input comparisons are **Not run**.
+
+### CMC input intent
+
+Walk and strafe toggle on press. Sprint clears the walk selection and, like aim, responds to both press and release. The local pawn updates the same `CharacterInputState` property consumed by the authored camera and animation interfaces. The owning client submits a typed snapshot through an unreliable Server RPC, matching the reference event's flags. The server updates the existing replicated property, including compatibility with push-model replication. The `Set_CharacterInputState` interface remains available to existing callers.
+
+After the movement input migration, run the input intent migration and the complete suite.
+
+```powershell
+$script = (Resolve-Path Scripts/migrate_cmc_input_intent.py).Path
+& $editor $project -run=PythonScript "-script=$script" -Unattended -NullRHI
+& $editor $project -Unattended -NullRHI '-ExecCmds=Automation RunTests GameAnimationSampleCpp.Migration' '-TestExit=Automation Test Queue Empty'
+```
+
+The migration compares the old and new network flags before editing, checks the original defaults after compilation, and backs up the previous pawn package under `Saved/BlueprintMigration/CmcInputIntent/`.
+
+On UE 5.9.0 build 60738873, both Win64 Development targets built, the migration installed with zero errors, and a rerun preserved its package hash. The seven-test migration suite passed. The CMC input test exercises press and release, walk and sprint priority, strafe toggling, preservation of crouch intent, and authoritative writes to the existing replicated state.
 
 See the [Epic sample documentation](https://dev.epicgames.com/documentation/unreal-engine/game-animation-sample-project-in-unreal-engine) for the sample's public controls and architecture.
