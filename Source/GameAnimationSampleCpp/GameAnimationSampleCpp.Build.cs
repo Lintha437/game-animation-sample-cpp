@@ -5,6 +5,6 @@ public class GameAnimationSampleCpp : ModuleRules
     public GameAnimationSampleCpp(ReadOnlyTargetRules target) : base(target)
     {
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
-        PrivateDependencyModuleNames.AddRange(new[] { "Core", "CoreUObject", "Engine", "AnimGraphRuntime", "EnhancedInput" });
+        PrivateDependencyModuleNames.AddRange(new[] { "Core", "CoreUObject", "Engine", "AnimGraphRuntime", "EnhancedInput", "NetCore" });
     }
 }
