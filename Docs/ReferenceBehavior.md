@@ -133,4 +133,22 @@ The migration compares the old and new network flags before editing, checks the 
 
 On UE 5.9.0 build 60738873, both Win64 Development targets built, the migration installed with zero errors, and a rerun preserved its package hash. The seven-test migration suite passed. The CMC input test exercises press and release, walk and sprint priority, strafe toggling, preservation of crouch intent, and authoritative writes to the existing replicated state.
 
+A two-player listen-server PIE session in `NPCLevel` verified the aim action over the client-to-server path. Both pawns were CMC. The remote player's client and its counterpart on the server reported false before press, true while held, and false after release. Packet loss and a separate observing client are **Not run**.
+
+### Sandbox pawn selection and restart
+
+`ASampleSandboxGameMode` selects the pawn for login and restart. It reads the level's existing `PawnClasses_Soft` and default pawn class. Changes to `DDCvar.PawnClass` preload the new choice and replace possessed player pawns at their current transforms with their aim restored. A newer request cancels the previous load, and teardown releases the request and delegate. Controllers without a pawn continue through the normal spawn flow. A failed or abstract selection leaves existing pawns in place.
+
+The `GM_Sandbox` and `GM_Sandbox_Ragdoll` packages still supply the level-specific defaults. With the destination Editor closed, run the local GameMode migration and the migration suite.
+
+```powershell
+$script = (Resolve-Path Scripts/migrate_sandbox_game_mode.py).Path
+& $editor $project -run=PythonScript "-script=$script" -Unattended -NullRHI
+& $editor $project -Unattended -NullRHI '-ExecCmds=Automation RunTests GameAnimationSampleCpp.Migration' '-TestExit=Automation Test Queue Empty'
+```
+
+The migration verifies the stock GameMode package and backs it up under `Saved/BlueprintMigration/SandboxGameMode/`.
+
+Both Win64 Development targets built on UE 5.9.0 build 60738873. The migration installed with zero errors and reran without changing the package hash. All eight migration tests passed, including CMC and Mover selection and fallback to the sandbox and ragdoll defaults. Two-player PIE in `NPCLevel` switched both players from Mover to CMC and back, including possession on the remote client. Horizontal positions and the observed zero aim yaw were retained. Vertical positions differed by up to 7.3 cm during replacement. Nonzero aim yaw and packaged checks are **Not run**.
+
 See the [Epic sample documentation](https://dev.epicgames.com/documentation/unreal-engine/game-animation-sample-project-in-unreal-engine) for the sample's public controls and architecture.
