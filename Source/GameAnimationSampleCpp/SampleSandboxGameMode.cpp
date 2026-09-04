@@ -13,6 +13,36 @@
 namespace
 {
     constexpr TCHAR PawnClassVariable[] = TEXT("DDCvar.PawnClass");
+    constexpr TCHAR VisualOverrideVariable[] = TEXT("DDCvar.VisualOverride");
+
+    int32 GetChoiceCount(const UObject& Owner, FName PropertyName)
+    {
+        const FArrayProperty* Property = FindFProperty<FArrayProperty>(Owner.GetClass(), PropertyName);
+        return Property ? FScriptArrayHelper(Property, Property->ContainerPtrToValuePtr<void>(&Owner)).Num() : 0;
+    }
+}
+
+void ASampleSandboxGameMode::CyclePawn()
+{
+    const int32 Count = GetChoiceCount(*this, TEXT("PawnClasses_Soft"));
+    IConsoleVariable* Selection = IConsoleManager::Get().FindConsoleVariable(PawnClassVariable);
+    if (Selection && Count > 0)
+    {
+        const int64 Previous = Selection->GetInt();
+        const int64 Next = Previous + (Previous == -1 ? 2 : 1);
+        Selection->Set(static_cast<int32>(Next % Count), ECVF_SetByConsole);
+    }
+}
+
+void ASampleSandboxGameMode::CycleVisualOverride()
+{
+    IConsoleVariable* Selection = IConsoleManager::Get().FindConsoleVariable(VisualOverrideVariable);
+    if (Selection)
+    {
+        const int32 Count = GetChoiceCount(*this, TEXT("VisualOverrides_Soft"));
+        const int64 Next = static_cast<int64>(Selection->GetInt()) + 1;
+        Selection->Set(Next >= Count ? -1 : static_cast<int32>(Next), ECVF_SetByConsole);
+    }
 }
 
 TSoftClassPtr<APawn> ASampleSandboxGameMode::GetSelectedPawn() const

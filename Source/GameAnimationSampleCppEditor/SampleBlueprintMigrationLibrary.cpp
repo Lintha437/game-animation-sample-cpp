@@ -173,3 +173,13 @@ bool USampleBlueprintMigrationLibrary::RemoveCustomEvent(UBlueprint* Blueprint, 
     RemoveNodes(*Blueprint, *Graph, Remove);
     return true;
 }
+
+bool USampleBlueprintMigrationLibrary::RemoveDeclaredVariable(UBlueprint* Blueprint, FName VariableName)
+{
+    if (!Blueprint || FBlueprintEditorUtils::FindNewVariableIndex(Blueprint, VariableName) == INDEX_NONE)
+    {
+        return false;
+    }
+    FBlueprintEditorUtils::RemoveMemberVariable(Blueprint, VariableName);
+    return true;
+}

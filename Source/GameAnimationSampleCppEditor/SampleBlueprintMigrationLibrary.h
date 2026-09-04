@@ -56,4 +56,8 @@ public:
      */
     UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
     static bool RemoveCustomEvent(UBlueprint* Blueprint, UEdGraph* Graph, FName EventName);
+
+    /** Removes a declared Blueprint member before its value is moved to a native property. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
+    static bool RemoveDeclaredVariable(UBlueprint* Blueprint, FName VariableName);
 };

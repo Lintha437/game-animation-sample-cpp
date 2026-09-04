@@ -151,4 +151,22 @@ The migration verifies the stock GameMode package and backs it up under `Saved/B
 
 Both Win64 Development targets built on UE 5.9.0 build 60738873. The migration installed with zero errors and reran without changing the package hash. All eight migration tests passed, including CMC and Mover selection and fallback to the sandbox and ragdoll defaults. Two-player PIE in `NPCLevel` switched both players from Mover to CMC and back, including possession on the remote client. Horizontal positions and the observed zero aim yaw were retained. Vertical positions differed by up to 7.3 cm during replacement. Nonzero aim yaw and packaged checks are **Not run**.
 
+### Sandbox player controller
+
+`ASampleSandboxPlayerController` handles the three authored sandbox input actions on the owning controller. The gaze teleport sweeps a 32 cm sphere on the same trace channel as the reference and moves the pawn with the reference 50 cm clearance on hit. The authored maximum distance moves to the native class defaults. With a clear view the pawn moves to the sweep endpoint. The same operation handles CMC and Mover, using the original local execution and teleport physics.
+
+Pawn and visual cycling retain their original server delivery. The pawn change is reliable and the visual change is unreliable. The native GameMode advances the existing console variables and authored lists, including index wrapping. The visual data and its consumers remain asset-driven. Android and iOS retain the joystick-hide behavior when a gamepad is assigned.
+
+After applying the GameMode migration, close the destination Editor and run the controller migration.
+
+```powershell
+$script = (Resolve-Path Scripts/migrate_sandbox_controller.py).Path
+& $editor $project -run=PythonScript "-script=$script" -Unattended -NullRHI
+& $editor $project -Unattended -NullRHI '-ExecCmds=Automation RunTests GameAnimationSampleCpp.Migration' '-TestExit=Automation Test Queue Empty'
+```
+
+The local script backs up both affected packages under `Saved/BlueprintMigration/SandboxController/`. It preserves the two original network flag sets and leaves the authored game mode and controller package paths in place.
+
+Both Win64 Development targets built and all nine migration tests passed on UE 5.9.0 build 60738873. The controller test verifies unobstructed range, the sphere-hit clearance, pawn rotation, and the two RPC policies. Installing and rerunning the migration produced zero errors, and the rerun preserved both package hashes. In two-player `NPCLevel` PIE, the remote input advanced the visual index from -1 to 0 and switched the pawn from CMC to Mover. Host input teleported each pawn roughly 100 m in open space. Mobile joystick behavior, packet-loss cases and packaged runs are **Not run**.
+
 See the [Epic sample documentation](https://dev.epicgames.com/documentation/unreal-engine/game-animation-sample-project-in-unreal-engine) for the sample's public controls and architecture.

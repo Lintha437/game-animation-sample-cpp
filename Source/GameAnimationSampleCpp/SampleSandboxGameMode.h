@@ -31,6 +31,12 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Sandbox")
     void ResetAllPlayers();
 
+    /** Advances the authored pawn index, then lets the existing selection delegate restart players. */
+    void CyclePawn();
+
+    /** Advances the authored presentation index, including the default selection at index -1. */
+    void CycleVisualOverride();
+
 protected:
     /** Subscribes to the authored pawn-selection console variable. */
     virtual void BeginPlay() override;
