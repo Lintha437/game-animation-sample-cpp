@@ -169,4 +169,20 @@ The local script backs up both affected packages under `Saved/BlueprintMigration
 
 Both Win64 Development targets built and all nine migration tests passed on UE 5.9.0 build 60738873. The controller test verifies unobstructed range, the sphere-hit clearance, pawn rotation, and the two RPC policies. Installing and rerunning the migration produced zero errors, and the rerun preserved both package hashes. In two-player `NPCLevel` PIE, the remote input advanced the visual index from -1 to 0 and switched the pawn from CMC to Mover. Host input teleported each pawn roughly 100 m in open space. Mobile joystick behavior, packet-loss cases and packaged runs are **Not run**.
 
+### Traversal movement hooks
+
+The local `AC_TraversalLogic` package uses `USampleTraversalComponent` for its CMC movement mode and replication updates. The animation event graph still starts the montage, selects its authored warp targets, and invokes the existing CMC hooks in order. The CMC path enters flying and temporarily enables its client-position flags. Blend-out or interruption invokes the exit mode for the selected action, then restores normal correction after the original 0.2-second delay. The Mover path keeps its original mode queue and flags. Collision management and the traversal eligibility checks remain in the current Blueprint.
+
+Build the Editor target, close the destination Editor, and apply the local migration.
+
+```powershell
+$script = (Resolve-Path Scripts/migrate_traversal_movement.py).Path
+& $editor $project -run=PythonScript "-script=$script" -Unattended -NullRHI
+& $editor $project -Unattended -NullRHI '-ExecCmds=Automation RunTests GameAnimationSampleCpp.Migration' '-TestExit=Automation Test Queue Empty'
+```
+
+The migration backs up the previous package under `Saved/BlueprintMigration/TraversalMovement/`. The original traversal action data, montage chooser, warp targets, CMC and Mover playback graphs, and their package references stay authored.
+
+Both Win64 Development targets built and all ten migration tests passed on UE 5.9.0 build 60738873. The test covers the four authored exit choices, both CMC flags, and the Mover guard. The package hash stayed unchanged on rerun. The event, traversal selection and warp target graphs matched their pre-migration DSL. Direct calls on a possessed CMC pawn in `NPCLevel` PIE verified walking → flying → walking and both flag changes. An injected montage did not start the traversal event path, so montage interruption, obstacle-driven playback and multiplayer correction remain unverified.
+
 See the [Epic sample documentation](https://dev.epicgames.com/documentation/unreal-engine/game-animation-sample-project-in-unreal-engine) for the sample's public controls and architecture.

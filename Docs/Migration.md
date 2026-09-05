@@ -42,6 +42,10 @@ The sandbox uses `DDCvar.PawnClass` to switch demonstration pawns for everyone i
 
 The reference controller's gaze teleport is a local sandbox navigation command. For an online gameplay teleport in a host project, have the authority establish the destination and validate collisions, occupancy, and player permissions. Preserve the intended movement mode and test correction on an owning client for each movement component.
 
+### Connect traversal playback to movement
+
+Keep the montage and warp target data in the animation assets. Wire the action's start, blend-out, and interruption callbacks to the host movement system. The sample CMC path enters flying and chooses walking or falling from the traversal result. Its sample-specific replication window stays bounded by the traversal cleanup. In an authoritative host, decide which movement state the client may predict and verify restoration on every exit. Exercise target loss, montage failure, interruption, unpossession, and level travel. Keep Mover mode queues separate from CMC movement flags.
+
 ## Bring in licensed animation data
 
 When using the Epic sample assets, acquire the sample under the applicable terms. In a scratch branch of the destination project, use Content Browser → Asset Actions → Migrate, review Asset Report dependencies, and target the destination's `Content/` directory. Review package name conflicts before accepting an overwrite. Preserve referenced package paths and enable required plugins for each migrated feature. For instance, a Motion Matching graph needs Pose Search assets and may also depend on Chooser, Motion Warping, Animation Warping, and Control Rig.
