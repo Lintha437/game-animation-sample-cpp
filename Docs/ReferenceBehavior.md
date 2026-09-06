@@ -185,4 +185,18 @@ The migration backs up the previous package under `Saved/BlueprintMigration/Trav
 
 Both Win64 Development targets built and all ten migration tests passed on UE 5.9.0 build 60738873. The test covers the four authored exit choices, both CMC flags, and the Mover guard. The package hash stayed unchanged on rerun. The event, traversal selection and warp target graphs matched their pre-migration DSL. Direct calls on a possessed CMC pawn in `NPCLevel` PIE verified walking → flying → walking and both flag changes. An injected montage did not start the traversal event path, so montage interruption, obstacle-driven playback and multiplayer correction remain unverified.
 
+### Traversable block ledges
+
+`USampleTraversalLedgeLibrary` selects and samples the obstacle's authored splines. It chooses the nearest facing edge from the pawn position, applies the minimum width and corner clearance at the impact point, then samples the mapped opposite edge. The local `LevelBlock_Traversable` keeps its authored parent, construction, and typed `GetLedgeTransforms` signature. The existing traversal component still supplies the trace hit and consumes the same by-reference result.
+
+Build the Editor target, close the destination Editor, and apply the local migration.
+
+```powershell
+$script = (Resolve-Path Scripts/migrate_traversal_ledges.py).Path
+& $editor $project -run=PythonScript "-script=$script" -Unattended -NullRHI
+& $editor $project -Unattended -NullRHI '-ExecCmds=Automation RunTests GameAnimationSampleCpp.Migration' '-TestExit=Automation Test Queue Empty'
+```
+
+The script backs up the reference package under `Saved/BlueprintMigration/TraversalLedges/`. A rerun preserved the installed package hash, and the source package matched its original hash. Both Win64 Development targets built and all eleven migration tests passed on UE 5.9.0 build 60738873. The ledge test calls the saved Blueprint entry point and verifies its in-place result, corner clearance, opposite edge sampling, preservation of unrelated result fields, and rejection of a short ledge. The local `DefaultLevel` loaded 28 traversable block instances in the editor. Curved and rotated splines, physical obstacle playback, and multiplayer correction are **Not run**.
+
 See the [Epic sample documentation](https://dev.epicgames.com/documentation/unreal-engine/game-animation-sample-project-in-unreal-engine) for the sample's public controls and architecture.

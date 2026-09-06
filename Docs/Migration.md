@@ -46,6 +46,12 @@ The reference controller's gaze teleport is a local sandbox navigation command. 
 
 Keep the montage and warp target data in the animation assets. Wire the action's start, blend-out, and interruption callbacks to the host movement system. The sample CMC path enters flying and chooses walking or falling from the traversal result. Its sample-specific replication window stays bounded by the traversal cleanup. In an authoritative host, decide which movement state the client may predict and verify restoration on every exit. Exercise target loss, montage failure, interruption, unpossession, and level travel. Keep Mover mode queues separate from CMC movement flags.
 
+### Author traversal ledges
+
+Give each traversable obstacle a set of spline components, ordered consistently, and map each front spline to its opposite where applicable. Author each spline's up vector to represent its outward ledge normal in world space. Preserve spline direction, scale, and the corner clearance when porting existing levels. The sample chooses the front spline from the pawn position, projects the collision impact to that spline, clamps the point half the minimum ledge width away from either end, and samples the opposite spline from the clamped position.
+
+Keep the query result in a typed native structure in the host project. Update it when the host's gameplay trace hits a block and feed the resulting transforms into the existing action and animation pipeline. The sample's one-call Blueprint adapter exists to preserve the imported traversal result structure. When adapting the native query, map the obstacle's ordered splines, opposites, and minimum width to the host's own types. Verify straight and curved splines, narrow edges, missing opposites, and obstacles rotated in the level.
+
 ## Bring in licensed animation data
 
 When using the Epic sample assets, acquire the sample under the applicable terms. In a scratch branch of the destination project, use Content Browser → Asset Actions → Migrate, review Asset Report dependencies, and target the destination's `Content/` directory. Review package name conflicts before accepting an overwrite. Preserve referenced package paths and enable required plugins for each migrated feature. For instance, a Motion Matching graph needs Pose Search assets and may also depend on Chooser, Motion Warping, Animation Warping, and Control Rig.
