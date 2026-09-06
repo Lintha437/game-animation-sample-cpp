@@ -7,6 +7,8 @@
 #include "K2Node_CallFunction.h"
 #include "K2Node_CustomEvent.h"
 #include "K2Node_EnhancedInputAction.h"
+#include "K2Node_FunctionEntry.h"
+#include "K2Node_FunctionResult.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 
 namespace
@@ -181,5 +183,69 @@ bool USampleBlueprintMigrationLibrary::RemoveDeclaredVariable(UBlueprint* Bluepr
         return false;
     }
     FBlueprintEditorUtils::RemoveMemberVariable(Blueprint, VariableName);
+    return true;
+}
+
+bool USampleBlueprintMigrationLibrary::ReplaceVoidFunctionBody(
+    UBlueprint* Blueprint, UEdGraph* Graph, UClass* Library, FName FunctionName)
+{
+    const UFunction* Function = Library ? Library->FindFunctionByName(FunctionName) : nullptr;
+    if (!Blueprint || !Graph || Graph->GetOuter() != Blueprint || !Function ||
+        !Function->HasAllFunctionFlags(FUNC_Static | FUNC_Native) || Function->GetReturnProperty())
+    {
+        return false;
+    }
+
+    TArray<UK2Node_FunctionEntry*> Entries;
+    Graph->GetNodesOfClass(Entries);
+    if (Entries.Num() != 1)
+    {
+        return false;
+    }
+    UK2Node_FunctionEntry* Entry = Entries[0];
+    TSet<UEdGraphNode*> OldBody;
+    for (UEdGraphNode* Node : Graph->Nodes)
+    {
+        if (const auto* Result = Cast<UK2Node_FunctionResult>(Node))
+        {
+            for (const UEdGraphPin* Pin : Result->Pins)
+            {
+                if (Pin->Direction == EGPD_Input && Pin->PinType.PinCategory != UEdGraphSchema_K2::PC_Exec)
+                {
+                    return false;
+                }
+            }
+        }
+        if (Node != Entry)
+        {
+            OldBody.Add(Node);
+        }
+    }
+
+    FGraphNodeCreator<UK2Node_CallFunction> Creator(*Graph);
+    UK2Node_CallFunction* Call = Creator.CreateNode();
+    Call->SetFromFunction(Function);
+    Call->NodePosX = Entry->NodePosX + 400;
+    Call->NodePosY = Entry->NodePosY;
+    Creator.Finalize();
+
+    RemoveNodes(*Blueprint, *Graph, OldBody);
+    Entry->Modify();
+    Entry->LocalVariables.Reset();
+    const UEdGraphSchema* Schema = Graph->GetSchema();
+    for (UEdGraphPin* Output : Entry->Pins)
+    {
+        if (Output->Direction == EGPD_Output)
+        {
+            const FName InputName = Output->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec
+                ? UEdGraphSchema_K2::PN_Execute
+                : Output->PinName;
+            UEdGraphPin* Input = Call->FindPin(InputName, EGPD_Input);
+            if (!Input || !Schema->TryCreateConnection(Output, Input))
+            {
+                return false;
+            }
+        }
+    }
     return true;
 }

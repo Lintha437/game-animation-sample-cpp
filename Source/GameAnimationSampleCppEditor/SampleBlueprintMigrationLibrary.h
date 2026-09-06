@@ -60,4 +60,12 @@ public:
     /** Removes a declared Blueprint member before its value is moved to a native property. */
     UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
     static bool RemoveDeclaredVariable(UBlueprint* Blueprint, FName VariableName);
+
+    /**
+     * Replaces a void Blueprint function body with a static native call.
+     * The call receives matching inputs by name and the graph retains its
+     * original typed signature. Callers own compile and save.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
+    static bool ReplaceVoidFunctionBody(UBlueprint* Blueprint, UEdGraph* Graph, UClass* Library, FName FunctionName);
 };
