@@ -68,4 +68,14 @@ public:
      */
     UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
     static bool ReplaceVoidFunctionBody(UBlueprint* Blueprint, UEdGraph* Graph, UClass* Library, FName FunctionName);
+
+    /**
+     * Replaces the two geometry stages of the reference traversal function
+     * while preserving initialization, both Choosers, and event dispatch.
+     * @param Blueprint Traversal component that owns the graph.
+     * @param Graph Existing TryTraversalAction graph.
+     * @return True when the native call is wired or already installed.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
+    static bool ReplaceTraversalGeometry(UBlueprint* Blueprint, UEdGraph* Graph);
 };
