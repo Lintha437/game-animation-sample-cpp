@@ -199,4 +199,20 @@ $script = (Resolve-Path Scripts/migrate_traversal_ledges.py).Path
 
 The script backs up the reference package under `Saved/BlueprintMigration/TraversalLedges/`. A rerun preserved the installed package hash, and the source package matched its original hash. Both Win64 Development targets built and all eleven migration tests passed on UE 5.9.0 build 60738873. The ledge test calls the saved Blueprint entry point and verifies its in-place result, corner clearance, opposite edge sampling, preservation of unrelated result fields, and rejection of a short ledge. The local `DefaultLevel` loaded 28 traversable block instances in the editor. Curved and rotated splines, physical obstacle playback, and multiplayer correction are **Not run**.
 
+### Traversal obstacle and clearance sweeps
+
+`FSampleTraversalClearanceQuery` performs the approach sweep, front-edge clearance, over-obstacle sweep, and far-floor sweep. It keeps the reference's capsule sizes, trace channel indices, initial-overlap rejection on the front sweep, corner clearance, and far-floor reach. An overhead hit invalidates the back ledge and reports depth to the hit. The imported `AC_TraversalLogic.TryTraversalAction` calls the native query and passes the same typed reference result to the existing CMC and Mover Choosers. The asset still evaluates pose history, selects and plays montages, sets warp targets, and dispatches the traversal events.
+
+Build the Editor target, close the destination Editor, apply the traversal movement migration, and then apply the clearance migration.
+
+```powershell
+$script = (Resolve-Path Scripts/migrate_traversal_clearance.py).Path
+& $editor $project -run=PythonScript "-script=$script" -Unattended -NullRHI
+& $editor $project -Unattended -NullRHI '-ExecCmds=Automation RunTests GameAnimationSampleCpp.Migration' '-TestExit=Automation Test Queue Empty'
+```
+
+The script saves the previous local package under `Saved/BlueprintMigration/TraversalClearance/`. Both Win64 Development targets built, and all eleven migration tests passed. The expanded ledge test verifies an actual capsule hit, obstacle height and depth, a clear far floor, an overhead blockage, and a blocked front approach. A rerun preserved the migrated package hash. The original package matched its reference hash.
+
+In single-player `DefaultLevel` PIE, `LevelBlock_Traversable36` triggered `AM_M_Neutral_Traversal_Vault_1_0_stand_F_Lfoot` through the original traversal function on CMC and Mover. Both pawns crossed the obstacle and returned to ground, and CMC movement correction flags returned to their normal values. The Mover run supplied the approach direction explicitly. Montage interruption, the normal Mover input chain, and multiplayer correction are **Not run**.
+
 See the [Epic sample documentation](https://dev.epicgames.com/documentation/unreal-engine/game-animation-sample-project-in-unreal-engine) for the sample's public controls and architecture.
