@@ -7,8 +7,11 @@
 #include "K2Node_CallFunction.h"
 #include "K2Node_CustomEvent.h"
 #include "K2Node_EnhancedInputAction.h"
+#include "K2Node_ExecutionSequence.h"
 #include "K2Node_FunctionEntry.h"
 #include "K2Node_FunctionResult.h"
+#include "K2Node_IfThenElse.h"
+#include "K2Node_VariableGet.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 
 namespace
@@ -56,6 +59,79 @@ namespace
         {
             FBlueprintEditorUtils::RemoveNode(&Blueprint, Node, true);
         }
+    }
+
+    TSet<UEdGraphNode*> CollectExecutionNodes(const UEdGraphPin& Start)
+    {
+        TArray<UEdGraphPin*> Pending(Start.LinkedTo);
+        TSet<UEdGraphNode*> Nodes;
+        while (!Pending.IsEmpty())
+        {
+            UEdGraphNode* Node = Pending.Pop(EAllowShrinking::No)->GetOwningNode();
+            if (Nodes.Contains(Node))
+            {
+                continue;
+            }
+            Nodes.Add(Node);
+            for (const UEdGraphPin* Pin : Node->Pins)
+            {
+                if (Pin->Direction == EGPD_Output && Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec)
+                {
+                    Pending.Append(Pin->LinkedTo);
+                }
+            }
+        }
+        return Nodes;
+    }
+
+    void CollectUnusedInputs(TSet<UEdGraphNode*>& Remove, const UEdGraphNode* Keep)
+    {
+        TSet<UEdGraphNode*> Candidates;
+        TArray<UEdGraphNode*> Pending = Remove.Array();
+        while (!Pending.IsEmpty())
+        {
+            for (const UEdGraphPin* Pin : Pending.Pop(EAllowShrinking::No)->Pins)
+            {
+                if (Pin->Direction != EGPD_Input || Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec)
+                {
+                    continue;
+                }
+                for (const UEdGraphPin* Peer : Pin->LinkedTo)
+                {
+                    UEdGraphNode* Source = Peer->GetOwningNode();
+                    if (Source != Keep && !Remove.Contains(Source) && !Candidates.Contains(Source) &&
+                        !Source->Pins.ContainsByPredicate([](const UEdGraphPin* SourcePin)
+                        {
+                            return SourcePin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec;
+                        }))
+                    {
+                        Candidates.Add(Source);
+                        Pending.Add(Source);
+                    }
+                }
+            }
+        }
+        bool bChanged;
+        do
+        {
+            bChanged = false;
+            for (auto It = Candidates.CreateIterator(); It; ++It)
+            {
+                if ((*It)->Pins.ContainsByPredicate([&](const UEdGraphPin* Pin)
+                {
+                    return Pin->Direction == EGPD_Output && Pin->LinkedTo.ContainsByPredicate([&](const UEdGraphPin* Peer)
+                    {
+                        const UEdGraphNode* Consumer = Peer->GetOwningNode();
+                        return !Remove.Contains(Consumer) && !Candidates.Contains(Consumer);
+                    });
+                }))
+                {
+                    It.RemoveCurrent();
+                    bChanged = true;
+                }
+            }
+        } while (bChanged);
+        Remove.Append(Candidates);
     }
 }
 
@@ -248,4 +324,113 @@ bool USampleBlueprintMigrationLibrary::ReplaceVoidFunctionBody(
         }
     }
     return true;
+}
+
+bool USampleBlueprintMigrationLibrary::ReplaceTraversalGeometry(UBlueprint* Blueprint, UEdGraph* Graph)
+{
+    static const FName FunctionName(TEXT("EvaluateTraversalClearance"));
+    static const FName ResultName(TEXT("TraversalCheckResult"));
+    if (!Blueprint || !Graph || Graph->GetOuter() != Blueprint || Graph->GetFName() != TEXT("TryTraversalAction"))
+    {
+        return false;
+    }
+    TArray<UK2Node_CallFunction*> Calls;
+    Graph->GetNodesOfClass(Calls);
+    if (Calls.ContainsByPredicate([](const UK2Node_CallFunction* Call)
+    {
+        return Call->FunctionReference.GetMemberName() == FunctionName;
+    }))
+    {
+        return true;
+    }
+    const UFunction* Function = Blueprint->ParentClass->FindFunctionByName(FunctionName);
+    TArray<UK2Node_FunctionEntry*> Entries;
+    Graph->GetNodesOfClass(Entries);
+    if (!Function || Entries.Num() != 1)
+    {
+        return false;
+    }
+    UK2Node_FunctionEntry* Entry = Entries[0];
+    UEdGraphPin* Start = Entry->FindPin(UEdGraphSchema_K2::PN_Then, EGPD_Output);
+    UK2Node_ExecutionSequence* Sequence = Start && Start->LinkedTo.Num() == 1
+        ? Cast<UK2Node_ExecutionSequence>(Start->LinkedTo[0]->GetOwningNode()) : nullptr;
+    UEdGraphPin* Probe = Sequence ? Sequence->GetThenPinGivenIndex(1) : nullptr;
+    UEdGraphPin* Clearance = Sequence ? Sequence->GetThenPinGivenIndex(2) : nullptr;
+    UEdGraphPin* Inputs = Entry->FindPin(TEXT("Inputs"), EGPD_Output);
+    UEdGraphPin* Debug = Entry->FindPin(TEXT("DebugType"), EGPD_Output);
+    if (!Probe || !Clearance || !Inputs || !Debug || !Sequence->GetThenPinGivenIndex(4))
+    {
+        return false;
+    }
+    TSet<UEdGraphNode*> Remove = CollectExecutionNodes(*Probe);
+    Remove.Append(CollectExecutionNodes(*Clearance));
+    int32 ApproachTraces = 0;
+    int32 ClearanceTraces = 0;
+    UK2Node_FunctionResult* Rejection = nullptr;
+    for (UEdGraphNode* Node : Remove)
+    {
+        if (const auto* Call = Cast<UK2Node_CallFunction>(Node);
+            Call && Call->FunctionReference.GetMemberName() == TEXT("CapsuleTraceSingle"))
+        {
+            const UEdGraphPin* Channel = Call->FindPin(TEXT("TraceChannel"), EGPD_Input);
+            ApproachTraces += Channel && Channel->DefaultValue == TEXT("TraceTypeQuery3");
+            ClearanceTraces += Channel && Channel->DefaultValue == TEXT("TraceTypeQuery1");
+        }
+        if (auto* Result = Cast<UK2Node_FunctionResult>(Node))
+        {
+            const UEdGraphPin* TraversalFailed = Result->FindPin(TEXT("TraversalCheckFailed"), EGPD_Input);
+            const UEdGraphPin* MontageFailed = Result->FindPin(TEXT("MontageSelectionFailed"), EGPD_Input);
+            if (TraversalFailed && TraversalFailed->DefaultValue == TEXT("true") &&
+                MontageFailed && MontageFailed->DefaultValue == TEXT("false"))
+            {
+                Rejection = Result;
+            }
+        }
+    }
+    TArray<UK2Node_VariableGet*> Gets;
+    Graph->GetNodesOfClass(Gets);
+    UEdGraphPin* LocalResult = nullptr;
+    for (UK2Node_VariableGet* Get : Gets)
+    {
+        if (Get->GetVarName() == ResultName && Get->VariableReference.IsLocalScope())
+        {
+            UEdGraphPin* Candidate = Get->FindPin(ResultName, EGPD_Output);
+            if (Candidate && Candidate->SubPins.IsEmpty())
+            {
+                LocalResult = Candidate;
+                break;
+            }
+        }
+    }
+    if (ApproachTraces != 1 || ClearanceTraces != 3 || !LocalResult || !Rejection)
+    {
+        return false;
+    }
+
+    Remove.Remove(Rejection);
+    CollectUnusedInputs(Remove, LocalResult->GetOwningNode());
+    RemoveNodes(*Blueprint, *Graph, Remove);
+    const UEdGraphSchema* Schema = Graph->GetSchema();
+    if (!Inputs->SubPins.IsEmpty())
+    {
+        Schema->RecombinePin(Inputs->SubPins[0]);
+    }
+    FGraphNodeCreator<UK2Node_CallFunction> CreateCall(*Graph);
+    UK2Node_CallFunction* Call = CreateCall.CreateNode();
+    Call->SetFromFunction(Function);
+    Call->NodePosX = Sequence->NodePosX + 350;
+    Call->NodePosY = Sequence->NodePosY;
+    CreateCall.Finalize();
+    FGraphNodeCreator<UK2Node_IfThenElse> CreateBranch(*Graph);
+    UK2Node_IfThenElse* Branch = CreateBranch.CreateNode();
+    Branch->NodePosX = Call->NodePosX + 420;
+    Branch->NodePosY = Call->NodePosY;
+    CreateBranch.Finalize();
+    return Schema->TryCreateConnection(Probe, Call->GetExecPin()) &&
+        Schema->TryCreateConnection(Inputs, Call->FindPin(TEXT("Inputs"), EGPD_Input)) &&
+        Schema->TryCreateConnection(Debug, Call->FindPin(TEXT("DebugType"), EGPD_Input)) &&
+        Schema->TryCreateConnection(LocalResult, Call->FindPin(ResultName, EGPD_Input)) &&
+        Schema->TryCreateConnection(Call->GetThenPin(), Branch->GetExecPin()) &&
+        Schema->TryCreateConnection(Call->GetReturnValuePin(), Branch->GetConditionPin()) &&
+        Schema->TryCreateConnection(Branch->GetElsePin(), Rejection->FindPin(UEdGraphSchema_K2::PN_Execute, EGPD_Input));
 }

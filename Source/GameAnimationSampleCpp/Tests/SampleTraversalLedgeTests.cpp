@@ -1,10 +1,13 @@
 #include "../SampleTraversalLedgeLibrary.h"
+#include "../SampleTraversalClearance.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
+#include "Components/BoxComponent.h"
 #include "Components/SplineComponent.h"
 #include "Engine/EngineBaseTypes.h"
 #include "Engine/World.h"
+#include "GameFramework/Character.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/ScopeExit.h"
 #include "UObject/StructOnScope.h"
@@ -110,6 +113,60 @@ bool FSampleTraversalLedgeMigrationTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("The existing Blueprint call returns the clamped position"),
         FrontLocation->ContainerPtrToValuePtr<FVector>(Payload)->Equals(FVector(0.0, 30.0, 0.0), 0.1));
     TestTrue(TEXT("The call preserves unrelated result fields"), BackFloor->GetPropertyValue_InContainer(Payload));
+
+    TInlineComponentArray<UPrimitiveComponent*> AuthoredCollision(Block);
+    for (UPrimitiveComponent* Primitive : AuthoredCollision)
+    {
+        Primitive->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    }
+    const auto MakeBox = [Block](const FVector& Center, const FVector& Extent)
+    {
+        UBoxComponent* Box = NewObject<UBoxComponent>(Block);
+        Block->AddInstanceComponent(Box);
+        Box->SetBoxExtent(Extent);
+        Box->SetWorldLocation(Center);
+        Box->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+        Box->SetCollisionResponseToAllChannels(ECR_Block);
+        Box->RegisterComponent();
+        return Box;
+    };
+    UBoxComponent* FrontWall = MakeBox(FVector(50.0, 50.0, -55.0), FVector(50.0, 65.0, 55.0));
+    MakeBox(FVector(145.0, 50.0, -130.0), FVector(45.0, 65.0, 30.0));
+    for (int32 Index = 0; Index < 2; ++Index)
+    {
+        Front->SetUpVectorAtSplinePoint(Index, -FVector::ForwardVector, ESplineCoordinateSpace::World);
+        Back->SetUpVectorAtSplinePoint(Index, FVector::ForwardVector, ESplineCoordinateSpace::World);
+    }
+    ACharacter* Pawn = World->SpawnActor<ACharacter>(FVector(-115.0, 50.0, -55.0), FRotator::ZeroRotator);
+    if (!TestNotNull(TEXT("Traversing pawn"), Pawn))
+    {
+        return false;
+    }
+    FSampleTraversalApproach Approach;
+    Approach.Direction = FVector::ForwardVector;
+    Approach.Distance = 200.0;
+    Approach.Radius = 12.0f;
+    Approach.HalfHeight = 15.0f;
+    const auto Query = [&]()
+    {
+        return FSampleTraversalClearanceQuery::Query(*Pawn, Approach, 20.0f, 60.0f, EDrawDebugTrace::None, 0, 0.0f);
+    };
+    const FSampleTraversalClearance Clear = Query();
+    TestTrue(TEXT("The approach sweep identifies the actual obstacle component"), Clear.Obstacle.Get() == FrontWall);
+    TestTrue(TEXT("Clear approach and top"), Clear.bCanReachFront && Clear.bCanCrossTop);
+    TestEqual(TEXT("Height is measured from the pawn's feet"), Clear.Height, 115.0, 0.1);
+    TestEqual(TEXT("Open top depth is measured between the ledges"), Clear.Depth, 100.0, 0.1);
+    TestTrue(TEXT("The floor sweep returns the far landing"), Clear.BackFloor.IsSet());
+    TestEqual(TEXT("The far landing height is measured from the back ledge"), Clear.BackHeight, 100.0, 0.2);
+
+    UBoxComponent* Overhead = MakeBox(FVector(55.0, 50.0, 60.0), FVector(5.0, 40.0, 40.0));
+    const FSampleTraversalClearance BlockedTop = Query();
+    TestTrue(TEXT("A blocked top still permits reaching the front edge"), BlockedTop.bCanReachFront);
+    TestFalse(TEXT("An obstruction above the ledge blocks crossing"), BlockedTop.bCanCrossTop);
+    TestEqual(TEXT("Blocked top depth ends at the collision"), BlockedTop.Depth, 50.0, 0.5);
+    TestFalse(TEXT("A blocked crossing skips the floor sweep"), BlockedTop.BackFloor.IsSet());
+    Overhead->SetWorldLocation(FVector(-50.0, 50.0, 85.0));
+    TestFalse(TEXT("An obstruction on the approach blocks the front edge"), Query().bCanReachFront);
 
     Front->SetLocationAtSplinePoint(1, FVector(0.0, 40.0, 0.0), ESplineCoordinateSpace::Local, true);
     TestFalse(TEXT("A short front ledge is rejected"), USampleTraversalLedgeLibrary::QueryLedges(*Block, Hit, PawnLocation).Front.IsSet());

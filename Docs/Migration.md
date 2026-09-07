@@ -52,6 +52,12 @@ Give each traversable obstacle a set of spline components, ordered consistently,
 
 Keep the query result in a typed native structure in the host project. Update it when the host's gameplay trace hits a block and feed the resulting transforms into the existing action and animation pipeline. The sample's one-call Blueprint adapter exists to preserve the imported traversal result structure. When adapting the native query, map the obstacle's ordered splines, opposites, and minimum width to the host's own types. Verify straight and curved splines, narrow edges, missing opposites, and obstacles rotated in the level.
 
+### Validate traversal clearance before selection
+
+Run the approach sweep on the destination channel that identifies traversable obstacles. Use the pawn capsule dimensions for the clearance sweeps. Keep the obstacle component from the approach hit, and revalidate that component before excluding it from movement collision. Allow a separate result for reaching the front ledge with the crossing blocked. Pass the front transform, usable depth, and far floor information to the existing Chooser so it can distinguish mantle, hurdle, and vault candidates.
+
+The reference `FSampleTraversalClearanceQuery` uses the sample block class and its two trace channel indices. Map both channels to the host project's collision profiles and substitute the host's typed obstacle lookup when adapting it. Begin with a clear ledge, a blocked approach, a blocked crossing, and a missing far floor. Compare the chosen montage and final pawn location for each movement implementation that the host supports.
+
 ## Bring in licensed animation data
 
 When using the Epic sample assets, acquire the sample under the applicable terms. In a scratch branch of the destination project, use Content Browser → Asset Actions → Migrate, review Asset Report dependencies, and target the destination's `Content/` directory. Review package name conflicts before accepting an overwrite. Preserve referenced package paths and enable required plugins for each migrated feature. For instance, a Motion Matching graph needs Pose Search assets and may also depend on Chooser, Motion Warping, Animation Warping, and Control Rig.
