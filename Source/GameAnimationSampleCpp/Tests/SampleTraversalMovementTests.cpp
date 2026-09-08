@@ -2,6 +2,9 @@
 
 #if WITH_DEV_AUTOMATION_TESTS
 
+#include "Components/BoxComponent.h"
+#include "Components/CapsuleComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -115,6 +118,39 @@ bool FSampleTraversalMovementMigrationTest::RunTest(const FString& Parameters)
         Movement->bIgnoreClientMovementErrorChecksAndCorrection);
     TestFalse(TEXT("Mover selection leaves the CMC client-position flag alone"),
         Movement->bServerAcceptClientAuthoritativePosition);
+
+    const FBoolProperty* Activity = FindFProperty<FBoolProperty>(Class, TEXT("DoingTraversalAction"));
+    if (!TestNotNull(TEXT("Authored traversal activity observed by the pawn"), Activity))
+    {
+        return false;
+    }
+    Traversal->SetTraversalActionActive(true);
+    TestTrue(TEXT("The native start publishes traversal activity"), Activity->GetPropertyValue_InContainer(Traversal));
+    Traversal->SetTraversalActionActive(false);
+    TestFalse(TEXT("The native finish clears traversal activity"), Activity->GetPropertyValue_InContainer(Traversal));
+
+    UCapsuleComponent* Capsule = Character->GetCapsuleComponent();
+    USkeletalMeshComponent* Mesh = Character->GetMesh();
+    UBoxComponent* FirstObstacle = NewObject<UBoxComponent>(Character);
+    UBoxComponent* SecondObstacle = NewObject<UBoxComponent>(Character);
+    Mesh->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Overlap);
+    Capsule->IgnoreComponentWhenMoving(SecondObstacle, true);
+    Traversal->BeginTraversalCollision(Capsule, FirstObstacle, Mesh);
+    Traversal->BeginTraversalCollision(Capsule, FirstObstacle, Mesh);
+    TestTrue(TEXT("Mover temporarily ignores the swept obstacle"), Capsule->GetMoveIgnoreComponents().Contains(FirstObstacle));
+    TestEqual(TEXT("Mover mesh ignores WorldDynamic during the action"), Mesh->GetCollisionResponseToChannel(ECC_WorldDynamic), ECR_Ignore);
+    Traversal->BeginTraversalCollision(Capsule, SecondObstacle);
+    TestFalse(TEXT("Retargeting releases the previous obstacle"), Capsule->GetMoveIgnoreComponents().Contains(FirstObstacle));
+    TestEqual(TEXT("Changing to the CMC path restores the mesh response"), Mesh->GetCollisionResponseToChannel(ECC_WorldDynamic), ECR_Overlap);
+    Traversal->EndTraversalCollision();
+    Traversal->EndTraversalCollision();
+    TestTrue(TEXT("Cleanup preserves an ignore entry established by the host"),
+        Capsule->GetMoveIgnoreComponents().Contains(SecondObstacle));
+
+    Traversal->BeginTraversalCollision(Capsule, FirstObstacle, Mesh);
+    Traversal->EndTraversalCollision();
+    TestFalse(TEXT("Action finish clears the capsule's traversal ignore"), Capsule->GetMoveIgnoreComponents().Contains(FirstObstacle));
+    TestEqual(TEXT("Action finish restores the previous response"), Mesh->GetCollisionResponseToChannel(ECC_WorldDynamic), ECR_Overlap);
     return true;
 }
 
