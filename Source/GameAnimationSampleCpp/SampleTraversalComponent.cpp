@@ -1,5 +1,6 @@
 #include "SampleTraversalComponent.h"
 
+#include "Components/PrimitiveComponent.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "UObject/UnrealType.h"
@@ -65,4 +66,64 @@ void USampleTraversalComponent::SetReplicationBehavior(bool ClientAuthoritative)
         Movement->bIgnoreClientMovementErrorChecksAndCorrection = ClientAuthoritative;
         Movement->bServerAcceptClientAuthoritativePosition = ClientAuthoritative;
     }
+}
+
+void USampleTraversalComponent::SetTraversalActionActive(bool bActive)
+{
+    if (const FBoolProperty* Activity = FindFProperty<FBoolProperty>(GetClass(), TEXT("DoingTraversalAction")))
+    {
+        Activity->SetPropertyValue_InContainer(this, bActive);
+    }
+}
+
+void USampleTraversalComponent::BeginTraversalCollision(UPrimitiveComponent* Capsule, UPrimitiveComponent* Obstacle,
+    UPrimitiveComponent* Mesh)
+{
+    if (TraversalCapsule.Get() == Capsule && TraversalObstacle.Get() == Obstacle && TraversalMesh.Get() == Mesh)
+    {
+        return;
+    }
+    EndTraversalCollision();
+    TraversalCapsule = Capsule;
+    TraversalObstacle = Obstacle;
+    TraversalMesh = Mesh;
+    if (IsValid(Capsule) && IsValid(Obstacle) && !Capsule->GetMoveIgnoreComponents().Contains(Obstacle))
+    {
+        Capsule->IgnoreComponentWhenMoving(Obstacle, true);
+        bAddedMoveIgnore = true;
+    }
+    if (IsValid(Mesh))
+    {
+        SavedMeshResponse = Mesh->GetCollisionResponseToChannel(ECC_WorldDynamic);
+        Mesh->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Ignore);
+    }
+}
+
+void USampleTraversalComponent::EndTraversalCollision()
+{
+    if (bAddedMoveIgnore)
+    {
+        UPrimitiveComponent* Capsule = TraversalCapsule.Get();
+        UPrimitiveComponent* Obstacle = TraversalObstacle.Get();
+        if (Capsule && Obstacle)
+        {
+            Capsule->IgnoreComponentWhenMoving(Obstacle, false);
+        }
+    }
+    if (UPrimitiveComponent* Mesh = TraversalMesh.Get();
+        Mesh && Mesh->GetCollisionResponseToChannel(ECC_WorldDynamic) == ECR_Ignore)
+    {
+        Mesh->SetCollisionResponseToChannel(ECC_WorldDynamic, SavedMeshResponse);
+    }
+    TraversalCapsule.Reset();
+    TraversalObstacle.Reset();
+    TraversalMesh.Reset();
+    bAddedMoveIgnore = false;
+}
+
+void USampleTraversalComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    EndTraversalCollision();
+    SetTraversalActionActive(false);
+    Super::EndPlay(EndPlayReason);
 }

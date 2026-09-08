@@ -12,6 +12,7 @@
 #include "K2Node_FunctionResult.h"
 #include "K2Node_IfThenElse.h"
 #include "K2Node_VariableGet.h"
+#include "K2Node_VariableSet.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 
 namespace
@@ -132,6 +133,52 @@ namespace
             }
         } while (bChanged);
         Remove.Append(Candidates);
+    }
+
+    struct FTraversalCallReplacement
+    {
+        UEdGraphNode* First;
+        UEdGraphNode* Last;
+        const UFunction* Function;
+        TArray<TPair<FName, UEdGraphPin*>> Inputs;
+    };
+
+    bool InstallTraversalCall(UBlueprint& Blueprint, UEdGraph& Graph, const FTraversalCallReplacement& Replacement)
+    {
+        FGraphNodeCreator<UK2Node_CallFunction> CreateCall(Graph);
+        UK2Node_CallFunction* Call = CreateCall.CreateNode();
+        Call->SetFromFunction(Replacement.Function);
+        Call->NodePosX = Replacement.First->NodePosX;
+        Call->NodePosY = Replacement.First->NodePosY;
+        CreateCall.Finalize();
+        const UEdGraphSchema* Schema = Graph.GetSchema();
+        for (const auto& [Name, Old] : Replacement.Inputs)
+        {
+            UEdGraphPin* New = Call->FindPin(Name, EGPD_Input);
+            if (!New)
+            {
+                return false;
+            }
+            if (Old->LinkedTo.IsEmpty())
+            {
+                Schema->TrySetDefaultValue(*New, Old->DefaultValue);
+            }
+            else if (!Schema->TryCreateConnection(Old->LinkedTo[0], New))
+            {
+                return false;
+            }
+        }
+        UEdGraphPin* Exec = Replacement.First->FindPin(UEdGraphSchema_K2::PN_Execute, EGPD_Input);
+        UEdGraphPin* Then = Replacement.Last->FindPin(UEdGraphSchema_K2::PN_Then, EGPD_Output);
+        if (!Exec || !Then || !Schema->MovePinLinks(*Exec, *Call->GetExecPin()).CanSafeConnect() ||
+            !Schema->MovePinLinks(*Then, *Call->GetThenPin()).CanSafeConnect())
+        {
+            return false;
+        }
+        TSet<UEdGraphNode*> Remove{Replacement.First, Replacement.Last};
+        CollectUnusedInputs(Remove, nullptr);
+        RemoveNodes(Blueprint, Graph, Remove);
+        return true;
     }
 }
 
@@ -433,4 +480,101 @@ bool USampleBlueprintMigrationLibrary::ReplaceTraversalGeometry(UBlueprint* Blue
         Schema->TryCreateConnection(Call->GetThenPin(), Branch->GetExecPin()) &&
         Schema->TryCreateConnection(Call->GetReturnValuePin(), Branch->GetConditionPin()) &&
         Schema->TryCreateConnection(Branch->GetElsePin(), Rejection->FindPin(UEdGraphSchema_K2::PN_Execute, EGPD_Input));
+}
+
+bool USampleBlueprintMigrationLibrary::ReplaceTraversalCollision(UBlueprint* Blueprint, UEdGraph* Graph)
+{
+    if (!Blueprint || !Blueprint->ParentClass || !Graph || Graph->GetOuter() != Blueprint ||
+        Graph->GetFName() != TEXT("EventGraph"))
+    {
+        return false;
+    }
+    const UFunction* Begin = Blueprint->ParentClass->FindFunctionByName(TEXT("BeginTraversalCollision"));
+    const UFunction* End = Blueprint->ParentClass->FindFunctionByName(TEXT("EndTraversalCollision"));
+    const UFunction* Activity = Blueprint->ParentClass->FindFunctionByName(TEXT("SetTraversalActionActive"));
+    if (!Begin || !End || !Activity)
+    {
+        return false;
+    }
+
+    TArray<UK2Node_CallFunction*> Calls;
+    Graph->GetNodesOfClass(Calls);
+    TArray<FTraversalCallReplacement> Replacements;
+    int32 ExistingBegin = 0;
+    int32 ExistingEnd = 0;
+    int32 ExistingActivity = 0;
+    int32 MeshChanges = 0;
+    for (UK2Node_CallFunction* Call : Calls)
+    {
+        const FName Name = Call->FunctionReference.GetMemberName();
+        ExistingBegin += Name == Begin->GetFName();
+        ExistingEnd += Name == End->GetFName();
+        ExistingActivity += Name == Activity->GetFName();
+        if (Name != TEXT("IgnoreComponentWhenMoving"))
+        {
+            continue;
+        }
+        UEdGraphPin* Ignore = Call->FindPin(TEXT("bShouldIgnore"), EGPD_Input);
+        UEdGraphPin* Capsule = Call->FindPin(UEdGraphSchema_K2::PN_Self, EGPD_Input);
+        UEdGraphPin* Obstacle = Call->FindPin(TEXT("Component"), EGPD_Input);
+        if (!Ignore || !Ignore->LinkedTo.IsEmpty() || !Capsule || Capsule->LinkedTo.Num() != 1 ||
+            !Obstacle || Obstacle->LinkedTo.Num() != 1 || Call->GetThenPin()->LinkedTo.Num() != 1)
+        {
+            return false;
+        }
+        const bool bStart = Ignore->DefaultValue == TEXT("true");
+        auto* Next = Cast<UK2Node_CallFunction>(Call->GetThenPin()->LinkedTo[0]->GetOwningNode());
+        const bool bChangesMesh = Next && Next->FunctionReference.GetMemberName() == TEXT("SetCollisionResponseToChannel");
+        UEdGraphPin* Mesh = bChangesMesh ? Next->FindPin(UEdGraphSchema_K2::PN_Self, EGPD_Input) : nullptr;
+        if (bChangesMesh && (!Mesh || Mesh->LinkedTo.Num() != 1))
+        {
+            return false;
+        }
+        MeshChanges += bChangesMesh;
+        FTraversalCallReplacement& Replacement = Replacements.Add_GetRef(
+            {Call, bChangesMesh ? Next : Call, bStart ? Begin : End, {}});
+        if (bStart)
+        {
+            Replacement.Inputs.Emplace(TEXT("Capsule"), Capsule);
+            Replacement.Inputs.Emplace(TEXT("Obstacle"), Obstacle);
+            if (Mesh)
+            {
+                Replacement.Inputs.Emplace(TEXT("Mesh"), Mesh);
+            }
+        }
+    }
+
+    TArray<UK2Node_VariableSet*> Setters;
+    Graph->GetNodesOfClass(Setters);
+    int32 ActivityChanges = 0;
+    for (UK2Node_VariableSet* Set : Setters)
+    {
+        if (Set->GetVarName() == TEXT("DoingTraversalAction"))
+        {
+            UEdGraphPin* Active = Set->FindPin(TEXT("DoingTraversalAction"), EGPD_Input);
+            if (!Active || !Active->LinkedTo.IsEmpty())
+            {
+                return false;
+            }
+            Replacements.Add({Set, Set, Activity, {{TEXT("bActive"), Active}}});
+            ++ActivityChanges;
+        }
+    }
+    if (Replacements.IsEmpty())
+    {
+        return ExistingBegin == 2 && ExistingEnd == 2 && ExistingActivity == 4;
+    }
+    if (Replacements.Num() != 8 || MeshChanges != 2 || ActivityChanges != 4 ||
+        ExistingBegin || ExistingEnd || ExistingActivity)
+    {
+        return false;
+    }
+    for (const FTraversalCallReplacement& Replacement : Replacements)
+    {
+        if (!InstallTraversalCall(*Blueprint, *Graph, Replacement))
+        {
+            return false;
+        }
+    }
+    return true;
 }

@@ -78,4 +78,14 @@ public:
      */
     UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
     static bool ReplaceTraversalGeometry(UBlueprint* Blueprint, UEdGraph* Graph);
+
+    /**
+     * Rewires the collision and activity nodes at the four traversal callback sites.
+     * Preserves the authored montage, warp target, and movement mode nodes.
+     * @param Blueprint Traversal component owning the event graph.
+     * @param Graph Existing traversal event graph.
+     * @return True when the expected sites were converted or already installed.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
+    static bool ReplaceTraversalCollision(UBlueprint* Blueprint, UEdGraph* Graph);
 };

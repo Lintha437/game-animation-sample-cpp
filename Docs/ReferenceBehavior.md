@@ -215,4 +215,20 @@ The script saves the previous local package under `Saved/BlueprintMigration/Trav
 
 In single-player `DefaultLevel` PIE, `LevelBlock_Traversable36` triggered `AM_M_Neutral_Traversal_Vault_1_0_stand_F_Lfoot` through the original traversal function on CMC and Mover. Both pawns crossed the obstacle and returned to ground, and CMC movement correction flags returned to their normal values. The Mover run supplied the approach direction explicitly. Montage interruption, the normal Mover input chain, and multiplayer correction are **Not run**.
 
+### Traversal activity and collision
+
+`USampleTraversalComponent` sets the existing activity field at the authored montage callback sites. The native collision scope suspends the capsule response to the struck component, and the Mover path also suspends the mesh response to `WorldDynamic`. Finish and interrupted callbacks release those changes, and component teardown calls the same cleanup. The scope preserves ignore entries owned by other systems and restores the mesh response captured at entry.
+
+Build the Editor target, close the destination Editor, and apply the local migration after the traversal movement migration.
+
+```powershell
+$script = (Resolve-Path Scripts/migrate_traversal_collision.py).Path
+& $editor $project -run=PythonScript "-script=$script" -Unattended -NullRHI
+& $editor $project -Unattended -NullRHI '-ExecCmds=Automation RunTests GameAnimationSampleCpp.Migration' '-TestExit=Automation Test Queue Empty'
+```
+
+The migration backs up the local package under `Saved/BlueprintMigration/TraversalCollision/`. The authored montage calls, warp targets, movement mode changes and CMC correction delay remain in their existing order. Both Win64 Development targets built and all eleven migration tests passed. The extended test covers duplicate starts, retargeting, repeated cleanup and preservation of host-owned collision settings.
+
+In single-player `DefaultLevel` PIE, CMC and Mover cleared traversal activity and the obstacle ignore entry after normal vault playback and after an explicit interruption. The Mover mesh returned from Ignore to Block. CMC returned to Walking and restored the two client correction flags. In the Mover test that interrupted playback in the same frame as the start, collision recovered but the pawn stayed in Traversing. The retained Mover exit checks the current mode while the start queues its transition for the next simulation frame. Verify that case when migrating Mover mode ownership. The Mover tests supplied the approach direction. Multiplayer correction and teardown during level travel are **Not run**.
+
 See the [Epic sample documentation](https://dev.epicgames.com/documentation/unreal-engine/game-animation-sample-project-in-unreal-engine) for the sample's public controls and architecture.

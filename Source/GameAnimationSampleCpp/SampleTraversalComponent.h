@@ -5,6 +5,8 @@
 #include "Kismet/KismetSystemLibrary.h"
 #include "SampleTraversalComponent.generated.h"
 
+class UPrimitiveComponent;
+
 /**
  * Native movement hooks for the reference traversal component.
  * The authored component supplies the traversal result and invokes the hooks
@@ -57,4 +59,42 @@ public:
 
     /** Reads the imported Blueprint structures from the VM and forwards them to the native query. */
     DECLARE_FUNCTION(execEvaluateTraversalClearance);
+
+    /**
+     * Updates the traversal activity field exposed by the imported component.
+     * The original montage callbacks own when the activity starts and ends.
+     * @param bActive Whether a traversal action is in progress.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Traversal")
+    void SetTraversalActionActive(bool bActive);
+
+    /**
+     * Suspends collision with the struck component for this traversal.
+     * Replacing an active target releases its changes first. Repeating the same
+     * request leaves the originally captured snapshot intact.
+     * @param Capsule Component swept by the owner's movement system.
+     * @param Obstacle Specific component to ignore, if present.
+     * @param Mesh Optional Mover visual mesh whose WorldDynamic response is suspended.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Traversal")
+    void BeginTraversalCollision(UPrimitiveComponent* Capsule, UPrimitiveComponent* Obstacle,
+        UPrimitiveComponent* Mesh = nullptr);
+
+    /**
+     * Releases the ignore entry and mesh response acquired at the action start.
+     * Safe to call more than once, including after the target has been destroyed.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Traversal")
+    void EndTraversalCollision();
+
+protected:
+    /** Restores outstanding physical changes if the owner leaves play during traversal. */
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+private:
+    TWeakObjectPtr<UPrimitiveComponent> TraversalCapsule;
+    TWeakObjectPtr<UPrimitiveComponent> TraversalObstacle;
+    TWeakObjectPtr<UPrimitiveComponent> TraversalMesh;
+    ECollisionResponse SavedMeshResponse = ECR_Block;
+    bool bAddedMoveIgnore = false;
 };
