@@ -141,6 +141,7 @@ namespace
         UEdGraphNode* Last;
         const UFunction* Function;
         TArray<TPair<FName, UEdGraphPin*>> Inputs;
+        TArray<UEdGraphNode*> AdditionalNodes = {};
     };
 
     bool InstallTraversalCall(UBlueprint& Blueprint, UEdGraph& Graph, const FTraversalCallReplacement& Replacement)
@@ -171,14 +172,29 @@ namespace
         UEdGraphPin* Exec = Replacement.First->FindPin(UEdGraphSchema_K2::PN_Execute, EGPD_Input);
         UEdGraphPin* Then = Replacement.Last->FindPin(UEdGraphSchema_K2::PN_Then, EGPD_Output);
         if (!Exec || !Then || !Schema->MovePinLinks(*Exec, *Call->GetExecPin()).CanSafeConnect() ||
-            !Schema->MovePinLinks(*Then, *Call->GetThenPin()).CanSafeConnect())
+            (!Then->LinkedTo.IsEmpty() && !Schema->MovePinLinks(*Then, *Call->GetThenPin()).CanSafeConnect()))
         {
             return false;
         }
         TSet<UEdGraphNode*> Remove{Replacement.First, Replacement.Last};
+        for (UEdGraphNode* Node : Replacement.AdditionalNodes)
+        {
+            Remove.Add(Node);
+        }
         CollectUnusedInputs(Remove, nullptr);
         RemoveNodes(Blueprint, Graph, Remove);
         return true;
+    }
+
+    UEdGraphNode* GetOnlyPeer(const UEdGraphPin* Pin)
+    {
+        return Pin && Pin->LinkedTo.Num() == 1 ? Pin->LinkedTo[0]->GetOwningNode() : nullptr;
+    }
+
+    UK2Node_CallFunction* GetNextCall(const UK2Node_CallFunction& Call, FName Name)
+    {
+        auto* Next = Cast<UK2Node_CallFunction>(GetOnlyPeer(Call.GetThenPin()));
+        return Next && Next->FunctionReference.GetMemberName() == Name ? Next : nullptr;
     }
 }
 
@@ -568,6 +584,111 @@ bool USampleBlueprintMigrationLibrary::ReplaceTraversalCollision(UBlueprint* Blu
         ExistingBegin || ExistingEnd || ExistingActivity)
     {
         return false;
+    }
+    for (const FTraversalCallReplacement& Replacement : Replacements)
+    {
+        if (!InstallTraversalCall(*Blueprint, *Graph, Replacement))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool USampleBlueprintMigrationLibrary::ReplaceTraversalModes(UBlueprint* Blueprint, UEdGraph* Graph)
+{
+    if (!Blueprint || !Blueprint->ParentClass || !Graph || Graph->GetOuter() != Blueprint ||
+        Graph->GetFName() != TEXT("EventGraph"))
+    {
+        return false;
+    }
+    const UClass* Parent = Blueprint->ParentClass;
+    const UFunction* BeginCmc = Parent->FindFunctionByName(TEXT("BeginCmcTraversalMode"));
+    const UFunction* FinishCmc = Parent->FindFunctionByName(TEXT("FinishCmcTraversalMode"));
+    const UFunction* BeginMover = Parent->FindFunctionByName(TEXT("BeginMoverTraversalMode"));
+    const UFunction* FinishMover = Parent->FindFunctionByName(TEXT("FinishMoverTraversalMode"));
+    if (!BeginCmc || !FinishCmc || !BeginMover || !FinishMover)
+    {
+        return false;
+    }
+
+    TArray<UK2Node_CallFunction*> Calls;
+    Graph->GetNodesOfClass(Calls);
+    const auto Count = [&](FName Name)
+    {
+        return Calls.FilterByPredicate([&](const UK2Node_CallFunction* Call)
+        {
+            return Call->FunctionReference.GetMemberName() == Name;
+        }).Num();
+    };
+    if (Count(TEXT("BeginTraversalCollision")) != 2 || Count(TEXT("EndTraversalCollision")) != 2)
+    {
+        return false;
+    }
+    if (Count(BeginCmc->GetFName()) == 1 && Count(FinishCmc->GetFName()) == 1 &&
+        Count(BeginMover->GetFName()) == 1 && Count(FinishMover->GetFName()) == 1)
+    {
+        return true;
+    }
+    if (Count(TEXT("SetMovementMode_CMC")) != 2 || Count(TEXT("QueueNextMode")) != 2 ||
+        Count(TEXT("RetriggerableDelay")) != 1)
+    {
+        return false;
+    }
+
+    TArray<FTraversalCallReplacement> Replacements;
+    for (UK2Node_CallFunction* Call : Calls)
+    {
+        const FName Name = Call->FunctionReference.GetMemberName();
+        if (Name == TEXT("SetMovementMode_CMC"))
+        {
+            if (UK2Node_CallFunction* Delay = GetNextCall(*Call, TEXT("RetriggerableDelay")))
+            {
+                auto* Correction = GetNextCall(*Delay, TEXT("SetReplicationBehavior"));
+                if (!Correction)
+                {
+                    return false;
+                }
+                Replacements.Add({Call, Correction, FinishCmc, {}, {Delay}});
+            }
+            else if (UK2Node_CallFunction* Correction = GetNextCall(*Call, TEXT("SetReplicationBehavior")))
+            {
+                Replacements.Add({Call, Correction, BeginCmc, {}});
+            }
+        }
+        else if (Name == TEXT("QueueNextMode"))
+        {
+            const UEdGraphPin* Mode = Call->FindPin(TEXT("DesiredModeName"), EGPD_Input);
+            UEdGraphPin* Mover = Call->FindPin(UEdGraphSchema_K2::PN_Self, EGPD_Input);
+            if (!Mode || !Mode->LinkedTo.IsEmpty() || !Mover || Mover->LinkedTo.Num() != 1)
+            {
+                return false;
+            }
+            if (Mode->DefaultValue == TEXT("Traversing"))
+            {
+                Replacements.Add({Call, Call, BeginMover, {{TEXT("Mover"), Mover}}});
+            }
+            else if (Mode->DefaultValue == TEXT("Walking"))
+            {
+                auto* Gate = Cast<UK2Node_IfThenElse>(GetOnlyPeer(Call->GetExecPin()));
+                UEdGraphPin* Then = Gate ? Gate->FindPin(UEdGraphSchema_K2::PN_Then, EGPD_Output) : nullptr;
+                if (!Gate || GetOnlyPeer(Then) != Call || !Gate->GetElsePin()->LinkedTo.IsEmpty())
+                {
+                    return false;
+                }
+                Replacements.Add({Gate, Call, FinishMover, {}});
+            }
+        }
+    }
+    for (const UFunction* Function : {BeginCmc, FinishCmc, BeginMover, FinishMover})
+    {
+        if (Replacements.FilterByPredicate([&](const FTraversalCallReplacement& Item)
+        {
+            return Item.Function == Function;
+        }).Num() != 1)
+        {
+            return false;
+        }
     }
     for (const FTraversalCallReplacement& Replacement : Replacements)
     {
