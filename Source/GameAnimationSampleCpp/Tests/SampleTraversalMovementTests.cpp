@@ -107,6 +107,15 @@ bool FSampleTraversalMovementMigrationTest::RunTest(const FString& Parameters)
     TestFalse(TEXT("CMC teardown stops accepting authoritative client positions"),
         Movement->bServerAcceptClientAuthoritativePosition);
 
+    Traversal->BeginCmcTraversalMode();
+    TestEqual(TEXT("The native start enters CMC flying"), Movement->MovementMode.GetValue(), MOVE_Flying);
+    TestTrue(TEXT("The native start enables the correction window"), Movement->bIgnoreClientMovementErrorChecksAndCorrection);
+    Traversal->FinishCmcTraversalMode();
+    TestEqual(TEXT("The native finish returns to the selected CMC mode"), Movement->MovementMode.GetValue(), MOVE_Walking);
+    TestTrue(TEXT("The native finish retains the correction grace period"), Movement->bIgnoreClientMovementErrorChecksAndCorrection);
+    World->GetTimerManager().ClearAllTimersForObject(Traversal);
+    Traversal->SetReplicationBehavior(false);
+
     const FBoolProperty* Mover = FindFProperty<FBoolProperty>(Class, TEXT("IsMoverCharacter"));
     if (!TestNotNull(TEXT("Authored Mover selector"), Mover))
     {

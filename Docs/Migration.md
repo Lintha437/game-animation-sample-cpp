@@ -46,6 +46,8 @@ The reference controller's gaze teleport is a local sandbox navigation command. 
 
 Keep the montage and warp target data in the animation assets. Wire the action's start, blend-out, and interruption callbacks to the host movement system. The sample CMC path enters flying and chooses walking or falling from the traversal result. Its sample-specific replication window stays bounded by the traversal cleanup. In an authoritative host, decide which movement state the client may predict and verify restoration on every exit. Exercise target loss, montage failure, interruption, unpossession, and level travel. Keep Mover mode queues separate from CMC movement flags.
 
+For CMC, let the current action own the correction timer. Starting another action during the grace period must cancel the previous timer. For Mover, distinguish a queued traversal mode from an active one. If a montage is interrupted before the start takes effect, cancel the pending request while preserving the current movement mode. Once traversal is active, apply the host's exit policy. Test cancellation both in the same simulation step as entry and after the mode changes.
+
 Track temporary collision changes for the same lifetime as the action that acquired them. The sample passes the movement capsule and exact obstacle component to `BeginTraversalCollision`. The Mover path additionally supplies its visual mesh to suspend `WorldDynamic` collision. Use the same native cleanup for completion, interruption, and component teardown. Preserve any existing move-ignore entry and the previous mesh response. If a host action changes collision independently during traversal, define which system owns the affected response before layering another override.
 
 ### Author traversal ledges

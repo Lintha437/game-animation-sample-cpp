@@ -88,4 +88,14 @@ public:
      */
     UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
     static bool ReplaceTraversalCollision(UBlueprint* Blueprint, UEdGraph* Graph);
+
+    /**
+     * Replaces the CMC and Mover mode sequences at their four callback sites.
+     * Keeps the authored playback, collision and warp target ordering.
+     * @param Blueprint Traversal component with the native parent.
+     * @param Graph Component event graph after the collision migration.
+     * @return True when all four sites were converted or already installed.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
+    static bool ReplaceTraversalModes(UBlueprint* Blueprint, UEdGraph* Graph);
 };
