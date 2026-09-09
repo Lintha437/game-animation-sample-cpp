@@ -231,4 +231,20 @@ The migration backs up the local package under `Saved/BlueprintMigration/Travers
 
 In single-player `DefaultLevel` PIE, CMC and Mover cleared traversal activity and the obstacle ignore entry after normal vault playback and after an explicit interruption. The Mover mesh returned from Ignore to Block. CMC returned to Walking and restored the two client correction flags. In the Mover test that interrupted playback in the same frame as the start, collision recovered but the pawn stayed in Traversing. The retained Mover exit checks the current mode while the start queues its transition for the next simulation frame. Verify that case when migrating Mover mode ownership. The Mover tests supplied the approach direction. Multiplayer correction and teardown during level travel are **Not run**.
 
+### Traversal movement mode lifetime
+
+The montage callbacks now call `BeginCmcTraversalMode`, `FinishCmcTraversalMode`, `BeginMoverTraversalMode`, and `FinishMoverTraversalMode`. CMC keeps the reference exit mode and 0.2-second correction grace period. The component cancels an earlier correction timer at the next traversal start and clears it on teardown. Mover cancels a same-step pending start and preserves the current mode. Once Traversing is active, it queues Walking on exit.
+
+Build the Editor target, close the destination Editor, and apply the local migration after the traversal collision migration.
+
+```powershell
+$script = (Resolve-Path Scripts/migrate_traversal_modes.py).Path
+& $editor $project -run=PythonScript "-script=$script" -Unattended -NullRHI
+& $editor $project -Unattended -NullRHI '-ExecCmds=Automation RunTests GameAnimationSampleCpp.Migration' '-TestExit=Automation Test Queue Empty'
+```
+
+The local package is backed up under `Saved/BlueprintMigration/TraversalModes/`. Both Win64 Development targets built and all eleven migration tests passed, including the native CMC entry and grace period. A rerun preserved the installed package hash. In single-player `DefaultLevel` PIE, interrupting the selected Mover vault in the start frame kept the pawn grounded. Interrupting after observing Traversing restored the ground mode and collision. The Mover test supplied the approach direction. CMC kept both flags immediately after interruption, cleared them after the timer, and returned to Walking once grounded.
+
+In two-player listen-server PIE on `DefaultLevel`, an owning CMC client initiated the vault. At an uncapped frame rate, the client and authority finished in Walking with both flags cleared and positions within 0.01 cm. At `t.MaxFPS 3`, both remained Flying four game seconds after the start despite clearing the flags. The saved pre-mode-migration Blueprint reproduced the failure under the same frame cap and also landed in the uncapped control. Movement recovery under long frames still needs a network-path fix.
+
 See the [Epic sample documentation](https://dev.epicgames.com/documentation/unreal-engine/game-animation-sample-project-in-unreal-engine) for the sample's public controls and architecture.
