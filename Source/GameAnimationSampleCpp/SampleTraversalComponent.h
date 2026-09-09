@@ -3,9 +3,11 @@
 #include "Components/ActorComponent.h"
 #include "Engine/EngineTypes.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "TimerManager.h"
 #include "SampleTraversalComponent.generated.h"
 
 class UPrimitiveComponent;
+class UMoverComponent;
 
 /**
  * Native movement hooks for the reference traversal component.
@@ -87,14 +89,46 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Traversal")
     void EndTraversalCollision();
 
+    /** Enters flying and starts the CMC correction grace period for the current montage. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Traversal")
+    void BeginCmcTraversalMode();
+
+    /**
+     * Selects the authored CMC exit mode and restores normal correction after 0.2 seconds.
+     * A new traversal cancels a still-pending restoration from the previous action.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Traversal")
+    void FinishCmcTraversalMode();
+
+    /**
+     * Queues the authored Traversing mode and records the current simulation step.
+     * @param Mover Movement component used by the retained authored montage action.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Traversal")
+    void BeginMoverTraversalMode(UMoverComponent* Mover);
+
+    /**
+     * Returns an active traversal to Walking. If interrupted before the queued
+     * start takes effect, cancels it and preserves the current mode.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Traversal")
+    void FinishMoverTraversalMode();
+
 protected:
     /** Restores outstanding physical changes if the owner leaves play during traversal. */
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
+    void RestoreCmcCorrection();
+
     TWeakObjectPtr<UPrimitiveComponent> TraversalCapsule;
     TWeakObjectPtr<UPrimitiveComponent> TraversalObstacle;
     TWeakObjectPtr<UPrimitiveComponent> TraversalMesh;
     ECollisionResponse SavedMeshResponse = ECR_Block;
     bool bAddedMoveIgnore = false;
+    FTimerHandle CmcCorrectionTimer;
+    bool bCmcCorrectionSuspended = false;
+    TWeakObjectPtr<UMoverComponent> TraversalMover;
+    int32 MoverStartFrame = INDEX_NONE;
+    double MoverStartTimeMs = -1.0;
 };

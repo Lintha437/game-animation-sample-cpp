@@ -1,12 +1,18 @@
 #include "SampleTraversalComponent.h"
 
 #include "Components/PrimitiveComponent.h"
+#include "Engine/World.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "MoverComponent.h"
+#include "MoverTypes.h"
 #include "UObject/UnrealType.h"
 
 namespace
 {
+    const FName TraversingMode(TEXT("Traversing"));
+    const FName WalkingMode(TEXT("Walking"));
+
     UCharacterMovementComponent* FindCharacterMovement(const UActorComponent& Component)
     {
         const ACharacter* Character = Cast<ACharacter>(Component.GetOwner());
@@ -125,5 +131,87 @@ void USampleTraversalComponent::EndPlay(const EEndPlayReason::Type EndPlayReason
 {
     EndTraversalCollision();
     SetTraversalActionActive(false);
+    FinishMoverTraversalMode();
+    if (UWorld* World = GetWorld())
+    {
+        World->GetTimerManager().ClearTimer(CmcCorrectionTimer);
+    }
+    RestoreCmcCorrection();
     Super::EndPlay(EndPlayReason);
+}
+
+void USampleTraversalComponent::BeginCmcTraversalMode()
+{
+    if (UWorld* World = GetWorld())
+    {
+        World->GetTimerManager().ClearTimer(CmcCorrectionTimer);
+    }
+    SetMovementMode_CMC(MOVE_Flying);
+    SetReplicationBehavior(true);
+    bCmcCorrectionSuspended = true;
+}
+
+void USampleTraversalComponent::FinishCmcTraversalMode()
+{
+    SetMovementMode_CMC(GetEndMovementMode_CMC());
+    if (!bCmcCorrectionSuspended)
+    {
+        return;
+    }
+    if (UWorld* World = GetWorld())
+    {
+        constexpr float CorrectionGracePeriod = 0.2f;
+        World->GetTimerManager().SetTimer(CmcCorrectionTimer, this, &USampleTraversalComponent::RestoreCmcCorrection,
+            CorrectionGracePeriod, false);
+    }
+    else
+    {
+        RestoreCmcCorrection();
+    }
+}
+
+void USampleTraversalComponent::RestoreCmcCorrection()
+{
+    if (bCmcCorrectionSuspended)
+    {
+        SetReplicationBehavior(false);
+        bCmcCorrectionSuspended = false;
+    }
+}
+
+void USampleTraversalComponent::BeginMoverTraversalMode(UMoverComponent* Mover)
+{
+    if (!IsValid(Mover) || Mover->GetOwner() != GetOwner())
+    {
+        return;
+    }
+    if (TraversalMover.Get() && TraversalMover.Get() != Mover)
+    {
+        FinishMoverTraversalMode();
+    }
+    TraversalMover = Mover;
+    const FMoverTimeStep& Step = Mover->GetLastTimeStep();
+    MoverStartFrame = Step.ServerFrame;
+    MoverStartTimeMs = Step.BaseSimTimeMs;
+    Mover->QueueNextMode(TraversingMode, true);
+}
+
+void USampleTraversalComponent::FinishMoverTraversalMode()
+{
+    UMoverComponent* Mover = TraversalMover.Get();
+    TraversalMover.Reset();
+    if (!Mover)
+    {
+        return;
+    }
+    if (Mover->GetMovementModeName() == TraversingMode)
+    {
+        Mover->QueueNextMode(WalkingMode, true);
+        return;
+    }
+    const FMoverTimeStep& Step = Mover->GetLastTimeStep();
+    if (Step.ServerFrame == MoverStartFrame && Step.BaseSimTimeMs == MoverStartTimeMs)
+    {
+        Mover->QueueNextMode(NAME_None);
+    }
 }
