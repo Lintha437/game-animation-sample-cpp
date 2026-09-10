@@ -114,6 +114,22 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Traversal")
     void FinishMoverTraversalMode();
 
+    /**
+     * Receives the reference multiplayer traversal result on authority and proxies.
+     * The locally controlled pawn has already started the chosen action. Other
+     * copies record the payload before invoking the authored playback event.
+     * @param TraversalResult Original typed result serialized by the sample RPC.
+     */
+    UFUNCTION(BlueprintCallable, CustomThunk, Category = "Sample|Traversal",
+        meta = (CustomStructureParam = "TraversalResult"))
+    void ApplyTraversalReplay(UPARAM(ref) int32& TraversalResult);
+
+    /** Reads the reflected network payload directly from the Blueprint VM. */
+    DECLARE_FUNCTION(execApplyTraversalReplay);
+
+    /** @return Whether this copy needs traversal replay from the multicast. */
+    bool ShouldReceiveTraversalReplay() const;
+
 protected:
     /** Restores outstanding physical changes if the owner leaves play during traversal. */
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
