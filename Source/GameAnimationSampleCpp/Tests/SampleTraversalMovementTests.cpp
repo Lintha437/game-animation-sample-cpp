@@ -8,6 +8,7 @@
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/PlayerController.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/ScopeExit.h"
 #include "UObject/UnrealType.h"
@@ -40,6 +41,13 @@ bool FSampleTraversalMovementMigrationTest::RunTest(const FString& Parameters)
             Function && !Function->Script.IsEmpty());
     }
 
+    const UFunction* ServerRequest = Class->FindFunctionByName(TEXT("PerformTraversalAction_Server"));
+    const UFunction* Multicast = Class->FindFunctionByName(TEXT("PerformTraversalAction_Clients"));
+    TestTrue(TEXT("The native adapter preserves the typed server RPC"),
+        ServerRequest && ServerRequest->HasAllFunctionFlags(FUNC_Net | FUNC_NetServer));
+    TestTrue(TEXT("The native adapter preserves the typed multicast RPC"),
+        Multicast && Multicast->HasAllFunctionFlags(FUNC_Net | FUNC_NetMulticast));
+
     UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
     if (!TestNotNull(TEXT("Transient game world"), World))
     {
@@ -54,6 +62,15 @@ bool FSampleTraversalMovementMigrationTest::RunTest(const FString& Parameters)
     USampleTraversalComponent* Traversal = NewObject<USampleTraversalComponent>(Character, Class);
     Character->AddInstanceComponent(Traversal);
     Traversal->RegisterComponent();
+    TestTrue(TEXT("A pawn without local control receives the multicast"), Traversal->ShouldReceiveTraversalReplay());
+    APlayerController* Controller = World->SpawnActor<APlayerController>();
+    if (!TestNotNull(TEXT("Local controller"), Controller))
+    {
+        return false;
+    }
+    Controller->SetAsLocalPlayerController();
+    Controller->Possess(Character);
+    TestFalse(TEXT("The locally controlled pawn skips its own multicast"), Traversal->ShouldReceiveTraversalReplay());
     UCharacterMovementComponent* Movement = Character->GetCharacterMovement();
     Traversal->SetMovementMode_CMC(MOVE_Flying);
     TestEqual(TEXT("Starting traversal selects flying"), Movement->MovementMode.GetValue(), MOVE_Flying);

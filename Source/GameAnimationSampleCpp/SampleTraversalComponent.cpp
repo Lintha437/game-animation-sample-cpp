@@ -215,3 +215,50 @@ void USampleTraversalComponent::FinishMoverTraversalMode()
         Mover->QueueNextMode(NAME_None);
     }
 }
+
+bool USampleTraversalComponent::ShouldReceiveTraversalReplay() const
+{
+    const APawn* Pawn = Cast<APawn>(GetOwner());
+    return Pawn && !Pawn->IsLocallyControlled();
+}
+
+void USampleTraversalComponent::ApplyTraversalReplay(int32&)
+{
+    checkNoEntry();
+}
+
+DEFINE_FUNCTION(USampleTraversalComponent::execApplyTraversalReplay)
+{
+    Stack.StepCompiledIn<FStructProperty>(nullptr);
+    const auto* Incoming = CastField<FStructProperty>(Stack.MostRecentProperty);
+    const void* Data = Stack.MostRecentPropertyAddress;
+    P_FINISH;
+
+    P_NATIVE_BEGIN;
+    if (Incoming && Data)
+    {
+        const auto* Stored = FindFProperty<FStructProperty>(P_THIS->GetClass(), TEXT("TraversalResult"));
+        if (Stored && Stored->Struct == Incoming->Struct)
+        {
+            if (P_THIS->ShouldReceiveTraversalReplay())
+            {
+                UFunction* Play = P_THIS->FindFunction(TEXT("PerformTraversalAction"));
+                if (Play && Play->ParmsSize == 0)
+                {
+                    Stored->Struct->CopyScriptStruct(Stored->ContainerPtrToValuePtr<void>(P_THIS), Data);
+                    P_THIS->ProcessEvent(Play, nullptr);
+                }
+            }
+            else if (P_THIS->bCmcCorrectionSuspended)
+            {
+                const auto* Activity = FindFProperty<FBoolProperty>(P_THIS->GetClass(), TEXT("DoingTraversalAction"));
+                if (Activity && Activity->GetPropertyValue_InContainer(P_THIS))
+                {
+                    // A correction sent before the server saw the request may have restored Walking.
+                    P_THIS->SetMovementMode_CMC(MOVE_Flying);
+                }
+            }
+        }
+    }
+    P_NATIVE_END;
+}

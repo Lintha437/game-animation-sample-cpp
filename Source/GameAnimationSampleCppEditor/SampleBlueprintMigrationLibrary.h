@@ -98,4 +98,13 @@ public:
      */
     UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
     static bool ReplaceTraversalModes(UBlueprint* Blueprint, UEdGraph* Graph);
+
+    /**
+     * Keeps the typed multicast event and replaces its recipient body with native replay.
+     * @param Blueprint Traversal component with the native parent.
+     * @param Graph Component event graph containing the multicast.
+     * @return True when the replay body was converted or already installed.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
+    static bool ReplaceTraversalReplay(UBlueprint* Blueprint, UEdGraph* Graph);
 };

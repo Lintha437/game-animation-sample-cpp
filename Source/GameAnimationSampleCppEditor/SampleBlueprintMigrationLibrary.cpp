@@ -6,6 +6,7 @@
 #include "InputAction.h"
 #include "K2Node_CallFunction.h"
 #include "K2Node_CustomEvent.h"
+#include "K2Node_DynamicCast.h"
 #include "K2Node_EnhancedInputAction.h"
 #include "K2Node_ExecutionSequence.h"
 #include "K2Node_FunctionEntry.h"
@@ -698,4 +699,48 @@ bool USampleBlueprintMigrationLibrary::ReplaceTraversalModes(UBlueprint* Bluepri
         }
     }
     return true;
+}
+
+bool USampleBlueprintMigrationLibrary::ReplaceTraversalReplay(UBlueprint* Blueprint, UEdGraph* Graph)
+{
+    if (!Blueprint || !Blueprint->ParentClass || !Graph || Graph->GetOuter() != Blueprint ||
+        Graph->GetFName() != TEXT("EventGraph"))
+    {
+        return false;
+    }
+    static const FName NativeName(TEXT("ApplyTraversalReplay"));
+    static const FName ResultName(TEXT("TraversalResult"));
+    const UFunction* NativeReplay = Blueprint->ParentClass->FindFunctionByName(NativeName);
+    TArray<UK2Node_CustomEvent*> Events;
+    Graph->GetNodesOfClass(Events);
+    const auto* Match = Events.FindByPredicate([](const UK2Node_CustomEvent* Event)
+    {
+        return Event->CustomFunctionName == TEXT("PerformTraversalAction_Clients");
+    });
+    UEdGraphPin* EventExec = Match ? (*Match)->FindPin(UEdGraphSchema_K2::PN_Then, EGPD_Output) : nullptr;
+    UEdGraphNode* Body = GetOnlyPeer(EventExec);
+    if (!NativeReplay || !Body)
+    {
+        return false;
+    }
+    if (const auto* Call = Cast<UK2Node_CallFunction>(Body);
+        Call && Call->FunctionReference.GetMemberName() == NativeName)
+    {
+        return true;
+    }
+    const auto* CastOwner = Cast<UK2Node_DynamicCast>(Body);
+    UEdGraphPin* Then = CastOwner ? CastOwner->GetValidCastPin() : nullptr;
+    auto* Store = Cast<UK2Node_VariableSet>(CastOwner ? GetOnlyPeer(Then) : Body);
+    auto* Playback = Store ? Cast<UK2Node_CallFunction>(
+        GetOnlyPeer(Store->FindPin(UEdGraphSchema_K2::PN_Then, EGPD_Output))) : nullptr;
+    UEdGraphPin* Payload = Store ? Store->FindPin(ResultName, EGPD_Input) : nullptr;
+    if (!Store || Store->GetVarName() != ResultName || !Payload || Payload->LinkedTo.Num() != 1 ||
+        !Playback || Playback->FunctionReference.GetMemberName() != TEXT("PerformTraversalAction") ||
+        (CastOwner && !CastOwner->GetInvalidCastPin()->LinkedTo.IsEmpty()))
+    {
+        return false;
+    }
+    FTraversalCallReplacement Replacement{Body, Playback, NativeReplay, {{ResultName, Payload}}};
+    Replacement.AdditionalNodes.Add(Store);
+    return InstallTraversalCall(*Blueprint, *Graph, Replacement);
 }
