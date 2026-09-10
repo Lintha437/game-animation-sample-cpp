@@ -247,4 +247,18 @@ The local package is backed up under `Saved/BlueprintMigration/TraversalModes/`.
 
 In two-player listen-server PIE on `DefaultLevel`, an owning CMC client initiated the vault. At an uncapped frame rate, the client and authority finished in Walking with both flags cleared and positions within 0.01 cm. At `t.MaxFPS 3`, both remained Flying four game seconds after the start despite clearing the flags. The saved pre-mode-migration Blueprint reproduced the failure under the same frame cap and also landed in the uncapped control. Movement recovery under long frames still needs a network-path fix.
 
+### Traversal replay recipients
+
+The imported server and multicast declarations keep their original network flags and traversal payload. The multicast calls `USampleTraversalComponent::ApplyTraversalReplay`. The authority for a remote pawn and simulated copies install the typed result and invoke the authored playback event. The locally controlled pawn keeps its predicted playback. Receipt of the result during an active CMC traversal restores Flying if an earlier movement correction interrupted that mode.
+
+Build the Editor target, close the destination Editor, and apply the local replay migration.
+
+```powershell
+$script = (Resolve-Path Scripts/migrate_traversal_replay.py).Path
+& $editor $project -run=PythonScript "-script=$script" -Unattended -NullRHI
+& $editor $project -Unattended -NullRHI '-ExecCmds=Automation RunTests GameAnimationSampleCpp.Migration' '-TestExit=Automation Test Queue Empty'
+```
+
+The local package is backed up under `Saved/BlueprintMigration/TraversalReplay/`. Both Win64 Development targets built and all eleven migration tests passed. The tests exercise local ownership gating and the original RPC directions. In two-player listen-server PIE at 60 FPS, the owning client and authority each started the selected vault exactly once. A host-initiated run likewise started once on the host and once on the observer. Both runs reached the lower platform and returned to Walking with the flags cleared, and the two copies in each run settled within 0.01 cm. At 3 FPS, the owning client and authority still remained Flying after four game seconds even though both flags cleared and each montage started once. Movement recovery under that condition remains open.
+
 See the [Epic sample documentation](https://dev.epicgames.com/documentation/unreal-engine/game-animation-sample-project-in-unreal-engine) for the sample's public controls and architecture.
