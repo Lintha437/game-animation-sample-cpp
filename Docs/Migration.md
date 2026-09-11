@@ -36,6 +36,12 @@ Bind movement and look on the pawn's local input component during possession. Ke
 
 When adapting the sample's input intent for networking, keep one authoritative state and feed the same state to camera and animation consumers. Inspect both the press and release rules on each action. The reference CMC pawn applies intent locally, sends an unreliable snapshot to the server, and replicates the shared state to observers. In the destination, verify press and release under latency and packet loss, especially the final release. Select a delivery rule that matches the destination's movement prediction and correction requirements.
 
+### Read Mover state at the simulation boundary
+
+For a Mover-based pawn, take horizontal speed and the current mode name from `UCharacterMoverComponent`. Translate mode names to the destination's state type before supplying them to animation and camera consumers. Preserve the exact snapshot used for gait. The sample reads pre-simulation move input and orientation intent, gives sprint priority over the walk toggle, and caps sprint in aim mode. Test the directional dot product and analog deflection at the original thresholds.
+
+When adapting a sandbox teleport or reset, update orientation intent alongside the actor transform. Let the host assign the next movement mode through Mover's simulation queue. Verify absolute teleports, relative orientation offsets, and the reset transform independently. Keep the host's authority and prediction policy for any replicated teleport.
+
 ### Integrate pawn selection with the host GameMode
 
 The sandbox uses `DDCvar.PawnClass` to switch demonstration pawns for everyone in the active world. Keep the production game's existing login, spawn, and restart policies. If the host needs a pawn switch, resolve the permitted class on the authority before restarting the player. Check the spawn location and restore view rotation after possession. Keep any client-facing selection UI separate from the authoritative validation and restart.
