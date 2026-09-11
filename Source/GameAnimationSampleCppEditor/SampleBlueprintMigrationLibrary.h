@@ -107,4 +107,15 @@ public:
      */
     UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
     static bool ReplaceTraversalReplay(UBlueprint* Blueprint, UEdGraph* Graph);
+
+    /**
+     * Connects a zero-argument Blueprint enum query to a native byte-valued member.
+     * The existing graph and typed return pin preserve the imported enum contract.
+     * @param Blueprint Blueprint that owns the function.
+     * @param Graph Pure enum query to convert.
+     * @param FunctionName Native inherited function supplying the underlying byte.
+     * @return True when the enum adapter is connected.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
+    static bool ReplaceEnumQuery(UBlueprint* Blueprint, UEdGraph* Graph, FName FunctionName);
 };

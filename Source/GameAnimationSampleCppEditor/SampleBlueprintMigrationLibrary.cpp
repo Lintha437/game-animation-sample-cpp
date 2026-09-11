@@ -5,6 +5,7 @@
 #include "Engine/Blueprint.h"
 #include "InputAction.h"
 #include "K2Node_CallFunction.h"
+#include "K2Node_CastByteToEnum.h"
 #include "K2Node_CustomEvent.h"
 #include "K2Node_DynamicCast.h"
 #include "K2Node_EnhancedInputAction.h"
@@ -743,4 +744,64 @@ bool USampleBlueprintMigrationLibrary::ReplaceTraversalReplay(UBlueprint* Bluepr
     FTraversalCallReplacement Replacement{Body, Playback, NativeReplay, {{ResultName, Payload}}};
     Replacement.AdditionalNodes.Add(Store);
     return InstallTraversalCall(*Blueprint, *Graph, Replacement);
+}
+
+bool USampleBlueprintMigrationLibrary::ReplaceEnumQuery(UBlueprint* Blueprint, UEdGraph* Graph, FName FunctionName)
+{
+    if (!Blueprint || !Blueprint->ParentClass || !Graph || Graph->GetOuter() != Blueprint)
+    {
+        return false;
+    }
+    const UFunction* Native = Blueprint->ParentClass->FindFunctionByName(FunctionName);
+    TArray<UK2Node_FunctionEntry*> Entries;
+    TArray<UK2Node_FunctionResult*> Results;
+    Graph->GetNodesOfClass(Entries);
+    Graph->GetNodesOfClass(Results);
+    if (!Native || !Native->HasAllFunctionFlags(FUNC_Native | FUNC_BlueprintPure) || Native->NumParms != 1 ||
+        !CastField<FByteProperty>(Native->GetReturnProperty()) || Entries.Num() != 1 || Results.IsEmpty())
+    {
+        return false;
+    }
+    UK2Node_FunctionEntry* Entry = Entries[0];
+    UK2Node_FunctionResult* Result = Results[0];
+    UEdGraphPin* Output = Result->FindPin(UEdGraphSchema_K2::PN_ReturnValue, EGPD_Input);
+    UEnum* Definition = Output ? Cast<UEnum>(Output->PinType.PinSubCategoryObject.Get()) : nullptr;
+    if (!Definition || Output->PinType.PinCategory != UEdGraphSchema_K2::PC_Byte)
+    {
+        return false;
+    }
+
+    TSet<UEdGraphNode*> OldBody;
+    for (UEdGraphNode* Node : Graph->Nodes)
+    {
+        if (Node != Entry && Node != Result)
+        {
+            OldBody.Add(Node);
+        }
+    }
+    RemoveNodes(*Blueprint, *Graph, OldBody);
+
+    FGraphNodeCreator<UK2Node_CallFunction> CreateCall(*Graph);
+    UK2Node_CallFunction* Call = CreateCall.CreateNode();
+    Call->SetFromFunction(Native);
+    Call->NodePosX = Entry->NodePosX + 240;
+    Call->NodePosY = Entry->NodePosY + 100;
+    CreateCall.Finalize();
+
+    FGraphNodeCreator<UK2Node_CastByteToEnum> CreateConversion(*Graph);
+    UK2Node_CastByteToEnum* Convert = CreateConversion.CreateNode();
+    Convert->Enum = Definition;
+    Convert->bSafe = true;
+    Convert->NodePosX = Call->NodePosX + 310;
+    Convert->NodePosY = Call->NodePosY;
+    CreateConversion.Finalize();
+    Result->NodePosX = Convert->NodePosX + 230;
+    Result->NodePosY = Entry->NodePosY;
+
+    const UEdGraphSchema* Schema = Graph->GetSchema();
+    UEdGraphPin* Then = Entry->FindPin(UEdGraphSchema_K2::PN_Then, EGPD_Output);
+    UEdGraphPin* Exec = Result->FindPin(UEdGraphSchema_K2::PN_Execute, EGPD_Input);
+    return (!Then || !Exec || Schema->TryCreateConnection(Then, Exec)) &&
+        Schema->TryCreateConnection(Call->GetReturnValuePin(), Convert->FindPin(TEXT("Byte"), EGPD_Input)) &&
+        Schema->TryCreateConnection(Convert->FindPin(UEdGraphSchema_K2::PN_ReturnValue, EGPD_Output), Output);
 }

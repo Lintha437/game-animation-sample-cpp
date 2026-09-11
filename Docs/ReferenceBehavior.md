@@ -7,7 +7,7 @@ Install the assets into the native checkout or prepare an isolated workspace as 
 | Area | Local evidence | Native implementation and parity criterion |
 | --- | --- | --- |
 | Capsule locomotion | `SandboxCharacter_CMC`, `IMC_Sandbox` | The sample pawn uses native gait selection, braking, pre-movement rotation, movement and look handlers, crouch input, and replicated input intent. The existing character state property still supplies the authored animation and camera interfaces. |
-| Mover and ragdoll | `SandboxCharacter_Mover`, `SandboxCharacter_Mover_Ragdoll`, `MovementModes`, `RagdollLevel` | Reference avatars and modes remain. Compare slide entry/exit, transitions through air, ragdoll start, recovery, and movement prediction. |
+| Mover and ragdoll | `SandboxCharacter_Mover`, `SandboxCharacter_Mover_Ragdoll`, `MovementModes`, `RagdollLevel` | The primary Mover pawn uses native mode and gait queries, horizontal speed, and sandbox teleport. Compare slide, input production, ragdoll transitions, recovery, and movement prediction. |
 | Animation selection | CMC and Mover Animation Blueprints and Chooser/Pose Search assets | The native snapshot provides inputs for an authored graph. Validate pose-search selections, trajectory, blending, root motion, locomotion layering, and IK in an integrated graph. |
 | Traversal and paired actions | `AC_TraversalLogic`, traversal actions and montage notify states | Native geometry probe covers a facing surface, reachable top and standing clearance. Compare traversal variants, aborts, montage alignment, moving targets, and blend-out after integration. |
 | Cameras and input devices | `Blueprints/Cameras`, `IA_Look_Gamepad`, `TIS_MobileControls` and `IMC_Sandbox` | Reference assets remain. Check camera modes, gamepad, keyboard/mouse, touch, aiming, twin-stick and camera collision against the reference. |
@@ -260,5 +260,21 @@ $script = (Resolve-Path Scripts/migrate_traversal_replay.py).Path
 ```
 
 The local package is backed up under `Saved/BlueprintMigration/TraversalReplay/`. Both Win64 Development targets built and all eleven migration tests passed. The tests exercise local ownership gating and the original RPC directions. In two-player listen-server PIE at 60 FPS, the owning client and authority each started the selected vault exactly once. A host-initiated run likewise started once on the host and once on the observer. Both runs reached the lower platform and returned to Walking with the flags cleared, and the two copies in each run settled within 0.01 cm. At 3 FPS, the owning client and authority still remained Flying after four game seconds even though both flags cleared and each montage started once. Movement recovery under that condition remains open.
+
+### Mover state and sandbox teleport
+
+`ASampleMoverCharacter` reads the current mode and velocity from the existing Mover component. The authored name map still defines the mode enumeration. Gait uses the pre-simulation input snapshot. Sprint takes precedence over the walk toggle, aim caps the gait at Run, and strafe uses the original dot-product and style thresholds. The existing Blueprint query signatures continue to return the original enum types. The native teleport handles absolute and relative moves, queues Falling, and updates the cached facing and optional reset transform.
+
+Build the Editor target, close the destination Editor, and apply the migration to the imported Mover pawn.
+
+```powershell
+$script = (Resolve-Path Scripts/migrate_mover_state.py).Path
+& $editor $project -run=PythonScript "-script=$script" -Unattended -NullRHI
+& $editor $project -Unattended -NullRHI '-ExecCmds=Automation RunTests GameAnimationSampleCpp.Migration' '-TestExit=Automation Test Queue Empty'
+```
+
+The script backs up the original pawn under `Saved/BlueprintMigration/MoverState/`. The mode map stayed unchanged, and a rerun preserved the package hash. Both Win64 Development targets built and all twelve migration tests passed. The new test exercises the typed gait query, sprint precedence, aim and strafe gates, analog thresholds, and absolute and relative teleport orientation.
+
+In `DefaultLevel` PIE, the possessed Mover pawn returned the original grounded, traversing and airborne enum values. Its reported speed matched the component's horizontal velocity during the authored vault. The pawn completed the vault and returned to ground, and a separate teleport updated its reset transform before entering Falling. The test supplied the vault direction. The original pawn, the copied Animation Blueprint, and the test map passed hash checks. Full Mover inputs, slide, ragdoll and multiplayer prediction are **Not run** for this migration.
 
 See the [Epic sample documentation](https://dev.epicgames.com/documentation/unreal-engine/game-animation-sample-project-in-unreal-engine) for the sample's public controls and architecture.
