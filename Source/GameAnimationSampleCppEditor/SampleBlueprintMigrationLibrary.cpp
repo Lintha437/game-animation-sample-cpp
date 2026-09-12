@@ -805,3 +805,83 @@ bool USampleBlueprintMigrationLibrary::ReplaceEnumQuery(UBlueprint* Blueprint, U
         Schema->TryCreateConnection(Call->GetReturnValuePin(), Convert->FindPin(TEXT("Byte"), EGPD_Input)) &&
         Schema->TryCreateConnection(Convert->FindPin(UEdGraphSchema_K2::PN_ReturnValue, EGPD_Output), Output);
 }
+
+bool USampleBlueprintMigrationLibrary::ReplaceMoverInputFunction(
+    UBlueprint* Blueprint, UEdGraph* Graph, FName FunctionName, FName OutputName)
+{
+    if (!Blueprint || !Blueprint->ParentClass || !Graph || Graph->GetOuter() != Blueprint)
+    {
+        return false;
+    }
+    const UFunction* Native = Blueprint->ParentClass->FindFunctionByName(FunctionName);
+    TArray<UK2Node_FunctionEntry*> Entries;
+    TArray<UK2Node_FunctionResult*> Results;
+    Graph->GetNodesOfClass(Entries);
+    Graph->GetNodesOfClass(Results);
+    if (!Native || Entries.Num() != 1 || (!OutputName.IsNone() && Results.IsEmpty()))
+    {
+        return false;
+    }
+    auto* Entry = Entries[0];
+    auto* Result = Results.IsEmpty() ? nullptr : Results[0];
+    UEdGraphPin* Output = Result ? Result->FindPin(OutputName, EGPD_Input) : nullptr;
+    UEdGraphPin* Then = Entry->FindPin(UEdGraphSchema_K2::PN_Then, EGPD_Output);
+    UEdGraphPin* Exec = Result ? Result->FindPin(UEdGraphSchema_K2::PN_Execute, EGPD_Input) : nullptr;
+    if ((!OutputName.IsNone() && !Output) || (Native->GetReturnProperty() != nullptr) != (Output != nullptr))
+    {
+        return false;
+    }
+    TSet<UEdGraphNode*> OldBody;
+    for (UEdGraphNode* Node : Graph->Nodes)
+    {
+        if (Node != Entry && Node != Result)
+        {
+            OldBody.Add(Node);
+        }
+    }
+    if (OldBody.Num() == 1)
+    {
+        const auto* Forward = Cast<UK2Node_CallFunction>(*OldBody.CreateConstIterator());
+        if (Forward && Forward->FunctionReference.GetMemberName() == FunctionName)
+        {
+            return true;
+        }
+    }
+
+    RemoveNodes(*Blueprint, *Graph, OldBody);
+    Entry->Modify();
+    Entry->LocalVariables.Reset();
+    FGraphNodeCreator<UK2Node_CallFunction> Creator(*Graph);
+    UK2Node_CallFunction* Call = Creator.CreateNode();
+    Call->SetFromFunction(Native);
+    Call->NodePosX = Entry->NodePosX + 350;
+    Call->NodePosY = Entry->NodePosY;
+    Creator.Finalize();
+    if (Result)
+    {
+        Result->NodePosX = Call->NodePosX + 400;
+        Result->NodePosY = Entry->NodePosY;
+    }
+    const UEdGraphSchema* Schema = Graph->GetSchema();
+    for (UEdGraphPin* Pin : Entry->Pins)
+    {
+        if (Pin->Direction == EGPD_Output && Pin->PinType.PinCategory != UEdGraphSchema_K2::PC_Exec)
+        {
+            UEdGraphPin* Input = Call->FindPin(Pin->PinName, EGPD_Input);
+            if (!Input || !Schema->TryCreateConnection(Pin, Input))
+            {
+                return false;
+            }
+        }
+    }
+    if (Output && !Schema->TryCreateConnection(Call->GetReturnValuePin(), Output))
+    {
+        return false;
+    }
+    if (Call->IsNodePure())
+    {
+        return !Then || !Exec || Schema->TryCreateConnection(Then, Exec);
+    }
+    return Then && Schema->TryCreateConnection(Then, Call->GetExecPin()) &&
+        (!Exec || Schema->TryCreateConnection(Call->GetThenPin(), Exec));
+}
