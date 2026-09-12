@@ -118,4 +118,15 @@ public:
      */
     UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
     static bool ReplaceEnumQuery(UBlueprint* Blueprint, UEdGraph* Graph, FName FunctionName);
+
+    /**
+     * Replaces a Blueprint function body with a native member call.
+     * @param Blueprint Mover pawn with the native parent.
+     * @param Graph Existing typed function with zero or one output.
+     * @param FunctionName Native inherited function with matching input names.
+     * @param OutputName Existing output pin, or None for void functions.
+     * @return True when the native call is connected or already installed.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
+    static bool ReplaceMoverInputFunction(UBlueprint* Blueprint, UEdGraph* Graph, FName FunctionName, FName OutputName);
 };

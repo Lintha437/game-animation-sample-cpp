@@ -11,6 +11,7 @@
 #include "MoverDataModelTypes.h"
 #include "UObject/StructOnScope.h"
 #include "UObject/UnrealType.h"
+#include "UserDefinedStructSupport.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
     FSampleMoverStateMigrationTest,
@@ -113,6 +114,44 @@ bool FSampleMoverStateMigrationTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Relative teleport rotates the cached facing"), State->OrientationIntent.Equals(-FVector::ForwardVector));
     TestTrue(TEXT("Relative teleport preserves the reset point when disabled"),
         Initial->ContainerPtrToValuePtr<FTransform>(Pawn)->GetLocation().Equals(Target.GetLocation()));
+
+    for (const FName Name : {FName(TEXT("UpdateCachedMoverInputs")), FName(TEXT("ApplyMoverCrouchInput")),
+        FName(TEXT("ResolveAimingRotation")), FName(TEXT("UpdateControlYawRate"))})
+    {
+        const UFunction* Function = Class->FindFunctionByName(Name);
+        TestTrue(Name.ToString(), Function && Function->GetOuter() == ASampleMoverCharacter::StaticClass());
+    }
+    UFunction* Produce = Class->FindFunctionByName(TEXT("ProduceInput"));
+    const auto* Command = Produce ? FindFProperty<FStructProperty>(Produce, TEXT("InputCmdResult")) : nullptr;
+    const auto* Jump = FindFProperty<FBoolProperty>(Class, TEXT("Jump_JustPressed"));
+    const auto* PlayerCrouch = FindFProperty<FBoolProperty>(Player->Struct, TEXT("WantsToCrouch_9_47D0791142F36BB93FFD9EA12F96F2B9"));
+    const auto* CommandCrouch = FindFProperty<FBoolProperty>(Custom->Struct, TEXT("WantsToCrouch_28_911DFFDE4A6B03A7346BE8A33869E3D6"));
+    if (!Command || Command->Struct != FMoverInputCmdContext::StaticStruct() || !Jump || !PlayerCrouch || !CommandCrouch)
+    {
+        AddError(TEXT("The authored Mover input interface or intent fields are missing."));
+        return false;
+    }
+    Jump->SetPropertyValue_InContainer(Pawn, true);
+    PlayerCrouch->SetPropertyValue_InContainer(PlayerData, true);
+    FStructOnScope ProduceParameters(Produce);
+    Pawn->ProcessEvent(Produce, ProduceParameters.GetStructMemory());
+    const FMoverDataCollection& Collection = Command->ContainerPtrToValuePtr<FMoverInputCmdContext>(
+        ProduceParameters.GetStructMemory())->InputCollection;
+    const FCharacterDefaultInputs* DefaultCommand = Collection.FindDataByType<FCharacterDefaultInputs>();
+    if (TestNotNull(TEXT("The original interface supplies default input"), DefaultCommand))
+    {
+        TestTrue(TEXT("Jump edge is included in the default block"), DefaultCommand->bIsJumpJustPressed);
+        TestEqual(TEXT("The command carries directional intent"), DefaultCommand->GetMoveInputType(), EMoveInputType::DirectionalIntent);
+    }
+    const auto* CustomCommand = static_cast<const FMoverUserDefinedDataStruct*>(Collection.FindDataByType(Custom->Struct));
+    if (TestNotNull(TEXT("The command preserves the imported custom block"), CustomCommand))
+    {
+        TestTrue(TEXT("Crouch intent is included in the custom block"),
+            CommandCrouch->GetPropertyValue_InContainer(CustomCommand->StructInstance.GetMemory()));
+        PlayerCrouch->SetPropertyValue_InContainer(PlayerData, false);
+        TestTrue(TEXT("Subsequent device input does not modify an issued command"),
+            CommandCrouch->GetPropertyValue_InContainer(CustomCommand->StructInstance.GetMemory()));
+    }
     return true;
 }
 

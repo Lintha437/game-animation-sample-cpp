@@ -277,4 +277,18 @@ The script backs up the original pawn under `Saved/BlueprintMigration/MoverState
 
 In `DefaultLevel` PIE, the possessed Mover pawn returned the original grounded, traversing and airborne enum values. Its reported speed matched the component's horizontal velocity during the authored vault. The pawn completed the vault and returned to ground, and a separate teleport updated its reset transform before entering Falling. The test supplied the vault direction. The original pawn, the copied Animation Blueprint, and the test map passed hash checks. Full Mover inputs, slide, ragdoll and multiplayer prediction are **Not run** for this migration.
 
+### Mover input command pipeline
+
+The original `ProduceInput` interface forwards to `ASampleMoverCharacter::BuildMoverInputCommand`. C++ updates the default and custom blocks in their authored order and returns an independent copy of each block in the command. The original device, orientation and direction queries feed those blocks, and the authored direction curves still determine the animation-facing offset. The native pre-simulation callback reads crouch from the current command. The native cache copies the last simulated input blocks to the existing animation and camera snapshots. Targeted aim, twin-stick aim selection, and normalized control yaw rate also execute in C++.
+
+Build the Editor target, close the destination Editor, and apply the migration after the Mover state migration.
+
+```powershell
+$script = (Resolve-Path Scripts/migrate_mover_input_pipeline.py).Path
+& $editor $project -run=PythonScript "-script=$script" -Unattended -NullRHI
+& $editor $project -Unattended -NullRHI '-ExecCmds=Automation RunTests GameAnimationSampleCpp.Migration' '-TestExit=Automation Test Queue Empty'
+```
+
+The script saves the prior local pawn under `Saved/BlueprintMigration/MoverInputPipeline/`. Both Win64 Development targets built and all twelve migration tests passed. The Mover test invokes the saved interface and verifies both command blocks, directional intent, the jump edge and crouch intent. In `DefaultLevel` PIE, the owning Mover client advanced with injected `IA_Move` and captured its direction in the post-simulation snapshot. `IA_Jump` produced the jump edge and an airborne transition before returning to ground. Releasing the crouch state through the authored action updated the client's and authority's simulated inputs and stance. Twin-stick, simulated packet loss, and the ragdoll pawn are **Not run**.
+
 See the [Epic sample documentation](https://dev.epicgames.com/documentation/unreal-engine/game-animation-sample-project-in-unreal-engine) for the sample's public controls and architecture.
