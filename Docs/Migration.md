@@ -40,6 +40,8 @@ When adapting the sample's input intent for networking, keep one authoritative s
 
 For a Mover-based pawn, take horizontal speed and the current mode name from `UCharacterMoverComponent`. Translate mode names to the destination's state type before supplying them to animation and camera consumers. Preserve the exact snapshot used for gait. The sample reads pre-simulation move input and orientation intent, gives sprint priority over the walk toggle, and caps sprint in aim mode. Test the directional dot product and analog deflection at the original thresholds.
 
+Keep the input producer and the simulated snapshot separate. Assemble one command per Mover input request, and carry crouch in the same prediction data as movement. During the pre-simulation callback, read crouch from the command being executed. Animation and camera consumers should read the latest simulated command. When porting the sample's user-defined input struct, either keep that struct and its network serialization or update every dependent movement mode and consumer together.
+
 When adapting a sandbox teleport or reset, update orientation intent alongside the actor transform. Let the host assign the next movement mode through Mover's simulation queue. Verify absolute teleports, relative orientation offsets, and the reset transform independently. Keep the host's authority and prediction policy for any replicated teleport.
 
 ### Integrate pawn selection with the host GameMode
