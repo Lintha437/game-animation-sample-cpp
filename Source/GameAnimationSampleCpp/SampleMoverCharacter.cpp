@@ -1,8 +1,11 @@
 #include "SampleMoverCharacter.h"
 
 #include "DefaultMovementSet/CharacterMoverComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
+#include "GameplayTagContainer.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "MoveLibrary/FloorQueryUtils.h"
 #include "MoverDataModelTypes.h"
 #include "StructUtils/UserDefinedStruct.h"
 #include "UObject/StructOnScope.h"
@@ -14,6 +17,18 @@ namespace
     constexpr uint8 Walk = 0;
     constexpr uint8 Run = 1;
     constexpr uint8 Sprint = 2;
+    constexpr int64 FaceMovement = 0;
+    constexpr int64 AimRotationMode = 2;
+
+    enum class EAuthoredMovementMode : uint8
+    {
+        Grounded,
+        Airborne,
+        Sliding,
+        Traversing,
+        Ragdoll,
+        Flying,
+    };
 
     int64 ReadEnum(const FProperty& Property, const void* Value)
     {
@@ -44,6 +59,24 @@ namespace
     {
         const auto* Property = Snapshot ? FindFProperty<FBoolProperty>(Snapshot->Struct, Name) : nullptr;
         return Property && Property->GetPropertyValue_InContainer(Snapshot->ContainerPtrToValuePtr<void>(&Pawn));
+    }
+
+    int64 GetPreSimRotationMode(const ASampleMoverCharacter& Pawn)
+    {
+        const FStructProperty* Custom = FindSnapshot(Pawn, TEXT("MoverCustomInputs_PreSim"));
+        const FProperty* Rotation = Custom ? Custom->Struct->FindPropertyByName(
+            TEXT("RotationMode_11_A4BE1D7943913AA41D3A5BB9A6A7B0A9")) : nullptr;
+        return Rotation ? ReadEnum(*Rotation, Rotation->ContainerPtrToValuePtr<void>(
+            Custom->ContainerPtrToValuePtr<void>(&Pawn))) : FaceMovement;
+    }
+
+    void WriteVector(ASampleMoverCharacter& Pawn, FName Name, const FVector& Value)
+    {
+        const auto* Property = FindSnapshot(Pawn, Name);
+        if (Property && Property->Struct == TBaseStructure<FVector>::Get())
+        {
+            *Property->ContainerPtrToValuePtr<FVector>(&Pawn) = Value;
+        }
     }
 
     template <typename ValueType>
@@ -129,12 +162,7 @@ uint8 ASampleMoverCharacter::ResolveGaitValue() const
     const FStructProperty* Player = FindSnapshot(*this, TEXT("PlayerInputState"));
     if (ReadIntent(Player, *this, TEXT("WantsToSprint_1_840C190D4B23289C5C46E0B5A4C5C936")))
     {
-        const FStructProperty* Custom = FindSnapshot(*this, TEXT("MoverCustomInputs_PreSim"));
-        const FProperty* Rotation = Custom ? Custom->Struct->FindPropertyByName(
-            TEXT("RotationMode_11_A4BE1D7943913AA41D3A5BB9A6A7B0A9")) : nullptr;
-        const int64 Mode = Rotation ? ReadEnum(*Rotation, Rotation->ContainerPtrToValuePtr<void>(
-            Custom->ContainerPtrToValuePtr<void>(this))) : 0;
-        switch (Mode)
+        switch (GetPreSimRotationMode(*this))
         {
         case 0:
             return Sprint;
@@ -190,7 +218,7 @@ FMoverInputCmdContext ASampleMoverCharacter::BuildMoverInputCommand(int32 SimTim
         CopyEnum(CustomType->FindPropertyByName(TEXT("RotationMode_11_A4BE1D7943913AA41D3A5BB9A6A7B0A9")),
             CustomData, Rotation->GetReturnProperty(), Args.GetStructMemory());
     }
-    Input->OrientationIntent = ReadStructResult(*this, TEXT("Get_OrientationIntent"), FVector::ZeroVector);
+    Input->OrientationIntent = ResolveOrientationIntent();
     SetEnumByte(CustomType, CustomData, TEXT("Gait_5_13BB29FB446593C2412547A541C4C00B"), ResolveGaitValue());
     WriteNumber(CustomType, CustomData, TEXT("ControlRotationRate_29_A6F8894147153250CDA5C889CD9DB171"),
         ReadNumber(GetClass(), this, TEXT("ControlRotationRate")));
@@ -293,6 +321,111 @@ void ASampleMoverCharacter::UpdateControlYawRate()
     WriteNumber(GetClass(), this, TEXT("ControlRotationRate"),
         Delta > 0.0 ? FRotator::NormalizeAxis(Current.Yaw - Previous->Yaw) / Delta : 0.0);
     *Previous = Current;
+}
+
+FVector ASampleMoverCharacter::ResolveOrientationIntent() const
+{
+    const auto* Mover = FindComponentByClass<UCharacterMoverComponent>();
+    const FCharacterDefaultInputs* Input = GetPreSimInputs(*this);
+    if (!Mover || !Input)
+    {
+        return FVector::ZeroVector;
+    }
+    static const FGameplayTag RootMotion = FGameplayTag::RequestGameplayTag(TEXT("Mover.AnimRootMotion"), false);
+    if (RootMotion.IsValid() && Mover->HasGameplayTag(RootMotion, false))
+    {
+        return GetActorForwardVector();
+    }
+    const int64 RotationMode = GetPreSimRotationMode(*this);
+    const double AimYaw = ResolveAimingRotation().Yaw;
+    const FVector AimDirection = FRotator(0.0, AimYaw, 0.0).Vector();
+    switch (static_cast<EAuthoredMovementMode>(ResolveMovementModeValue()))
+    {
+    case EAuthoredMovementMode::Grounded:
+        if (!Input->GetMoveInput().IsNearlyZero())
+        {
+            return RotationMode == FaceMovement ? Input->GetMoveInput() : AimDirection;
+        }
+        if (RotationMode == AimRotationMode)
+        {
+            return FMath::Abs(FRotator::NormalizeAxis(GetActorRotation().Yaw - AimYaw)) > 60.0
+                ? AimDirection : Input->OrientationIntent;
+        }
+        if (const auto* BaseDelta = FindSnapshot(*this, TEXT("BasedMovementDelta"));
+            BaseDelta && BaseDelta->Struct == TBaseStructure<FTransform>::Get())
+        {
+            return BaseDelta->ContainerPtrToValuePtr<FTransform>(this)->GetRotation().RotateVector(
+                Input->OrientationIntent.Rotation().Vector());
+        }
+        return Input->OrientationIntent.Rotation().Vector();
+    case EAuthoredMovementMode::Airborne:
+        return RotationMode == FaceMovement ? Input->OrientationIntent : AimDirection;
+    case EAuthoredMovementMode::Sliding:
+        return RotationMode == FaceMovement ? Mover->GetVelocity().GetSafeNormal2D() : AimDirection;
+    case EAuthoredMovementMode::Traversing:
+        return GetActorForwardVector();
+    case EAuthoredMovementMode::Flying:
+        return AimDirection;
+    default:
+        return FVector::ZeroVector;
+    }
+}
+
+void ASampleMoverCharacter::UpdateMoverFloor()
+{
+    FFloorCheckResult Floor;
+    if (auto* Mover = FindComponentByClass<UCharacterMoverComponent>())
+    {
+        bool bWalkable = false;
+        UFloorQueryUtils::TryFindFloor(Mover, bWalkable, Floor);
+    }
+    const auto* HasFloor = FindFProperty<FBoolProperty>(GetClass(), TEXT("HasFloor"));
+    if (HasFloor)
+    {
+        HasFloor->SetPropertyValue_InContainer(this, Floor.bBlockingHit);
+    }
+    const auto* Mesh = FindComponentByClass<USkeletalMeshComponent>();
+    WriteVector(*this, TEXT("FloorLocation"),
+        Floor.bBlockingHit ? Floor.HitResult.ImpactPoint : (Mesh ? Mesh->GetComponentLocation() : FVector::ZeroVector));
+    WriteVector(*this, TEXT("FloorNormal"), Floor.bBlockingHit ? Floor.HitResult.ImpactNormal : FVector::UpVector);
+}
+
+void ASampleMoverCharacter::CaptureBasedMovement(const FTransform& TransformDelta, const FMoverTimeStep& TimeStep)
+{
+    if (const auto* Delta = FindSnapshot(*this, TEXT("BasedMovementDelta"));
+        Delta && Delta->Struct == TBaseStructure<FTransform>::Get())
+    {
+        *Delta->ContainerPtrToValuePtr<FTransform>(this) = TransformDelta;
+    }
+}
+
+void ASampleMoverCharacter::NotifyMoverModeFinalized(const FMoverSyncState& SyncState, const FMoverAuxStateContext& AuxState)
+{
+    const auto* Mover = FindComponentByClass<UCharacterMoverComponent>();
+    const auto* Cached = FindFProperty<FNameProperty>(GetClass(), TEXT("CachedMovementMode"));
+    if (!Mover || !Cached)
+    {
+        return;
+    }
+    const FName Previous = Cached->GetPropertyValue_InContainer(this);
+    const FName Next = Mover->GetMovementModeName();
+    if (Previous == Next)
+    {
+        return;
+    }
+    if (UFunction* Callback = FindFunction(TEXT("On_MovementModeChanged_PostFinalize")))
+    {
+        const auto* PreviousParam = FindFProperty<FNameProperty>(Callback, TEXT("PreviousMovementModeName"));
+        const auto* NewParam = FindFProperty<FNameProperty>(Callback, TEXT("NewMovementModeName"));
+        if (PreviousParam && NewParam)
+        {
+            FStructOnScope Args(Callback);
+            PreviousParam->SetPropertyValue_InContainer(Args.GetStructMemory(), Previous);
+            NewParam->SetPropertyValue_InContainer(Args.GetStructMemory(), Next);
+            ProcessEvent(Callback, Args.GetStructMemory());
+        }
+    }
+    Cached->SetPropertyValue_InContainer(this, Next);
 }
 
 double ASampleMoverCharacter::Get_Speed() const
