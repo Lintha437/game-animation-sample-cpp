@@ -102,6 +102,21 @@ bool FSampleMoverStateMigrationTest::RunTest(const FString& Parameters)
         TestEqual(TEXT("Large deflection is run"), ReadGait(), uint8{1});
     }
 
+    auto* Mover = Pawn->FindComponentByClass<UCharacterMoverComponent>();
+    FMoverSyncState GroundedState = Mover->GetSyncState();
+    GroundedState.MovementMode = TEXT("Walking");
+    Mover->OnSimulationStateInitialized(GroundedState, FMoverAuxStateContext());
+    TestEqual(TEXT("The orientation fixture is grounded"), Pawn->ResolveMovementModeValue(), uint8{0});
+    Rotation->SetPropertyValue_InContainer(RotationData, 0);
+    State->SetMoveInput(EMoveInputType::DirectionalIntent, FVector::RightVector * 0.5);
+    TestEqual(TEXT("Ground facing preserves the directional input"), Pawn->ResolveOrientationIntent(), FVector::RightVector * 0.5);
+    State->SetMoveInput(EMoveInputType::DirectionalIntent, FVector::ZeroVector);
+    State->OrientationIntent = FVector::ForwardVector;
+    Pawn->CaptureBasedMovement(FTransform(FRotator(0.0, 90.0, 0.0)), FMoverTimeStep());
+    const FVector BasedFacing = Pawn->ResolveOrientationIntent();
+    TestTrue(*FString::Printf(TEXT("Stationary facing follows the moving base (%s)"), *BasedFacing.ToString()),
+        BasedFacing.Equals(FVector::RightVector));
+
     const FTransform Target(FRotator(0.0, 90.0, 0.0), FVector(500.0, 250.0, 100.0));
     Pawn->CustomTeleport(Target, false, true);
     TestTrue(TEXT("Absolute teleport reaches the destination"), Pawn->GetActorLocation().Equals(Target.GetLocation()));

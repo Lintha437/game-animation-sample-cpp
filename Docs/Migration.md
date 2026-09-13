@@ -42,6 +42,8 @@ For a Mover-based pawn, take horizontal speed and the current mode name from `UC
 
 Keep the input producer and the simulated snapshot separate. Assemble one command per Mover input request, and carry crouch in the same prediction data as movement. During the pre-simulation callback, read crouch from the command being executed. Animation and camera consumers should read the latest simulated command. When porting the sample's user-defined input struct, either keep that struct and its network serialization or update every dependent movement mode and consumer together.
 
+Resolve orientation before finalizing each input command. Preserve stationary aim thresholds, the last facing on a moving base, and the precedence given to root motion. Cache floor contact from the same Mover component used for simulation. Dispatch presentation callbacks only when the finalized mode changes.
+
 When adapting a sandbox teleport or reset, update orientation intent alongside the actor transform. Let the host assign the next movement mode through Mover's simulation queue. Verify absolute teleports, relative orientation offsets, and the reset transform independently. Keep the host's authority and prediction policy for any replicated teleport.
 
 ### Integrate pawn selection with the host GameMode
