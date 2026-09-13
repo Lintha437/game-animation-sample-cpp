@@ -70,4 +70,32 @@ public:
     /** Caches the normalized control yaw rate in degrees per world second. */
     UFUNCTION(BlueprintCallable, Category = "Sample|Mover")
     void UpdateControlYawRate();
+
+    /**
+     * Resolves the gameplay facing for the next simulation step.
+     * Preserves stationary aim hysteresis, moving-base rotation, and root-motion priority.
+     * @return Desired facing in world space.
+     */
+    UFUNCTION(BlueprintPure, Category = "Sample|Mover")
+    FVector ResolveOrientationIntent() const;
+
+    /** Updates the blocking floor, contact point, and surface normal from Mover. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover")
+    void UpdateMoverFloor();
+
+    /**
+     * Records the moving base's transform delta for stationary facing.
+     * @param TransformDelta Change applied by Mover for this step.
+     * @param TimeStep Simulation step supplying the change.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover")
+    void CaptureBasedMovement(const FTransform& TransformDelta, const FMoverTimeStep& TimeStep);
+
+    /**
+     * Notifies the authored presentation callback once per finalized mode change.
+     * @param SyncState Finalized simulation state.
+     * @param AuxState Finalized auxiliary state.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover")
+    void NotifyMoverModeFinalized(const FMoverSyncState& SyncState, const FMoverAuxStateContext& AuxState);
 };

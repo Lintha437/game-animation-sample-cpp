@@ -291,4 +291,18 @@ $script = (Resolve-Path Scripts/migrate_mover_input_pipeline.py).Path
 
 The script saves the prior local pawn under `Saved/BlueprintMigration/MoverInputPipeline/`. Both Win64 Development targets built and all twelve migration tests passed. The Mover test invokes the saved interface and verifies both command blocks, directional intent, the jump edge and crouch intent. In `DefaultLevel` PIE, the owning Mover client advanced with injected `IA_Move` and captured its direction in the post-simulation snapshot. `IA_Jump` produced the jump edge and an airborne transition before returning to ground. Releasing the crouch state through the authored action updated the client's and authority's simulated inputs and stance. Twin-stick, simulated packet loss, and the ragdoll pawn are **Not run**.
 
+### Mover facing and floor state
+
+The primary Mover pawn builds its facing intent in C++ using the current simulation mode, input direction, cached facing, and based movement rotation. The native floor query updates the fields consumed by the authored camera and animation graphs. The post-finalize hook dispatches the existing mode-change callback once per mode transition. The animation graph and its authored curves remain in their existing packages.
+
+Apply this step after the Mover input command migration. The script backs up the prior local pawn under `Saved/BlueprintMigration/MoverOrientation/`.
+
+```powershell
+$script = (Resolve-Path Scripts/migrate_mover_orientation.py).Path
+& $editor $project -run=PythonScript "-script=$script" -Unattended -NullRHI
+& $editor $project -Unattended -NullRHI '-ExecCmds=Automation RunTests GameAnimationSampleCpp.Migration.MoverState' '-TestExit=Automation Test Queue Empty'
+```
+
+Both Win64 Development targets built. The focused Mover state test passed and verifies directional facing on the ground and how a stationary pawn follows a moving base. In `DefaultLevel` PIE, the possessed Mover pawn reported the grounded mode, forward facing, and a floor normal of (0, 0, 1). The Mover Animation Blueprint matches the original package by SHA-256. Slide and multiplayer prediction are **Not run** for this migration.
+
 See the [Epic sample documentation](https://dev.epicgames.com/documentation/unreal-engine/game-animation-sample-project-in-unreal-engine) for the sample's public controls and architecture.
