@@ -98,4 +98,37 @@ public:
      */
     UFUNCTION(BlueprintCallable, Category = "Sample|Mover")
     void NotifyMoverModeFinalized(const FMoverSyncState& SyncState, const FMoverAuxStateContext& AuxState);
+
+    /**
+     * Adds a ragdoll transform snapshot and facing to the regular movement command.
+     * The extra block is present only when Ragdoll is the next simulation mode.
+     * @param SimTimeMs Time supplied by the Mover input producer interface.
+     * @return A command that owns copies of both the standard and ragdoll input blocks.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Ragdoll")
+    FMoverInputCmdContext BuildRagdollInputCommand(int32 SimTimeMs);
+
+    /** @return The pelvis position and upright capsule heading inferred from the simulated spine, in world space. */
+    UFUNCTION(BlueprintPure, Category = "Sample|Mover|Ragdoll")
+    FTransform ResolveRagdollTransform() const;
+
+    /** @return World-space capsule facing from the frozen heading, roll velocity, or latest ragdoll transform. */
+    UFUNCTION(BlueprintPure, Category = "Sample|Mover|Ragdoll")
+    FVector ResolveRagdollFacing() const;
+
+    /** Records center-of-mass velocity, spine velocity and spine speed for downstream physics and animation. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Ragdoll")
+    void UpdateRagdollVelocities();
+
+    /** Applies the configured gravity multiplier until the ragdoll reaches its downward speed limit. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Ragdoll")
+    void UpdateRagdollGravity();
+
+    /** @return Whether this grounded pawn can start an interaction given its aim intent and active montage slot. */
+    UFUNCTION(BlueprintPure, Category = "Sample|Mover|Ragdoll")
+    bool CanStartRagdollCharacterInteraction() const;
+
+    /** @return Whether another character may select this grounded pawn as a target. */
+    UFUNCTION(BlueprintPure, Category = "Sample|Mover|Ragdoll")
+    bool CanReceiveRagdollCharacterInteraction() const;
 };

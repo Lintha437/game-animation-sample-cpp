@@ -305,4 +305,17 @@ $script = (Resolve-Path Scripts/migrate_mover_orientation.py).Path
 
 Both Win64 Development targets built. The focused Mover state test passed and verifies directional facing on the ground and how a stationary pawn follows a moving base. In `DefaultLevel` PIE, the possessed Mover pawn reported the grounded mode, forward facing, and a floor normal of (0, 0, 1). The Mover Animation Blueprint matches the original package by SHA-256. Slide and multiplayer prediction are **Not run** for this migration.
 
+### Ragdoll simulation inputs
+
+The ragdoll pawn extends the native Mover command with a copy of its pelvis and spine transform when the queued mode is Ragdoll. The capsule facing follows the authored freeze and rolling flags. C++ measures center-of-mass and spine velocities, applies the authored fall-speed gravity limit, and checks whether a pawn can initiate or receive a character interaction. The imported Blueprint still drives the trigger, profile transitions, recovery montage, and paired animation.
+
+Apply the migration after the primary Mover migrations. The script saves the prior local pawn under `Saved/BlueprintMigration/RagdollState/`.
+
+```powershell
+$script = (Resolve-Path Scripts/migrate_ragdoll_state.py).Path
+& $editor $project -run=PythonScript "-script=$script" -Unattended -NullRHI
+```
+
+Both Win64 Development targets built. In `RagdollLevel` PIE the possessed pawn transitioned from Walking to Ragdoll and back to Walking. The ragdoll command transform and spine velocity changed during simulation. Target eligibility was false during ragdoll and was restored on recovery. The smoke check called the existing trigger and exit events. Raw input and multiplayer are **Not run**.
+
 See the [Epic sample documentation](https://dev.epicgames.com/documentation/unreal-engine/game-animation-sample-project-in-unreal-engine) for the sample's public controls and architecture.
