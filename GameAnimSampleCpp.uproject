@@ -72,6 +72,10 @@
       "Enabled": true
     },
     {
+      "Name": "PhysicsControl",
+      "Enabled": true
+    },
+    {
       "Name": "NetworkPrediction",
       "Enabled": true
     },

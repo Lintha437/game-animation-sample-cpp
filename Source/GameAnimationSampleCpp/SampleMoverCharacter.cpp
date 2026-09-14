@@ -1,5 +1,6 @@
 #include "SampleMoverCharacter.h"
 
+#include "Animation/AnimInstance.h"
 #include "DefaultMovementSet/CharacterMoverComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
@@ -7,6 +8,7 @@
 #include "Kismet/KismetSystemLibrary.h"
 #include "MoveLibrary/FloorQueryUtils.h"
 #include "MoverDataModelTypes.h"
+#include "PhysicsControlComponent.h"
 #include "StructUtils/UserDefinedStruct.h"
 #include "UObject/StructOnScope.h"
 #include "UObject/UnrealType.h"
@@ -19,6 +21,8 @@ namespace
     constexpr uint8 Sprint = 2;
     constexpr int64 FaceMovement = 0;
     constexpr int64 AimRotationMode = 2;
+    const FName RagdollMode(TEXT("Ragdoll"));
+    const FName RagdollTransformField(TEXT("RagdollTransform_33_5FE542414D593629259855B867DEA655"));
 
     enum class EAuthoredMovementMode : uint8
     {
@@ -77,6 +81,26 @@ namespace
         {
             *Property->ContainerPtrToValuePtr<FVector>(&Pawn) = Value;
         }
+    }
+
+    FVector ReadVector(const ASampleMoverCharacter& Pawn, FName Name)
+    {
+        const auto* Property = FindSnapshot(Pawn, Name);
+        return Property && Property->Struct == TBaseStructure<FVector>::Get()
+            ? *Property->ContainerPtrToValuePtr<FVector>(&Pawn) : FVector::ZeroVector;
+    }
+
+    const FTransform* FindRagdollTransform(const FStructProperty* Snapshot, const ASampleMoverCharacter& Pawn)
+    {
+        const auto* Field = Snapshot ? FindFProperty<FStructProperty>(Snapshot->Struct, RagdollTransformField) : nullptr;
+        return Field && Field->Struct == TBaseStructure<FTransform>::Get()
+            ? Field->ContainerPtrToValuePtr<FTransform>(Snapshot->ContainerPtrToValuePtr<void>(&Pawn)) : nullptr;
+    }
+
+    USkeletalMeshComponent* GetRagdollMesh(const ASampleMoverCharacter& Pawn)
+    {
+        const auto* Mesh = FindFProperty<FObjectPropertyBase>(Pawn.GetClass(), TEXT("SkeletalMesh"));
+        return Mesh ? Cast<USkeletalMeshComponent>(Mesh->GetObjectPropertyValue_InContainer(&Pawn)) : nullptr;
     }
 
     template <typename ValueType>
@@ -426,6 +450,111 @@ void ASampleMoverCharacter::NotifyMoverModeFinalized(const FMoverSyncState& Sync
         }
     }
     Cached->SetPropertyValue_InContainer(this, Next);
+}
+
+FMoverInputCmdContext ASampleMoverCharacter::BuildRagdollInputCommand(int32 SimTimeMs)
+{
+    FMoverInputCmdContext Command = BuildMoverInputCommand(SimTimeMs);
+    const auto* Mover = FindComponentByClass<UCharacterMoverComponent>();
+    const auto* Snapshot = FindSnapshot(*this, TEXT("RagdollInputs_PreSim"));
+    if (!Mover || Mover->GetNextMovementModeName() != RagdollMode ||
+        !Snapshot || !Snapshot->Struct->IsA<UUserDefinedStruct>())
+    {
+        return Command;
+    }
+
+    const auto* Transform = FindFProperty<FStructProperty>(Snapshot->Struct, RagdollTransformField);
+    if (!Transform || Transform->Struct != TBaseStructure<FTransform>::Get())
+    {
+        return Command;
+    }
+    void* Data = Snapshot->ContainerPtrToValuePtr<void>(this);
+    *Transform->ContainerPtrToValuePtr<FTransform>(Data) = ResolveRagdollTransform();
+
+    auto* Ragdoll = static_cast<FMoverUserDefinedDataStruct*>(Command.InputCollection.FindOrAddDataByType(Snapshot->Struct));
+    Ragdoll->InitializeAs(Snapshot->Struct, static_cast<const uint8*>(Data));
+    if (auto* Defaults = Command.InputCollection.FindMutableDataByType<FCharacterDefaultInputs>())
+    {
+        Defaults->OrientationIntent = ResolveRagdollFacing();
+    }
+    return Command;
+}
+
+FTransform ASampleMoverCharacter::ResolveRagdollTransform() const
+{
+    const USkeletalMeshComponent* Mesh = GetRagdollMesh(*this);
+    if (!Mesh)
+    {
+        return GetActorTransform();
+    }
+
+    const FVector Pelvis = Mesh->GetBoneTransform(TEXT("pelvis"), RTS_World).GetLocation();
+    const FTransform Spine = Mesh->GetBoneTransform(TEXT("spine_05"), RTS_World);
+    FVector Heading = Spine.GetLocation() - Pelvis;
+    if (Spine.GetUnitAxis(EAxis::Y).Z > 0.0)
+    {
+        Heading = -Heading;
+    }
+    return FTransform(FRotationMatrix::MakeFromZX(FVector::UpVector, Heading).ToQuat(), Pelvis);
+}
+
+FVector ASampleMoverCharacter::ResolveRagdollFacing() const
+{
+    const auto* Frozen = FindFProperty<FBoolProperty>(GetClass(), TEXT("Ragdoll_FreezeCapsuleRotation"));
+    if (Frozen && Frozen->GetPropertyValue_InContainer(this))
+    {
+        return GetActorForwardVector();
+    }
+    if (const auto* Rolling = FindFProperty<FBoolProperty>(GetClass(), TEXT("Ragdoll_PlayRollingGetups"));
+        Rolling && Rolling->GetPropertyValue_InContainer(this))
+    {
+        return ReadVector(*this, TEXT("Ragdoll_COM_Velocity")).GetSafeNormal2D();
+    }
+    const auto* Transform = FindRagdollTransform(FindSnapshot(*this, TEXT("RagdollInputs_PreSim")), *this);
+    return Transform ? Transform->GetUnitAxis(EAxis::X) : GetActorForwardVector();
+}
+
+void ASampleMoverCharacter::UpdateRagdollVelocities()
+{
+    const USkeletalMeshComponent* Mesh = GetRagdollMesh(*this);
+    if (!Mesh)
+    {
+        return;
+    }
+    const FVector Center = Mesh->GetSkeletalCenterOfMass();
+    const double DeltaSeconds = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.0;
+    const FVector PreviousCenter = ReadVector(*this, TEXT("Ragdoll_COM_LastFrame"));
+    WriteVector(*this, TEXT("Ragdoll_COM_Velocity"),
+        DeltaSeconds > SMALL_NUMBER ? (Center - PreviousCenter) / DeltaSeconds : FVector::ZeroVector);
+    WriteVector(*this, TEXT("Ragdoll_COM_LastFrame"), Center);
+    const FVector SpineVelocity = Mesh->GetPhysicsLinearVelocity(TEXT("spine_05"));
+    WriteVector(*this, TEXT("Ragdoll_SpineVelocity"), SpineVelocity);
+    WriteNumber(GetClass(), this, TEXT("Ragdoll_Speed"), SpineVelocity.Size());
+}
+
+void ASampleMoverCharacter::UpdateRagdollGravity()
+{
+    if (auto* Physics = FindComponentByClass<UPhysicsControlComponent>())
+    {
+        constexpr double GravityCutoffSpeed = -2500.0;
+        const double Multiplier = ReadVector(*this, TEXT("Ragdoll_COM_Velocity")).Z <= GravityCutoffSpeed
+            ? 0.0 : ReadNumber(GetClass(), this, TEXT("Ragdoll_GravityMultiplier"));
+        Physics->SetBodyModifierGravityMultiplier(TEXT("All"), static_cast<float>(Multiplier), true, true);
+    }
+}
+
+bool ASampleMoverCharacter::CanStartRagdollCharacterInteraction() const
+{
+    const USkeletalMeshComponent* Mesh = GetRagdollMesh(*this);
+    const UAnimInstance* Anim = Mesh ? Mesh->GetAnimInstance() : nullptr;
+    return CanReceiveRagdollCharacterInteraction() && (!Anim || !Anim->IsSlotActive(TEXT("DefaultSlot"))) &&
+        !ReadIntent(FindSnapshot(*this, TEXT("PlayerInputState")), *this,
+            TEXT("WantsToAim_7_3A4AA0AA4DE529A3B213E68BECD246F8"));
+}
+
+bool ASampleMoverCharacter::CanReceiveRagdollCharacterInteraction() const
+{
+    return ResolveMovementModeValue() == static_cast<uint8>(EAuthoredMovementMode::Grounded);
 }
 
 double ASampleMoverCharacter::Get_Speed() const
