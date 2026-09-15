@@ -131,4 +131,41 @@ public:
     /** @return Whether another character may select this grounded pawn as a target. */
     UFUNCTION(BlueprintPure, Category = "Sample|Mover|Ragdoll")
     bool CanReceiveRagdollCharacterInteraction() const;
+
+    /** Starts physics immediately, queues the Ragdoll mode, and freezes capsule facing briefly. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Ragdoll")
+    void BeginRagdollPhysics();
+
+    /** Queues the grounded mode. The finalized transition owns collision and profile recovery. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Ragdoll")
+    void RequestRagdollRecovery();
+
+    /** Applies the ragdoll capsule profile and suppresses pawn-to-pawn collision while down. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Ragdoll")
+    void ApplyRagdollCapsuleCollision();
+
+    /** Restores the normal capsule profile before the recovery pose is captured. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Ragdoll")
+    void RestoreRagdollCapsuleCollision();
+
+    /** Suppresses motor velocity for the recovery frame and schedules restoration of the default profile. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Ragdoll")
+    void FinishRagdollPhysicsRecovery();
+
+    /** Updates the default profile from the sample CVar. Applies it immediately outside ragdoll. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Ragdoll")
+    void RefreshRagdollDefaultProfile();
+
+private:
+    /** Invokes the pawn's authored Physics Control recipe for the requested profile. */
+    void ApplyRagdollProfile(FName Profile);
+
+    UFUNCTION()
+    void ConfirmRagdollEntry();
+
+    UFUNCTION()
+    void ReleaseRagdollFacing();
+
+    UFUNCTION()
+    void RestoreRagdollDefaultProfile();
 };

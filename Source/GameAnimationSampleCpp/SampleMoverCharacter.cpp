@@ -1,6 +1,7 @@
 #include "SampleMoverCharacter.h"
 
 #include "Animation/AnimInstance.h"
+#include "Components/CapsuleComponent.h"
 #include "DefaultMovementSet/CharacterMoverComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
@@ -23,6 +24,12 @@ namespace
     constexpr int64 AimRotationMode = 2;
     const FName RagdollMode(TEXT("Ragdoll"));
     const FName RagdollTransformField(TEXT("RagdollTransform_33_5FE542414D593629259855B867DEA655"));
+    const FName DefaultRagdollProfile(TEXT("DefaultPhysicsProfile"));
+    const FName CapsuleProfile(TEXT("CharacterCapsule"));
+    // Dedicated latent-action keys on the pawn, distinct from Blueprint node IDs.
+    constexpr int32 ConfirmRagdollEntryAction = 0x52414701;
+    constexpr int32 ReleaseRagdollFacingAction = 0x52414702;
+    constexpr int32 RestoreRagdollProfileAction = 0x52414703;
 
     enum class EAuthoredMovementMode : uint8
     {
@@ -101,6 +108,12 @@ namespace
     {
         const auto* Mesh = FindFProperty<FObjectPropertyBase>(Pawn.GetClass(), TEXT("SkeletalMesh"));
         return Mesh ? Cast<USkeletalMeshComponent>(Mesh->GetObjectPropertyValue_InContainer(&Pawn)) : nullptr;
+    }
+
+    UCapsuleComponent* GetRagdollCapsule(const ASampleMoverCharacter& Pawn)
+    {
+        const auto* Capsule = FindFProperty<FObjectPropertyBase>(Pawn.GetClass(), TEXT("Capsule"));
+        return Capsule ? Cast<UCapsuleComponent>(Capsule->GetObjectPropertyValue_InContainer(&Pawn)) : nullptr;
     }
 
     template <typename ValueType>
@@ -555,6 +568,130 @@ bool ASampleMoverCharacter::CanStartRagdollCharacterInteraction() const
 bool ASampleMoverCharacter::CanReceiveRagdollCharacterInteraction() const
 {
     return ResolveMovementModeValue() == static_cast<uint8>(EAuthoredMovementMode::Grounded);
+}
+
+void ASampleMoverCharacter::BeginRagdollPhysics()
+{
+    auto* Mover = FindComponentByClass<UCharacterMoverComponent>();
+    USkeletalMeshComponent* Mesh = GetRagdollMesh(*this);
+    if (!Mover || !Mesh || !GetWorld())
+    {
+        return;
+    }
+
+    // Impulses sent by the caller must see simulated bodies before Physics Control ticks.
+    Mesh->SetSimulatePhysics(true);
+    ApplyRagdollProfile(RagdollMode);
+    Mover->QueueNextMode(RagdollMode);
+    UKismetSystemLibrary::DelayUntilNextFrame(this, FLatentActionInfo(
+        0, ConfirmRagdollEntryAction, GET_FUNCTION_NAME_STRING_CHECKED(ASampleMoverCharacter, ConfirmRagdollEntry), this));
+
+    if (const auto* Frozen = FindFProperty<FBoolProperty>(GetClass(), TEXT("Ragdoll_FreezeCapsuleRotation")))
+    {
+        Frozen->SetPropertyValue_InContainer(this, true);
+    }
+    UKismetSystemLibrary::RetriggerableDelay(this, 0.25f, FLatentActionInfo(
+        0, ReleaseRagdollFacingAction, GET_FUNCTION_NAME_STRING_CHECKED(ASampleMoverCharacter, ReleaseRagdollFacing), this));
+}
+
+void ASampleMoverCharacter::RequestRagdollRecovery()
+{
+    if (auto* Mover = FindComponentByClass<UCharacterMoverComponent>())
+    {
+        Mover->QueueNextMode(TEXT("Walking"));
+    }
+}
+
+void ASampleMoverCharacter::ApplyRagdollCapsuleCollision()
+{
+    if (UCapsuleComponent* Capsule = GetRagdollCapsule(*this))
+    {
+        Capsule->SetCollisionProfileName(CapsuleProfile);
+        Capsule->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+    }
+}
+
+void ASampleMoverCharacter::RestoreRagdollCapsuleCollision()
+{
+    if (UCapsuleComponent* Capsule = GetRagdollCapsule(*this))
+    {
+        Capsule->SetCollisionProfileName(CapsuleProfile);
+    }
+}
+
+void ASampleMoverCharacter::FinishRagdollPhysicsRecovery()
+{
+    if (auto* Physics = FindComponentByClass<UPhysicsControlComponent>())
+    {
+        FPhysicsControlData Recovery;
+        Recovery.LinearTargetVelocityMultiplier = 0.f;
+        Recovery.AngularTargetVelocityMultiplier = 0.f;
+        Physics->SetControlDatasInSet(TEXT("ParentSpace"), Recovery);
+    }
+    if (GetWorld())
+    {
+        UKismetSystemLibrary::DelayUntilNextFrame(this, FLatentActionInfo(
+            0, RestoreRagdollProfileAction, GET_FUNCTION_NAME_STRING_CHECKED(ASampleMoverCharacter, RestoreRagdollDefaultProfile), this));
+    }
+}
+
+void ASampleMoverCharacter::RefreshRagdollDefaultProfile()
+{
+    const auto* Default = FindFProperty<FNameProperty>(GetClass(), DefaultRagdollProfile);
+    if (!Default)
+    {
+        return;
+    }
+    const int32 Choice = UKismetSystemLibrary::GetConsoleVariableIntValue(TEXT("DDCVar.CharacterPhysics.DefaultProfile"));
+    const FName Profile = Choice == 1 ? FName(TEXT("PhysicalAnimation")) : FName(TEXT("Kinematic"));
+    Default->SetPropertyValue_InContainer(this, Profile);
+    if (ResolveMovementModeValue() != static_cast<uint8>(EAuthoredMovementMode::Ragdoll))
+    {
+        ApplyRagdollProfile(Profile);
+    }
+}
+
+void ASampleMoverCharacter::ApplyRagdollProfile(FName Profile)
+{
+    UFunction* Function = FindFunction(TEXT("SetPhysicsProfile"));
+    if (const auto* Parameter = Function ? FindFProperty<FNameProperty>(Function, TEXT("PhysicsProfile")) : nullptr)
+    {
+        FStructOnScope Args(Function);
+        Parameter->SetPropertyValue_InContainer(Args.GetStructMemory(), Profile);
+        ProcessEvent(Function, Args.GetStructMemory());
+    }
+}
+
+void ASampleMoverCharacter::ConfirmRagdollEntry()
+{
+    if (ResolveMovementModeValue() != static_cast<uint8>(EAuthoredMovementMode::Ragdoll))
+    {
+        if (const auto* Default = FindFProperty<FNameProperty>(GetClass(), DefaultRagdollProfile))
+        {
+            ApplyRagdollProfile(Default->GetPropertyValue_InContainer(this));
+        }
+        ReleaseRagdollFacing();
+    }
+}
+
+void ASampleMoverCharacter::ReleaseRagdollFacing()
+{
+    if (const auto* Frozen = FindFProperty<FBoolProperty>(GetClass(), TEXT("Ragdoll_FreezeCapsuleRotation")))
+    {
+        Frozen->SetPropertyValue_InContainer(this, false);
+    }
+}
+
+void ASampleMoverCharacter::RestoreRagdollDefaultProfile()
+{
+    const auto* Mover = FindComponentByClass<UCharacterMoverComponent>();
+    if (Mover && Mover->GetNextMovementModeName() != RagdollMode)
+    {
+        if (const auto* Default = FindFProperty<FNameProperty>(GetClass(), DefaultRagdollProfile))
+        {
+            ApplyRagdollProfile(Default->GetPropertyValue_InContainer(this));
+        }
+    }
 }
 
 double ASampleMoverCharacter::Get_Speed() const
