@@ -48,6 +48,8 @@ When adapting a sandbox teleport or reset, update orientation intent alongside t
 
 For a physics-driven ragdoll, derive the command's capsule transform from the simulated pelvis and spine. Include that transform only while Mover is about to simulate the ragdoll mode. Keep the custom command type and its consumers in sync when moving this path to the host. Identify the host skeleton's pelvis and spine bones before adapting the calculation. Carry the measured center-of-mass and spine velocities separately, since the former is used for rolling direction and the latter comes directly from physics. Preserve the host's fall-speed threshold and Physics Control modifier settings when porting the gravity limit.
 
+Start skeletal physics before applying an entry impulse. Request the ragdoll mode through the simulation queue, then confirm the transition on the next engine frame and restore the configured default profile if the request failed. When leaving ragdoll, restore capsule collision before capturing the recovery pose. Let the animation graph choose and play its get-up. Restore the default physics profile after the pose handoff and skip that restoration if a new ragdoll request is pending.
+
 ### Integrate pawn selection with the host GameMode
 
 The sandbox uses `DDCvar.PawnClass` to switch demonstration pawns for everyone in the active world. Keep the production game's existing login, spawn, and restart policies. If the host needs a pawn switch, resolve the permitted class on the authority before restarting the player. Check the spawn location and restore view rotation after possession. Keep any client-facing selection UI separate from the authoritative validation and restart.
