@@ -129,4 +129,15 @@ public:
      */
     UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
     static bool ReplaceMoverInputFunction(UBlueprint* Blueprint, UEdGraph* Graph, FName FunctionName, FName OutputName);
+
+    /**
+     * Connects ragdoll entry, capsule collision and recovery to native code.
+     * Preserves the events and graph segments that supply the injury state and recovery playback.
+     * @param Blueprint Imported ragdoll pawn with the native Mover class in its inheritance chain.
+     * @param EventGraph Graph containing the entry and recovery events.
+     * @param ModeGraph Override that observes finalized Mover mode changes.
+     * @return True when all lifecycle hooks are installed.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
+    static bool ReplaceRagdollLifecycle(UBlueprint* Blueprint, UEdGraph* EventGraph, UEdGraph* ModeGraph);
 };

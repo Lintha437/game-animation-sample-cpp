@@ -198,6 +198,70 @@ namespace
         auto* Next = Cast<UK2Node_CallFunction>(GetOnlyPeer(Call.GetThenPin()));
         return Next && Next->FunctionReference.GetMemberName() == Name ? Next : nullptr;
     }
+
+    UK2Node_CallFunction* FindUniqueCall(UEdGraph& Graph, FName Name)
+    {
+        TArray<UK2Node_CallFunction*> Calls;
+        Graph.GetNodesOfClass(Calls);
+        UK2Node_CallFunction* Match = nullptr;
+        for (UK2Node_CallFunction* Call : Calls)
+        {
+            if (Call->FunctionReference.GetMemberName() == Name)
+            {
+                if (Match)
+                {
+                    return nullptr;
+                }
+                Match = Call;
+            }
+        }
+        return Match;
+    }
+
+    bool InstallRagdollTail(UBlueprint& Blueprint, UEdGraph& Graph, UK2Node_CallFunction& First,
+        const UFunction& Function)
+    {
+        UEdGraphPin* Exec = First.GetExecPin();
+        UEdGraphPin* Previous = Exec && Exec->LinkedTo.Num() == 1 ? Exec->LinkedTo[0] : nullptr;
+        if (GetOnlyPeer(Previous) != &First)
+        {
+            return false;
+        }
+
+        TSet<UEdGraphNode*> Remove = CollectExecutionNodes(*Previous);
+        for (const UEdGraphNode* Node : Remove)
+        {
+            for (const UEdGraphPin* Pin : Node->Pins)
+            {
+                const bool bExec = Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec;
+                if ((bExec && Pin->Direction == EGPD_Input && Pin != Exec) ||
+                    (!bExec && Pin->Direction == EGPD_Output))
+                {
+                    for (const UEdGraphPin* Peer : Pin->LinkedTo)
+                    {
+                        if (!Remove.Contains(Peer->GetOwningNode()))
+                        {
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+
+        FGraphNodeCreator<UK2Node_CallFunction> Creator(Graph);
+        UK2Node_CallFunction* Call = Creator.CreateNode();
+        Call->SetFromFunction(&Function);
+        Call->NodePosX = First.NodePosX;
+        Call->NodePosY = First.NodePosY;
+        Creator.Finalize();
+        if (!Graph.GetSchema()->MovePinLinks(*Exec, *Call->GetExecPin()).CanSafeConnect())
+        {
+            return false;
+        }
+        CollectUnusedInputs(Remove, nullptr);
+        RemoveNodes(Blueprint, Graph, Remove);
+        return true;
+    }
 }
 
 bool USampleBlueprintMigrationLibrary::RetargetSelfCall(UEdGraph* Graph, FName OldFunction, FName NewFunction)
@@ -884,4 +948,62 @@ bool USampleBlueprintMigrationLibrary::ReplaceMoverInputFunction(
     }
     return Then && Schema->TryCreateConnection(Then, Call->GetExecPin()) &&
         (!Exec || Schema->TryCreateConnection(Call->GetThenPin(), Exec));
+}
+
+bool USampleBlueprintMigrationLibrary::ReplaceRagdollLifecycle(
+    UBlueprint* Blueprint, UEdGraph* EventGraph, UEdGraph* ModeGraph)
+{
+    if (!Blueprint || !Blueprint->ParentClass || !EventGraph || !ModeGraph ||
+        EventGraph->GetOuter() != Blueprint || ModeGraph->GetOuter() != Blueprint)
+    {
+        return false;
+    }
+
+    const auto InstallTail = [&](FName Native, UK2Node_CallFunction* First)
+    {
+        if (FindUniqueCall(*EventGraph, Native))
+        {
+            return true;
+        }
+        const UFunction* Function = Blueprint->ParentClass->FindFunctionByName(Native);
+        return First && Function && InstallRagdollTail(*Blueprint, *EventGraph, *First, *Function);
+    };
+    TArray<UK2Node_CustomEvent*> Events;
+    EventGraph->GetNodesOfClass(Events);
+    const auto* Exit = Events.FindByPredicate([](const UK2Node_CustomEvent* Event)
+    {
+        return Event->CustomFunctionName == TEXT("ExitRagdoll");
+    });
+    auto* ExitQueue = Cast<UK2Node_CallFunction>(Exit ? GetOnlyPeer(
+        (*Exit)->FindPin(UEdGraphSchema_K2::PN_Then, EGPD_Output)) : nullptr);
+    if (!InstallTail(TEXT("BeginRagdollPhysics"), FindUniqueCall(*EventGraph, TEXT("SetSimulatePhysics"))) ||
+        !InstallTail(TEXT("FinishRagdollPhysicsRecovery"), FindUniqueCall(*EventGraph, TEXT("SetControlDatasInSet"))) ||
+        !InstallTail(TEXT("RequestRagdollRecovery"), ExitQueue && ExitQueue->FunctionReference.GetMemberName() == TEXT("QueueNextMode")
+            ? ExitQueue : nullptr))
+    {
+        return false;
+    }
+
+    const auto InstallCollision = [&](UEdGraph& Graph, FName Native, bool bEnter)
+    {
+        if (FindUniqueCall(Graph, Native))
+        {
+            return true;
+        }
+        const UFunction* Function = Blueprint->ParentClass->FindFunctionByName(Native);
+        UK2Node_CallFunction* First = FindUniqueCall(Graph, TEXT("SetCollisionProfileName"));
+        auto* Last = bEnter && First ? GetNextCall(*First, TEXT("SetCollisionResponseToChannel")) : First;
+        return Function && First && Last && InstallTraversalCall(*Blueprint, Graph, {First, Last, Function, {}});
+    };
+    if (!InstallCollision(*ModeGraph, TEXT("ApplyRagdollCapsuleCollision"), true) ||
+        !InstallCollision(*EventGraph, TEXT("RestoreRagdollCapsuleCollision"), false))
+    {
+        return false;
+    }
+
+    static const FName OldCheck(TEXT("Entered Ragdoll Successfully Check"));
+    return !Events.ContainsByPredicate([](const UK2Node_CustomEvent* Event)
+        {
+            return Event->CustomFunctionName == OldCheck;
+        }) || RemoveCustomEvent(Blueprint, EventGraph, OldCheck);
 }
