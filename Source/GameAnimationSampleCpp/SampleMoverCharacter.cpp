@@ -9,6 +9,7 @@
 #include "Kismet/KismetSystemLibrary.h"
 #include "MoveLibrary/FloorQueryUtils.h"
 #include "MoverDataModelTypes.h"
+#include "PhysicsControlBPLibrary.h"
 #include "PhysicsControlComponent.h"
 #include "StructUtils/UserDefinedStruct.h"
 #include "UObject/StructOnScope.h"
@@ -25,6 +26,8 @@ namespace
     const FName RagdollMode(TEXT("Ragdoll"));
     const FName RagdollTransformField(TEXT("RagdollTransform_33_5FE542414D593629259855B867DEA655"));
     const FName DefaultRagdollProfile(TEXT("DefaultPhysicsProfile"));
+    const FName KinematicRagdollProfile(TEXT("Kinematic"));
+    const FName PhysicalAnimationProfile(TEXT("PhysicalAnimation"));
     const FName CapsuleProfile(TEXT("CharacterCapsule"));
     // Dedicated latent-action keys on the pawn, distinct from Blueprint node IDs.
     constexpr int32 ConfirmRagdollEntryAction = 0x52414701;
@@ -114,6 +117,44 @@ namespace
     {
         const auto* Capsule = FindFProperty<FObjectPropertyBase>(Pawn.GetClass(), TEXT("Capsule"));
         return Capsule ? Cast<UCapsuleComponent>(Capsule->GetObjectPropertyValue_InContainer(&Pawn)) : nullptr;
+    }
+
+    void SetLegCollision(USkeletalMeshComponent& Mesh, const TArray<FName>& Left,
+        const TArray<FName>& Right, bool bEnabled)
+    {
+        if (Left.IsEmpty() || Right.IsEmpty())
+        {
+            return;
+        }
+
+        // Physics Control exposes these batched operations as reflected functions.
+        auto* Library = GetMutableDefault<UPhysicsControlBPLibrary>();
+        const FName Name = bEnabled
+            ? GET_FUNCTION_NAME_CHECKED(UPhysicsControlBPLibrary, EnableCollisionBetweenBodyArrays)
+            : GET_FUNCTION_NAME_CHECKED(UPhysicsControlBPLibrary, DisableCollisionBetweenBodyArrays);
+        UFunction* Function = Library->FindFunction(Name);
+        if (!Function)
+        {
+            return;
+        }
+
+        const auto* First = FindFProperty<FObjectPropertyBase>(Function, TEXT("FirstComponent"));
+        const auto* Second = FindFProperty<FObjectPropertyBase>(Function, TEXT("SecondComponent"));
+        const auto* FirstBones = FindFProperty<FArrayProperty>(Function, TEXT("FirstBoneNames"));
+        const auto* SecondBones = FindFProperty<FArrayProperty>(Function, TEXT("SecondBoneNames"));
+        if (!First || !Second || !FirstBones || !SecondBones ||
+            !CastField<FNameProperty>(FirstBones->Inner) || !CastField<FNameProperty>(SecondBones->Inner))
+        {
+            return;
+        }
+
+        FStructOnScope Args(Function);
+        uint8* Data = Args.GetStructMemory();
+        First->SetObjectPropertyValue_InContainer(Data, &Mesh);
+        Second->SetObjectPropertyValue_InContainer(Data, &Mesh);
+        *FirstBones->ContainerPtrToValuePtr<TArray<FName>>(Data) = Left;
+        *SecondBones->ContainerPtrToValuePtr<TArray<FName>>(Data) = Right;
+        Library->ProcessEvent(Function, Data);
     }
 
     template <typename ValueType>
@@ -643,7 +684,7 @@ void ASampleMoverCharacter::RefreshRagdollDefaultProfile()
         return;
     }
     const int32 Choice = UKismetSystemLibrary::GetConsoleVariableIntValue(TEXT("DDCVar.CharacterPhysics.DefaultProfile"));
-    const FName Profile = Choice == 1 ? FName(TEXT("PhysicalAnimation")) : FName(TEXT("Kinematic"));
+    const FName Profile = Choice == 1 ? PhysicalAnimationProfile : KinematicRagdollProfile;
     Default->SetPropertyValue_InContainer(this, Profile);
     if (ResolveMovementModeValue() != static_cast<uint8>(EAuthoredMovementMode::Ragdoll))
     {
@@ -651,14 +692,61 @@ void ASampleMoverCharacter::RefreshRagdollDefaultProfile()
     }
 }
 
-void ASampleMoverCharacter::ApplyRagdollProfile(FName Profile)
+void ASampleMoverCharacter::ApplyRagdollProfile(FName PhysicsProfile)
 {
-    UFunction* Function = FindFunction(TEXT("SetPhysicsProfile"));
-    if (const auto* Parameter = Function ? FindFProperty<FNameProperty>(Function, TEXT("PhysicsProfile")) : nullptr)
+    if (const auto* Applied = FindFProperty<FNameProperty>(GetClass(), TEXT("AppliedPhysicsProfile")))
     {
-        FStructOnScope Args(Function);
-        Parameter->SetPropertyValue_InContainer(Args.GetStructMemory(), Profile);
-        ProcessEvent(Function, Args.GetStructMemory());
+        Applied->SetPropertyValue_InContainer(this, PhysicsProfile);
+    }
+    if (auto* Physics = FindComponentByClass<UPhysicsControlComponent>())
+    {
+        Physics->InvokeControlProfile(PhysicsProfile);
+    }
+    if (USkeletalMeshComponent* Mesh = GetRagdollMesh(*this))
+    {
+        if (PhysicsProfile == RagdollMode)
+        {
+            SetLegCollision(*Mesh, LeftLegPhysicsBodies, RightLegPhysicsBodies, true);
+            Mesh->SetConstraintProfileForAll(NAME_None, false);
+        }
+        else if (PhysicsProfile == KinematicRagdollProfile || PhysicsProfile == PhysicalAnimationProfile)
+        {
+            SetLegCollision(*Mesh, LeftLegPhysicsBodies, RightLegPhysicsBodies, false);
+            Mesh->SetConstraintProfileForAll(TEXT("Free"), false);
+        }
+    }
+}
+
+void ASampleMoverCharacter::TraceRagdollObstacles()
+{
+    const USkeletalMeshComponent* Mesh = GetRagdollMesh(*this);
+    if (!Mesh || !GetWorld())
+    {
+        return;
+    }
+    const FVector Neck = Mesh->GetSocketLocation(TEXT("neck_01"));
+    const FVector Feet = (Mesh->GetSocketLocation(TEXT("foot_l")) + Mesh->GetSocketLocation(TEXT("foot_r"))) * 0.5;
+    const auto* Debug = FindFProperty<FIntProperty>(GetClass(), TEXT("DebugState"));
+    const auto Draw = Debug && Debug->GetPropertyValue_InContainer(this) == 1
+        ? EDrawDebugTrace::ForOneFrame : EDrawDebugTrace::None;
+    TArray<FHitResult> Hits;
+    if (!UKismetSystemLibrary::SphereTraceMultiForObjects(this, Neck, Feet, 15.f,
+        {EObjectTypeQuery::ObjectTypeQuery7}, false, {}, Draw, Hits, true))
+    {
+        return;
+    }
+
+    UFunction* Trigger = FindFunction(TEXT("TriggerRagdoll"));
+    const auto* Stop = Trigger ? FindFProperty<FBoolProperty>(Trigger, TEXT("StopActiveMontages")) : nullptr;
+    const auto* Blend = Trigger ? FindFProperty<FStructProperty>(Trigger, TEXT("MontageBlendOut")) : nullptr;
+    const auto* DefaultBlend = FindSnapshot(*this, TEXT("DefaultRagdollMontageBlendOut"));
+    if (Stop && Blend && DefaultBlend && Blend->SameType(DefaultBlend))
+    {
+        FStructOnScope Args(Trigger);
+        uint8* Data = Args.GetStructMemory();
+        Stop->SetPropertyValue_InContainer(Data, true);
+        Blend->CopyCompleteValue(Blend->ContainerPtrToValuePtr<void>(Data), DefaultBlend->ContainerPtrToValuePtr<void>(this));
+        ProcessEvent(Trigger, Data);
     }
 }
 

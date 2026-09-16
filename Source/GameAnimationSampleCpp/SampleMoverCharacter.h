@@ -156,9 +156,25 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Ragdoll")
     void RefreshRagdollDefaultProfile();
 
+    /**
+     * Applies the named Physics Control recipe and the corresponding leg collision policy.
+     * @param PhysicsProfile Authored profile name. Ragdoll enables collisions between the leg groups.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Ragdoll")
+    void ApplyRagdollProfile(FName PhysicsProfile);
+
+    /** Checks the neck-to-feet obstacle volume and starts the authored ragdoll reaction on a hit. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Ragdoll")
+    void TraceRagdollObstacles();
+
 private:
-    /** Invokes the pawn's authored Physics Control recipe for the requested profile. */
-    void ApplyRagdollProfile(FName Profile);
+    /** Physics body names on the sample skeleton. Adjust both groups when using another rig. */
+    UPROPERTY(EditDefaultsOnly, Category = "Sample|Mover|Ragdoll")
+    TArray<FName> LeftLegPhysicsBodies{TEXT("thigh_l"), TEXT("calf_l"), TEXT("foot_l")};
+
+    /** Physics body names paired with the left leg group when switching collision policy. */
+    UPROPERTY(EditDefaultsOnly, Category = "Sample|Mover|Ragdoll")
+    TArray<FName> RightLegPhysicsBodies{TEXT("thigh_r"), TEXT("calf_r"), TEXT("foot_r")};
 
     UFUNCTION()
     void ConfirmRagdollEntry();

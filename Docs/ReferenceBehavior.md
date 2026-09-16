@@ -320,7 +320,7 @@ Both Win64 Development targets built. In `RagdollLevel` PIE the possessed pawn t
 
 ### Ragdoll entry and recovery
 
-The native pawn activates skeletal physics, queues entry or exit, confirms entry on the following engine frame, and maintains the original quarter-second heading freeze. During ragdoll the capsule ignores pawns. Recovery restores capsule collision before the authored pose snapshot and schedules restoration of the default Physics Control profile after the montage handoff. The imported pawn retains the injury input, pose history, get-up chooser and playback, and the profile recipe for leg collision and constraints.
+The native pawn activates skeletal physics, queues entry or exit, confirms entry on the following engine frame, and maintains the original quarter-second heading freeze. During ragdoll the capsule ignores pawns. Recovery restores capsule collision before the authored pose snapshot and schedules restoration of the default Physics Control profile after the montage handoff. The imported pawn retains the injury input, pose history, get-up chooser and playback.
 
 Apply this after installing the ragdoll state migration. The script saves the previous local pawn under `Saved/BlueprintMigration/RagdollLifecycle/`.
 
@@ -330,5 +330,18 @@ $script = (Resolve-Path Scripts/migrate_ragdoll_lifecycle.py).Path
 ```
 
 Both Win64 Development targets built. In `RagdollLevel` PIE, entry requested the Ragdoll profile immediately, the heading freeze cleared, and the finalized Ragdoll state ignored pawn collision. Recovery returned to Walking, restored pawn blocking, and reapplied PhysicalAnimation. Entry followed by an exit request in the same frame rolled back to the default profile and unfroze the capsule. Multiplayer and raw input are **Not run**.
+
+### Ragdoll obstacle checks and physics profiles
+
+The native pawn invokes the authored Physics Control recipe, switches collision between the original leg body sets, and selects the joint constraint profile based on the active physics state. A 15 cm sweep from the neck to the midpoint between the feet detects the Obstacle object type and invokes the existing ragdoll reaction.
+
+After the lifecycle migration, install the profile and obstacle hooks.
+
+```powershell
+$script = (Resolve-Path Scripts/migrate_ragdoll_physics.py).Path
+& $editor $project -run=PythonScript "-script=$script" -Unattended -NullRHI
+```
+
+Both Win64 Development targets built. In `RagdollLevel` PIE, a clear sweep kept the pawn in Walking. Moving an existing obstacle into the sweep triggered the Ragdoll profile immediately. The pawn entered Ragdoll, then returned to Walking and PhysicalAnimation after recovery. The check observed the applied profile and capsule responses. Individual physics contact pairs are **Not run**.
 
 See the [Epic sample documentation](https://dev.epicgames.com/documentation/unreal-engine/game-animation-sample-project-in-unreal-engine) for the sample's public controls and architecture.
