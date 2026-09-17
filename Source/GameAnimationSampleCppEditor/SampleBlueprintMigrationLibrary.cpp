@@ -9,6 +9,7 @@
 #include "K2Node_CustomEvent.h"
 #include "K2Node_DynamicCast.h"
 #include "K2Node_EnhancedInputAction.h"
+#include "K2Node_Event.h"
 #include "K2Node_ExecutionSequence.h"
 #include "K2Node_FunctionEntry.h"
 #include "K2Node_FunctionResult.h"
@@ -374,6 +375,37 @@ bool USampleBlueprintMigrationLibrary::RemoveCustomEvent(UBlueprint* Blueprint, 
 
     TSet<UEdGraphNode*> Remove;
     if (!Match || !CollectIsolatedChain(Match, Remove))
+    {
+        return false;
+    }
+    RemoveNodes(*Blueprint, *Graph, Remove);
+    return true;
+}
+
+bool USampleBlueprintMigrationLibrary::RemoveIsolatedEventOverride(UBlueprint* Blueprint, UEdGraph* Graph, FName EventName)
+{
+    if (!Blueprint || !Graph || Graph->GetOuter() != Blueprint || EventName.IsNone())
+    {
+        return false;
+    }
+    UK2Node_Event* Match = nullptr;
+    for (UEdGraphNode* Node : Graph->Nodes)
+    {
+        if (auto* Event = Cast<UK2Node_Event>(Node); Event && Event->EventReference.GetMemberName() == EventName)
+        {
+            if (Match)
+            {
+                return false;
+            }
+            Match = Event;
+        }
+    }
+    if (!Match)
+    {
+        return true;
+    }
+    TSet<UEdGraphNode*> Remove;
+    if (!CollectIsolatedChain(Match, Remove))
     {
         return false;
     }

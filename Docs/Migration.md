@@ -80,6 +80,12 @@ Run the approach sweep on the destination channel that identifies traversable ob
 
 The reference `FSampleTraversalClearanceQuery` uses the sample block class and its two trace channel indices. Map both channels to the host project's collision profiles and substitute the host's typed obstacle lookup when adapting it. Begin with a clear ledge, a blocked approach, a blocked crossing, and a missing far floor. Compare the chosen montage and final pawn location for each movement implementation that the host supports.
 
+## Integrate Smart Object interactions
+
+Enable StateTree, Smart Objects and Gameplay Interactions in the host. Keep the StateTree transitions, gameplay interaction assets, and Smart Object definitions together. The sample's slot tasks retain the imported Blueprint properties for the searching actor, candidate slot, interaction owner, and claim handle. Adapt these bindings if the host uses a different schema.
+
+Use the searching actor as the filter context. Pass the selected handle to the normal-priority claim step and carry the claim into interaction and cleanup. A candidate may become unavailable before the claim is issued. Validate the claim before starting the interaction and release it on every path that owns it. Test contention and interruption separately from animation playback.
+
 ## Bring in licensed animation data
 
 When using the Epic sample assets, acquire the sample under the applicable terms. In a scratch branch of the destination project, use Content Browser → Asset Actions → Migrate, review Asset Report dependencies, and target the destination's `Content/` directory. Review package name conflicts before accepting an overwrite. Preserve referenced package paths and enable required plugins for each migrated feature. For instance, a Motion Matching graph needs Pose Search assets and may also depend on Chooser, Motion Warping, Animation Warping, and Control Rig.
