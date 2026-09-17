@@ -18,9 +18,9 @@
 
 namespace
 {
-    constexpr uint8 Walk = 0;
-    constexpr uint8 Run = 1;
-    constexpr uint8 Sprint = 2;
+    constexpr uint8 MoverGaitWalk = 0;
+    constexpr uint8 MoverGaitRun = 1;
+    constexpr uint8 MoverGaitSprint = 2;
     constexpr int64 FaceMovement = 0;
     constexpr int64 AimRotationMode = 2;
     const FName RagdollMode(TEXT("Ragdoll"));
@@ -243,32 +243,32 @@ uint8 ASampleMoverCharacter::ResolveGaitValue() const
         switch (GetPreSimRotationMode(*this))
         {
         case 0:
-            return Sprint;
+            return MoverGaitSprint;
         case 1:
             if (const FCharacterDefaultInputs* Input = GetPreSimInputs(*this))
             {
                 const int32 Style = UKismetSystemLibrary::GetConsoleVariableIntValue(TEXT("DDCvar.StrafeStyle"));
                 const double Threshold = Style == 1 || Style == 2 ? -0.1 : 0.5;
-                return FVector::DotProduct(Input->GetMoveInput(), Input->OrientationIntent) > Threshold ? Sprint : Run;
+                return FVector::DotProduct(Input->GetMoveInput(), Input->OrientationIntent) > Threshold ? MoverGaitSprint : MoverGaitRun;
             }
-            return Run;
+            return MoverGaitRun;
         case 2:
-            return Run;
+            return MoverGaitRun;
         default:
-            return Walk;
+            return MoverGaitWalk;
         }
     }
     if (ReadIntent(Player, *this, TEXT("WantsToWalk_3_78963B154975E3BDE244A3BE438473E3")))
     {
-        return Walk;
+        return MoverGaitWalk;
     }
     const int32 AnalogStyle = UKismetSystemLibrary::GetConsoleVariableIntValue(TEXT("DDCvar.AnalogInputStyle"));
     if (AnalogStyle == 0)
     {
-        return Run;
+        return MoverGaitRun;
     }
     const double Deflection = ReadNumber(GetClass(), this, TEXT("SmoothedAnalogInputAmount"));
-    return AnalogStyle == 1 && Deflection > 0.7 ? Run : Walk;
+    return AnalogStyle == 1 && Deflection > 0.7 ? MoverGaitRun : MoverGaitWalk;
 }
 
 FMoverInputCmdContext ASampleMoverCharacter::BuildMoverInputCommand(int32 SimTimeMs)
