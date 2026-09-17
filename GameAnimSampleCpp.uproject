@@ -104,6 +104,10 @@
       "Enabled": true
     },
     {
+      "Name": "StateTree",
+      "Enabled": true
+    },
+    {
       "Name": "Locomotor",
       "Enabled": true
     },
