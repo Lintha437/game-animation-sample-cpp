@@ -344,4 +344,17 @@ $script = (Resolve-Path Scripts/migrate_ragdoll_physics.py).Path
 
 Both Win64 Development targets built. In `RagdollLevel` PIE, a clear sweep kept the pawn in Walking. Moving an existing obstacle into the sweep triggered the Ragdoll profile immediately. The pawn entered Ragdoll, then returned to Walking and PhysicalAnimation after recovery. The check observed the applied profile and capsule responses. Individual physics contact pairs are **Not run**.
 
+### Smart Object slot search, claim, and release
+
+The native StateTree task parents take over the three entry points while retaining the imported task assets and their existing bindings. Search uses the actor's spatial context and Gameplay Interaction behavior filter, then publishes the selected slot and owner. The claim step publishes a normal-priority claim and leaves completion to the interaction step. Cleanup releases the supplied claim. The StateTree flow and bench playback assets remain in the sample content.
+
+```powershell
+$script = (Resolve-Path Scripts/migrate_smart_object_slots.py).Path
+& $editor $project -run=PythonScript "-script=$script" -Unattended -NullRHI
+```
+
+The script saves the three original task packages under `Saved/BlueprintMigration/SmartObjectSlots/`.
+
+Both Win64 Development targets built. In `NPCLevel` PIE, the native task instances produced valid candidate slots and five valid claims across Mover and CMC NPCs. The observed slots reported both Occupied and Free over the run. Forced same-slot contention and interrupted interaction cleanup are **Not run**.
+
 See the [Epic sample documentation](https://dev.epicgames.com/documentation/unreal-engine/game-animation-sample-project-in-unreal-engine) for the sample's public controls and architecture.
