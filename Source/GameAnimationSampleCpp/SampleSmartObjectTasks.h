@@ -1,6 +1,8 @@
 #pragma once
 
+#include "Blueprint/StateTreeConditionBlueprintBase.h"
 #include "Blueprint/StateTreeTaskBlueprintBase.h"
+#include "GameFramework/Actor.h"
 #include "SampleSmartObjectTasks.generated.h"
 
 /**
@@ -40,4 +42,86 @@ protected:
     /** Completes successfully only when the subsystem releases the supplied claim. */
     virtual EStateTreeRunStatus EnterState(FStateTreeExecutionContext& Context,
         const FStateTreeTransitionResult& Transition) override;
+};
+
+/** Samples a reachable patrol point outside the authored Smart Object exclusion distance. */
+UCLASS(Abstract, Blueprintable)
+class GAMEANIMATIONSAMPLECPP_API USampleFindPatrolLocationTask : public UStateTreeTaskBlueprintBase
+{
+    GENERATED_BODY()
+
+protected:
+    /** Publishes the patrol target, falling back to the pawn's position when no sample is usable. */
+    virtual EStateTreeRunStatus EnterState(FStateTreeExecutionContext& Context,
+        const FStateTreeTransitionResult& Transition) override;
+
+private:
+    /** Actor class whose instances reserve space for Smart Object approaches. */
+    UPROPERTY(EditDefaultsOnly, Category = "Patrol")
+    TSoftClassPtr<AActor> PatrolExclusionClass{FSoftObjectPath(TEXT("/Game/Blueprints/SmartObjects/BP_SmartObject_Base.BP_SmartObject_Base_C"))};
+};
+
+/** Gives the AI controller gameplay focus on its bound target. */
+UCLASS(Abstract, Blueprintable)
+class GAMEANIMATIONSAMPLECPP_API USampleFocusInteractionTargetTask : public UStateTreeTaskBlueprintBase
+{
+    GENERATED_BODY()
+
+protected:
+    virtual EStateTreeRunStatus EnterState(FStateTreeExecutionContext& Context,
+        const FStateTreeTransitionResult& Transition) override;
+};
+
+/** Clears the gameplay focus when the StateTree leaves the approach sequence. */
+UCLASS(Abstract, Blueprintable)
+class GAMEANIMATIONSAMPLECPP_API USampleClearInteractionFocusTask : public UStateTreeTaskBlueprintBase
+{
+    GENERATED_BODY()
+
+protected:
+    virtual EStateTreeRunStatus EnterState(FStateTreeExecutionContext& Context,
+        const FStateTreeTransitionResult& Transition) override;
+};
+
+/** Resolves a claimed slot's world transform for movement and alignment consumers. */
+UCLASS(Abstract, Blueprintable)
+class GAMEANIMATIONSAMPLECPP_API USampleFindSlotTransformTask : public UStateTreeTaskBlueprintBase
+{
+    GENERATED_BODY()
+
+protected:
+    virtual EStateTreeRunStatus EnterState(FStateTreeExecutionContext& Context,
+        const FStateTreeTransitionResult& Transition) override;
+};
+
+/** Updates the same replicated collision policy used by the authored paired-interaction component. */
+UCLASS(Abstract, Blueprintable)
+class GAMEANIMATIONSAMPLECPP_API USampleSetInteractionCollisionTask : public UStateTreeTaskBlueprintBase
+{
+    GENERATED_BODY()
+
+protected:
+    virtual EStateTreeRunStatus EnterState(FStateTreeExecutionContext& Context,
+        const FStateTreeTransitionResult& Transition) override;
+};
+
+/** Records a named Smart Object cooldown in the controller's existing world-time map. */
+UCLASS(Abstract, Blueprintable)
+class GAMEANIMATIONSAMPLECPP_API USampleAddInteractionCooldownTask : public UStateTreeTaskBlueprintBase
+{
+    GENERATED_BODY()
+
+protected:
+    virtual EStateTreeRunStatus EnterState(FStateTreeExecutionContext& Context,
+        const FStateTreeTransitionResult& Transition) override;
+};
+
+/** Permits the next interaction after its cooldown and removes expired map entries. */
+UCLASS(Abstract, Blueprintable)
+class GAMEANIMATIONSAMPLECPP_API USampleCheckInteractionCooldownCondition : public UStateTreeConditionBlueprintBase
+{
+    GENERATED_BODY()
+
+protected:
+    virtual bool TestCondition(FStateTreeExecutionContext& Context) const override;
 };

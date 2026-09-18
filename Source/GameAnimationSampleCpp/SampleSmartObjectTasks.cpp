@@ -1,12 +1,18 @@
 #include "SampleSmartObjectTasks.h"
 
+#include "AIController.h"
+#include "Components/ActorComponent.h"
+#include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "GameplayInteractionSmartObjectBehaviorDefinition.h"
+#include "Kismet/GameplayStatics.h"
+#include "NavigationSystem.h"
 #include "SmartObjectBlueprintFunctionLibrary.h"
 #include "SmartObjectComponent.h"
 #include "SmartObjectRequestTypes.h"
 #include "SmartObjectSubsystem.h"
 #include "StateTreeExecutionContext.h"
+#include "UObject/StructOnScope.h"
 #include "UObject/UnrealType.h"
 
 namespace
@@ -28,6 +34,20 @@ namespace
     {
         const auto* Property = FindActorProperty(Task, Name);
         return Property ? Cast<AActor>(Property->GetObjectPropertyValue_InContainer(&Task)) : nullptr;
+    }
+
+    double ReadTaskNumber(const UObject& Task, FName Name)
+    {
+        const auto* Property = FindFProperty<FNumericProperty>(Task.GetClass(), Name);
+        return Property && Property->IsFloatingPoint()
+            ? Property->GetFloatingPointPropertyValue(Property->ContainerPtrToValuePtr<void>(&Task)) : 0.0;
+    }
+
+    const FMapProperty* FindCooldownMap(const AActor* Controller)
+    {
+        const auto* Map = IsValid(Controller) ? FindFProperty<FMapProperty>(Controller->GetClass(), TEXT("Cooldowns")) : nullptr;
+        const auto* Value = Map ? CastField<FNumericProperty>(Map->ValueProp) : nullptr;
+        return Value && Value->IsFloatingPoint() && CastField<FStrProperty>(Map->KeyProp) ? Map : nullptr;
     }
 
     TArray<FSmartObjectRequestResult>* FindSearchResults(UObject& Task)
@@ -164,4 +184,151 @@ EStateTreeRunStatus USampleReleaseSmartObjectTask::EnterState(FStateTreeExecutio
     const auto* Claim = FindStruct<FSmartObjectClaimHandle>(*this, TEXT("Claimed Handle"), FSmartObjectClaimHandle::StaticStruct());
     return Claim && Claim->IsValid() && USmartObjectBlueprintFunctionLibrary::MarkSmartObjectSlotAsFree(Context.GetWorld(), *Claim)
         ? EStateTreeRunStatus::Succeeded : EStateTreeRunStatus::Failed;
+}
+
+EStateTreeRunStatus USampleFindPatrolLocationTask::EnterState(FStateTreeExecutionContext& Context,
+    const FStateTreeTransitionResult& Transition)
+{
+    AActor* Actor = ReadActor(*this, TEXT("AIReference"));
+    auto* Output = FindStruct<FVector>(*this, TEXT("Random Location"), TBaseStructure<FVector>::Get());
+    if (!IsValid(Actor) || !Output)
+    {
+        return EStateTreeRunStatus::Failed;
+    }
+
+    const FVector Origin = Actor->GetActorLocation();
+    *Output = Origin;
+    const double ExcludeDistance = ReadTaskNumber(*this, TEXT("SearchExcludeDistance"));
+    const float Radius = static_cast<float>(ReadTaskNumber(*this, TEXT("SearchRadius")));
+    TArray<AActor*> Exclusions;
+    if (ExcludeDistance > 0.0)
+    {
+        UGameplayStatics::GetAllActorsOfClass(Actor, PatrolExclusionClass.LoadSynchronous(), Exclusions);
+    }
+    const double ExcludeSquared = FMath::Square(ExcludeDistance);
+
+    // A fully excluded navigation area must yield instead of spinning on the game thread.
+    constexpr int32 MaxAttempts = 16;
+    for (int32 Attempt = 0; Attempt < MaxAttempts; ++Attempt)
+    {
+        FVector Candidate;
+        if (!UNavigationSystemV1::K2_GetRandomReachablePointInRadius(Actor, Origin, Candidate, Radius))
+        {
+            break;
+        }
+        if (!Exclusions.ContainsByPredicate([&](const AActor* Exclusion)
+            {
+                return FVector::DistSquared(Candidate, Exclusion->GetActorLocation()) < ExcludeSquared;
+            }))
+        {
+            *Output = Candidate;
+            break;
+        }
+    }
+    return EStateTreeRunStatus::Running;
+}
+
+EStateTreeRunStatus USampleFocusInteractionTargetTask::EnterState(FStateTreeExecutionContext& Context,
+    const FStateTreeTransitionResult& Transition)
+{
+    auto* Controller = Cast<AAIController>(ReadActor(*this, TEXT("AIController")));
+    AActor* Target = ReadActor(*this, TEXT("TargetToFocus"));
+    if (IsValid(Controller) && IsValid(Target))
+    {
+        Controller->K2_SetFocus(Target);
+    }
+    return EStateTreeRunStatus::Running;
+}
+
+EStateTreeRunStatus USampleClearInteractionFocusTask::EnterState(FStateTreeExecutionContext& Context,
+    const FStateTreeTransitionResult& Transition)
+{
+    if (auto* Controller = Cast<AAIController>(ReadActor(*this, TEXT("AIController"))); IsValid(Controller))
+    {
+        Controller->K2_ClearFocus();
+    }
+    return EStateTreeRunStatus::Running;
+}
+
+EStateTreeRunStatus USampleFindSlotTransformTask::EnterState(FStateTreeExecutionContext& Context,
+    const FStateTreeTransitionResult& Transition)
+{
+    auto* Transform = FindStruct<FTransform>(*this, TEXT("Out Slot Transform"), TBaseStructure<FTransform>::Get());
+    const auto* Claim = FindStruct<FSmartObjectClaimHandle>(*this, TEXT("Claim Handle"), FSmartObjectClaimHandle::StaticStruct());
+    const auto* Subsystem = USmartObjectSubsystem::GetCurrent(Context.GetWorld());
+    if (!Transform || !Claim || !Subsystem)
+    {
+        return EStateTreeRunStatus::Failed;
+    }
+    *Transform = Subsystem->GetSlotTransform(*Claim).Get(FTransform::Identity);
+    return EStateTreeRunStatus::Running;
+}
+
+EStateTreeRunStatus USampleSetInteractionCollisionTask::EnterState(FStateTreeExecutionContext& Context,
+    const FStateTreeTransitionResult& Transition)
+{
+    const AActor* Character = ReadActor(*this, TEXT("Character"));
+    const auto* ShouldIgnore = FindFProperty<FBoolProperty>(GetClass(), TEXT("ShouldIgnore"));
+    if (IsValid(Character) && ShouldIgnore)
+    {
+        TInlineComponentArray<UActorComponent*> Components;
+        Character->GetComponents(Components);
+        for (UActorComponent* Component : Components)
+        {
+            UFunction* Event = Component->FindFunction(TEXT("SetIgnoreActorState"));
+            const auto* Ignore = Event ? FindFProperty<FBoolProperty>(Event, TEXT("bShouldIgnore")) : nullptr;
+            const auto* Other = Event ? FindFProperty<FObjectPropertyBase>(Event, TEXT("Other Actor")) : nullptr;
+            if (Ignore && Other)
+            {
+                FStructOnScope Args(Event);
+                Ignore->SetPropertyValue_InContainer(Args.GetStructMemory(), ShouldIgnore->GetPropertyValue_InContainer(this));
+                Other->SetObjectPropertyValue_InContainer(Args.GetStructMemory(), ReadActor(*this, TEXT("Other Actor")));
+                Component->ProcessEvent(Event, Args.GetStructMemory());
+                break;
+            }
+        }
+    }
+    return EStateTreeRunStatus::Succeeded;
+}
+
+EStateTreeRunStatus USampleAddInteractionCooldownTask::EnterState(FStateTreeExecutionContext& Context,
+    const FStateTreeTransitionResult& Transition)
+{
+    AActor* Controller = ReadActor(*this, TEXT("AIController"));
+    const auto* Map = FindCooldownMap(Controller);
+    const auto* Name = FindFProperty<FStrProperty>(GetClass(), TEXT("CooldownName"));
+    const UWorld* World = Context.GetWorld();
+    if (Map && Name && World)
+    {
+        FScriptMapHelper Entries(Map, Map->ContainerPtrToValuePtr<void>(Controller));
+        const FString Key = Name->GetPropertyValue_InContainer(this);
+        const double Expiry = World->GetTimeSeconds() + ReadTaskNumber(*this, TEXT("Cooldown Time"));
+        CastFieldChecked<FNumericProperty>(Map->ValueProp)->SetFloatingPointPropertyValue(Entries.FindOrAdd(&Key), Expiry);
+    }
+    return EStateTreeRunStatus::Succeeded;
+}
+
+bool USampleCheckInteractionCooldownCondition::TestCondition(FStateTreeExecutionContext& Context) const
+{
+    AActor* Controller = ReadActor(*this, TEXT("AIController"));
+    const auto* Map = FindCooldownMap(Controller);
+    const auto* Name = FindFProperty<FStrProperty>(GetClass(), TEXT("CooldownName"));
+    const UWorld* World = Context.GetWorld();
+    if (!Map || !Name || !World)
+    {
+        return true;
+    }
+
+    FScriptMapHelper Entries(Map, Map->ContainerPtrToValuePtr<void>(Controller));
+    const FString Key = Name->GetPropertyValue_InContainer(this);
+    if (const void* Entry = Entries.FindValueFromHash(&Key))
+    {
+        const double Expiry = CastFieldChecked<FNumericProperty>(Map->ValueProp)->GetFloatingPointPropertyValue(Entry);
+        if (Expiry > World->GetTimeSeconds())
+        {
+            return false;
+        }
+        Entries.RemovePair(&Key);
+    }
+    return true;
 }
