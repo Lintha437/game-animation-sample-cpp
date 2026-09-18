@@ -86,6 +86,8 @@ Enable StateTree, Smart Objects and Gameplay Interactions in the host. Keep the 
 
 Use the searching actor as the filter context. Pass the selected handle to the normal-priority claim step and carry the claim into interaction and cleanup. A candidate may become unavailable before the claim is issued. Validate the claim before starting the interaction and release it on every path that owns it. Test contention and interruption separately from animation playback.
 
+For NPC patrol, sample a reachable navigation point outside each configured interaction exclusion radius. Limit retries and use the pawn's current position when no point qualifies. Keep focus and slot alignment bound to the same interaction target, and route temporary collision changes through the existing replicated interaction component. Store cooldown expiry in the controller using world time so repeated searches for the same interaction respect the delay.
+
 ## Bring in licensed animation data
 
 When using the Epic sample assets, acquire the sample under the applicable terms. In a scratch branch of the destination project, use Content Browser → Asset Actions → Migrate, review Asset Report dependencies, and target the destination's `Content/` directory. Review package name conflicts before accepting an overwrite. Preserve referenced package paths and enable required plugins for each migrated feature. For instance, a Motion Matching graph needs Pose Search assets and may also depend on Chooser, Motion Warping, Animation Warping, and Control Rig.
