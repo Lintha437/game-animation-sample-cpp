@@ -1,4 +1,4 @@
-"""Keep the StateTree bindings and transfer slot search, claim, and release to C++."""
+"""Transfer slot and NPC behavior to native StateTree nodes while retaining bindings."""
 
 from pathlib import Path
 import shutil
@@ -7,13 +7,22 @@ import unreal
 
 
 ROOT = "/Game/Blueprints/SmartObjects/TasksAndConditions"
+NPC_ROOT = "/Game/Blueprints/AI/StateTree/TasksAndConditions"
 NATIVE_PACKAGE = "/Script/GameAnimationSampleCpp"
-STOCK_PARENT = "/Script/StateTreeModule.StateTreeTaskBlueprintBase"
+TASK_PARENT = "/Script/StateTreeModule.StateTreeTaskBlueprintBase"
+CONDITION_PARENT = "/Script/StateTreeModule.StateTreeConditionBlueprintBase"
 TASKS = {
-    "STT_FindSmartObject": "SampleFindSmartObjectTask",
-    "STT_ClaimSlot": "SampleClaimSmartObjectTask",
-    "STT_ClearHandle": "SampleReleaseSmartObjectTask",
+    f"{ROOT}/STT_FindSmartObject": "SampleFindSmartObjectTask",
+    f"{ROOT}/STT_ClaimSlot": "SampleClaimSmartObjectTask",
+    f"{ROOT}/STT_ClearHandle": "SampleReleaseSmartObjectTask",
+    f"{ROOT}/STT_AddCooldown": "SampleAddInteractionCooldownTask",
+    f"{NPC_ROOT}/STT_FindRandomLocation": "SampleFindPatrolLocationTask",
+    f"{NPC_ROOT}/STT_FocusToTarget": "SampleFocusInteractionTargetTask",
+    f"{NPC_ROOT}/STT_ClearFocus": "SampleClearInteractionFocusTask",
+    f"{NPC_ROOT}/STT_FindSlotTransforms": "SampleFindSlotTransformTask",
+    f"{NPC_ROOT}/STT_CharacterIgnoreCollisionsWithOtherActor": "SampleSetInteractionCollisionTask",
 }
+CONDITIONS = {f"{ROOT}/STC_CheckCooldown": "SampleCheckInteractionCooldownCondition"}
 
 
 def migrate():
@@ -24,8 +33,9 @@ def migrate():
     assets = unreal.get_editor_subsystem(unreal.EditorAssetSubsystem)
     dirty = {package.get_name() for package in unreal.EditorLoadingAndSavingUtils.get_dirty_content_packages()}
     pending = []
-    for name, class_name in TASKS.items():
-        asset_path = f"{ROOT}/{name}"
+    for asset_path, class_name in (TASKS | CONDITIONS).items():
+        is_task = asset_path in TASKS
+        expected_parent = TASK_PARENT if is_task else CONDITION_PARENT
         asset = unreal.load_asset(asset_path)
         native = unreal.load_class(None, f"{NATIVE_PACKAGE}.{class_name}")
         current = editor.get_blueprint_parent_class(asset) if asset else None
@@ -33,29 +43,33 @@ def migrate():
             raise RuntimeError(f"Cannot load the task or native parent: {asset_path}")
         if current == native:
             continue
-        if current.get_path_name() != STOCK_PARENT or asset_path in dirty or not editor.can_reparent_blueprint(asset, native):
-            raise RuntimeError(f"Task is dirty or its parent differs from the reference: {asset_path}")
-        graph = next((graph for graph in editor.list_graphs(asset) if graph.get_name() == "EventGraph"), None)
+        if current.get_path_name() != expected_parent or asset_path in dirty or not editor.can_reparent_blueprint(asset, native):
+            raise RuntimeError(f"Node is dirty or its parent differs from the reference: {asset_path}")
+        graph_name = "EventGraph" if is_task else "ReceiveTestCondition"
+        graph = next((graph for graph in editor.list_graphs(asset) if graph.get_name() == graph_name), None)
         if not graph:
-            raise RuntimeError(f"No event graph for {asset_path}")
+            raise RuntimeError(f"No {graph_name} graph for {asset_path}")
         package = descriptor.parent / f"Content/{asset_path.removeprefix('/Game/')}.uasset"
         backup = descriptor.parent / "Saved/BlueprintMigration/SmartObjectSlots" / package.name
         if backup.exists() and backup.read_bytes() != package.read_bytes():
             raise RuntimeError(f"Task backup differs from the current package: {backup}")
-        pending.append((asset, graph, native, package, backup))
+        pending.append((asset, graph, native, package, backup, is_task))
 
-    for asset, graph, native, package, backup in pending:
+    for asset, graph, native, package, backup, is_task in pending:
         backup.parent.mkdir(parents=True, exist_ok=True)
         if not backup.exists():
             shutil.copy2(package, backup)
-        if not unreal.SampleBlueprintMigrationLibrary.remove_isolated_event_override(asset, graph, "ReceiveLatentEnterState"):
-            raise RuntimeError(f"Task has a shared entry graph: {asset.get_path_name()}")
+        if is_task:
+            if not unreal.SampleBlueprintMigrationLibrary.remove_isolated_event_override(asset, graph, "ReceiveLatentEnterState"):
+                raise RuntimeError(f"Task has a shared entry graph: {asset.get_path_name()}")
+        else:
+            editor.remove_function_graph(asset, "ReceiveTestCondition")
         editor.reparent_blueprint(asset, native)
         if editor.get_blueprint_parent_class(asset) != native or not editor.compile_blueprint(asset):
             raise RuntimeError(f"Task failed to compile: {asset.get_path_name()}")
         if not assets.save_loaded_asset(asset, only_if_is_dirty=False):
             raise RuntimeError(f"Could not save task: {asset.get_path_name()}")
-    unreal.log("Native Smart Object slots installed." if pending else "Smart Object slots already migrated.")
+    unreal.log("Native Smart Object and NPC tasks installed." if pending else "Smart Object and NPC tasks already migrated.")
 
 
 if __name__ == "__main__":

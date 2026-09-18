@@ -357,4 +357,10 @@ The script saves the three original task packages under `Saved/BlueprintMigratio
 
 Both Win64 Development targets built. In `NPCLevel` PIE, the native task instances produced valid candidate slots and five valid claims across Mover and CMC NPCs. The observed slots reported both Occupied and Free over the run. Forced same-slot contention and interrupted interaction cleanup are **Not run**.
 
+### NPC patrol, approach, and cooldown
+
+The same installer connects patrol sampling, focus, slot transforms, collision requests, and the cooldown condition to native StateTree nodes. The patrol sampler keeps the authored navigation radius and Smart Object exclusion distance. It tries at most 16 points and falls back to the actor's position, so a fully excluded area can finish its update. Collision requests keep using the existing paired-interaction component's replicated event. The cooldown condition's label stays in the condition asset.
+
+The Win64 Editor target built and the updated tasks compiled in the migration. In `NPCLevel` PIE, five native patrol tasks produced targets and an NPC controller recorded a `Sit` cooldown. Player slot-transform output, multiplayer collision, and a standalone Game build are **Not run** for this batch.
+
 See the [Epic sample documentation](https://dev.epicgames.com/documentation/unreal-engine/game-animation-sample-project-in-unreal-engine) for the sample's public controls and architecture.
