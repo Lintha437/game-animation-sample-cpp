@@ -15,6 +15,7 @@ TASKS = {
     f"{ROOT}/STT_FindSmartObject": "SampleFindSmartObjectTask",
     f"{ROOT}/STT_ClaimSlot": "SampleClaimSmartObjectTask",
     f"{ROOT}/STT_ClearHandle": "SampleReleaseSmartObjectTask",
+    f"{ROOT}/STT_UseSmartObject": "SampleUseSmartObjectTask",
     f"{ROOT}/STT_AddCooldown": "SampleAddInteractionCooldownTask",
     f"{NPC_ROOT}/STT_FindRandomLocation": "SampleFindPatrolLocationTask",
     f"{NPC_ROOT}/STT_FocusToTarget": "SampleFocusInteractionTargetTask",

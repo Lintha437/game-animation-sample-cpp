@@ -363,4 +363,17 @@ The same installer connects patrol sampling, focus, slot transforms, collision r
 
 The Win64 Editor target built and the updated tasks compiled in the migration. In `NPCLevel` PIE, five native patrol tasks produced targets and an NPC controller recorded a `Sit` cooldown. Player slot-transform output, multiplayer collision, and a standalone Game build are **Not run** for this batch.
 
+### Smart Object use and paired collision
+
+The native use task dispatches the engine's Gameplay Interaction for the claimed slot. The AI controller owns the engine task after dispatch. The imported component continues to expose the original multicast, montage selection, and playback. C++ applies temporary capsule movement ignores and changes CMC correction on the same peers as the imported behavior.
+
+Run the updated `Scripts/migrate_smart_object_slots.py` installer, then apply the interaction component hooks below.
+
+```powershell
+$script = (Resolve-Path Scripts/migrate_smart_object_interaction.py).Path
+& $editor $project -run=PythonScript "-script=$script" -Unattended -NullRHI
+```
+
+The Win64 Editor target built and both installers compiled their updated assets. In `NPCLevel` PIE, NPCs reached the Occupied slot state and the existing collision event added and restored a CMC capsule's ignore entry. Release of the same slot was unobserved during the smoke run. Multiplayer correction and standalone Game are **Not run**.
+
 See the [Epic sample documentation](https://dev.epicgames.com/documentation/unreal-engine/game-animation-sample-project-in-unreal-engine) for the sample's public controls and architecture.
