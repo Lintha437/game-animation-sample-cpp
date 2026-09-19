@@ -964,7 +964,12 @@ bool USampleBlueprintMigrationLibrary::ReplaceMoverInputFunction(
         if (Pin->Direction == EGPD_Output && Pin->PinType.PinCategory != UEdGraphSchema_K2::PC_Exec)
         {
             UEdGraphPin* Input = Call->FindPin(Pin->PinName, EGPD_Input);
-            if (!Input || !Schema->TryCreateConnection(Pin, Input))
+            if (!Input)
+            {
+                const FString NativeName = Pin->PinName.ToString().Replace(TEXT(" "), TEXT(""));
+                Input = Call->FindPin(FName(*NativeName), EGPD_Input);
+            }
+            if (!Input || !Input->LinkedTo.IsEmpty() || !Schema->TryCreateConnection(Pin, Input))
             {
                 return false;
             }
