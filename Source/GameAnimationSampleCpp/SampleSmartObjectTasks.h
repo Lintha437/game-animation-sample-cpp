@@ -44,6 +44,18 @@ protected:
         const FStateTreeTransitionResult& Transition) override;
 };
 
+/** Starts the engine's Gameplay Interaction task on an already claimed slot. */
+UCLASS(Abstract, Blueprintable)
+class GAMEANIMATIONSAMPLECPP_API USampleUseSmartObjectTask : public UStateTreeTaskBlueprintBase
+{
+    GENERATED_BODY()
+
+protected:
+    /** Completes after successful dispatch. The controller's gameplay task owns the ongoing interaction. */
+    virtual EStateTreeRunStatus EnterState(FStateTreeExecutionContext& Context,
+        const FStateTreeTransitionResult& Transition) override;
+};
+
 /** Samples a reachable patrol point outside the authored Smart Object exclusion distance. */
 UCLASS(Abstract, Blueprintable)
 class GAMEANIMATIONSAMPLECPP_API USampleFindPatrolLocationTask : public UStateTreeTaskBlueprintBase

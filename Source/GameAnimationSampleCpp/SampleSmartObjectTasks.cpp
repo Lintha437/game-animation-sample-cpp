@@ -5,6 +5,7 @@
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "GameplayInteractionSmartObjectBehaviorDefinition.h"
+#include "GameplayTask.h"
 #include "Kismet/GameplayStatics.h"
 #include "NavigationSystem.h"
 #include "SmartObjectBlueprintFunctionLibrary.h"
@@ -184,6 +185,44 @@ EStateTreeRunStatus USampleReleaseSmartObjectTask::EnterState(FStateTreeExecutio
     const auto* Claim = FindStruct<FSmartObjectClaimHandle>(*this, TEXT("Claimed Handle"), FSmartObjectClaimHandle::StaticStruct());
     return Claim && Claim->IsValid() && USmartObjectBlueprintFunctionLibrary::MarkSmartObjectSlotAsFree(Context.GetWorld(), *Claim)
         ? EStateTreeRunStatus::Succeeded : EStateTreeRunStatus::Failed;
+}
+
+EStateTreeRunStatus USampleUseSmartObjectTask::EnterState(FStateTreeExecutionContext& Context,
+    const FStateTreeTransitionResult& Transition)
+{
+    auto* Controller = Cast<AAIController>(ReadActor(*this, TEXT("AIController")));
+    const auto* Claim = FindStruct<FSmartObjectClaimHandle>(*this, TEXT("Claimed Handle"), FSmartObjectClaimHandle::StaticStruct());
+    if (!IsValid(Controller) || !Claim || !Claim->IsValid())
+    {
+        return EStateTreeRunStatus::Failed;
+    }
+
+    // The engine task factory is reflected but its class header is private to Gameplay Interactions.
+    auto* Type = FindObject<UClass>(nullptr, TEXT("/Script/GameplayInteractionsModule.AITask_UseGameplayInteraction"));
+    UFunction* Factory = Type ? Type->FindFunctionByName(TEXT("UseSmartObjectWithGameplayInteraction")) : nullptr;
+    const auto* ControllerParam = Factory ? FindFProperty<FObjectPropertyBase>(Factory, TEXT("Controller")) : nullptr;
+    const auto* ClaimParam = Factory ? FindFProperty<FStructProperty>(Factory, TEXT("ClaimHandle")) : nullptr;
+    const auto* LockParam = Factory ? FindFProperty<FBoolProperty>(Factory, TEXT("bLockAILogic")) : nullptr;
+    const auto* ReturnParam = Factory ? CastField<FObjectPropertyBase>(Factory->GetReturnProperty()) : nullptr;
+    if (!ControllerParam || !ClaimParam || ClaimParam->Struct != FSmartObjectClaimHandle::StaticStruct() ||
+        !LockParam || !ReturnParam)
+    {
+        return EStateTreeRunStatus::Failed;
+    }
+
+    FStructOnScope Args(Factory);
+    uint8* Data = Args.GetStructMemory();
+    ControllerParam->SetObjectPropertyValue_InContainer(Data, Controller);
+    *ClaimParam->ContainerPtrToValuePtr<FSmartObjectClaimHandle>(Data) = *Claim;
+    LockParam->SetPropertyValue_InContainer(Data, true);
+    Type->GetDefaultObject()->ProcessEvent(Factory, Data);
+    auto* Task = Cast<UGameplayTask>(ReturnParam->GetObjectPropertyValue_InContainer(Data));
+    if (!Task)
+    {
+        return EStateTreeRunStatus::Failed;
+    }
+    Task->ReadyForActivation();
+    return Task->IsFinished() ? EStateTreeRunStatus::Failed : EStateTreeRunStatus::Succeeded;
 }
 
 EStateTreeRunStatus USampleFindPatrolLocationTask::EnterState(FStateTreeExecutionContext& Context,

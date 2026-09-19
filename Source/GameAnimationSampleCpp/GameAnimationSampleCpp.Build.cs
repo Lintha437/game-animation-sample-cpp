@@ -6,6 +6,6 @@ public class GameAnimationSampleCpp : ModuleRules
     {
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
         PrivateDependencyModuleNames.AddRange(new[] { "Core", "CoreUObject", "Engine", "AnimGraphRuntime", "EnhancedInput", "GameplayTags", "Mover", "NetCore", "PhysicsControl" });
-        PrivateDependencyModuleNames.AddRange(new[] { "AIModule", "GameplayInteractionsModule", "NavigationSystem", "SmartObjectsModule", "StateTreeModule" });
+        PrivateDependencyModuleNames.AddRange(new[] { "AIModule", "GameplayInteractionsModule", "GameplayTasks", "NavigationSystem", "SmartObjectsModule", "StateTreeModule" });
     }
 }
