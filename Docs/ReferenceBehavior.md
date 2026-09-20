@@ -376,4 +376,17 @@ $script = (Resolve-Path Scripts/migrate_smart_object_interaction.py).Path
 
 The Win64 Editor target built and both installers compiled their updated assets. In `NPCLevel` PIE, NPCs reached the Occupied slot state and the existing collision event added and restored a CMC capsule's ignore entry. Release of the same slot was unobserved during the smoke run. Multiplayer correction and standalone Game are **Not run**.
 
+### Player Smart Object requests
+
+The native interaction component caches the owning pawn's mesh and movement component. On the authored interact input, it initializes the player StateTree, traces for a usable Smart Object, filters for the nearest free slot, and submits the original event payload. The playback gate still opens in the imported component after an accepted request. The StateTree and its approach, sit, exit, and animation choices remain authored assets.
+
+Apply the native interaction component migration before installing the player request.
+
+```powershell
+$script = (Resolve-Path Scripts/migrate_player_smart_object.py).Path
+& $editor $project -run=PythonScript "-script=$script" -Unattended -NullRHI
+```
+
+The Win64 Editor target built, and the installer compiled the interaction component. In `NPCLevel` PIE, the player request rejected a bench from behind and accepted a bench from the front. The StateTree was running, and its player task resolved the slot transform at (430, 35, 0). This smoke check called the request directly. Enhanced Input dispatch, multiplayer, and full get-up playback are **Not run**.
+
 See the [Epic sample documentation](https://dev.epicgames.com/documentation/unreal-engine/game-animation-sample-project-in-unreal-engine) for the sample's public controls and architecture.

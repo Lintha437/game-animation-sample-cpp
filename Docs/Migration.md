@@ -90,6 +90,8 @@ For NPC patrol, sample a reachable navigation point outside each configured inte
 
 The Smart Object use step dispatches the engine's Gameplay Interaction AI task for the already claimed slot. Keep that task under the controller's lifetime while the StateTree continues into the authored interaction. Apply and remove capsule ignores through the same replicated event on entry and cleanup. If the host uses CMC, apply its temporary correction override only on the intended peers and verify that cleanup restores the previous gameplay policy.
 
+For player interactions, configure the StateTree and matching payload type on the interaction component. Supply the player interaction gameplay tag and register interactable world geometry on the query's object type. The request accepts the nearest free slot within 300 cm from the object's front side. Keep the playback-cancellation gate tied to accepted requests and retain the StateTree's claim step to handle contention between search and use.
+
 ## Bring in licensed animation data
 
 When using the Epic sample assets, acquire the sample under the applicable terms. In a scratch branch of the destination project, use Content Browser → Asset Actions → Migrate, review Asset Report dependencies, and target the destination's `Content/` directory. Review package name conflicts before accepting an overwrite. Preserve referenced package paths and enable required plugins for each migrated feature. For instance, a Motion Matching graph needs Pose Search assets and may also depend on Chooser, Motion Warping, Animation Warping, and Control Rig.

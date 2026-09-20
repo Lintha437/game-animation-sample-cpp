@@ -14,6 +14,7 @@
 #include "K2Node_FunctionEntry.h"
 #include "K2Node_FunctionResult.h"
 #include "K2Node_IfThenElse.h"
+#include "K2Node_Knot.h"
 #include "K2Node_VariableGet.h"
 #include "K2Node_VariableSet.h"
 #include "Kismet2/BlueprintEditorUtils.h"
@@ -65,14 +66,14 @@ namespace
         }
     }
 
-    TSet<UEdGraphNode*> CollectExecutionNodes(const UEdGraphPin& Start)
+    TSet<UEdGraphNode*> CollectExecutionNodes(const UEdGraphPin& Start, const UEdGraphNode* Stop = nullptr)
     {
         TArray<UEdGraphPin*> Pending(Start.LinkedTo);
         TSet<UEdGraphNode*> Nodes;
         while (!Pending.IsEmpty())
         {
             UEdGraphNode* Node = Pending.Pop(EAllowShrinking::No)->GetOwningNode();
-            if (Nodes.Contains(Node))
+            if (Node == Stop || Nodes.Contains(Node))
             {
                 continue;
             }
@@ -1043,4 +1044,109 @@ bool USampleBlueprintMigrationLibrary::ReplaceRagdollLifecycle(
         {
             return Event->CustomFunctionName == OldCheck;
         }) || RemoveCustomEvent(Blueprint, EventGraph, OldCheck);
+}
+
+bool USampleBlueprintMigrationLibrary::ReplacePlayerSmartObjectInput(UBlueprint* Blueprint, UEdGraph* EventGraph)
+{
+    if (!Blueprint || !Blueprint->ParentClass || !EventGraph || EventGraph->GetOuter() != Blueprint)
+    {
+        return false;
+    }
+
+    const FName FunctionName(TEXT("TryStartPlayerInteraction"));
+    const UFunction* Function = Blueprint->ParentClass->FindFunctionByName(FunctionName);
+    if (FindUniqueCall(*EventGraph, FunctionName))
+    {
+        return true;
+    }
+    TArray<UK2Node_EnhancedInputAction*> Actions;
+    EventGraph->GetNodesOfClass(Actions);
+    auto* Action = Actions.FindByPredicate([](const UK2Node_EnhancedInputAction* Candidate)
+    {
+        return Candidate->InputAction && Candidate->InputAction->GetPathName() == TEXT("/Game/Input/IA_Interact.IA_Interact");
+    });
+    UEdGraphPin* Trigger = Action ? (*Action)->FindPin(TEXT("Triggered"), EGPD_Output) : nullptr;
+    if (!Function || !GetOnlyPeer(Trigger))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Player interaction input or native request function is missing."));
+        return false;
+    }
+
+    UEdGraphPin* GateOpen = nullptr;
+    for (UEdGraphNode* Node : CollectExecutionNodes(*Trigger))
+    {
+        const auto* Flag = Cast<UK2Node_VariableSet>(Node);
+        const UEdGraphPin* Then = Flag ? Flag->FindPin(UEdGraphSchema_K2::PN_Then, EGPD_Output) : nullptr;
+        if (Flag && Flag->GetVarName() == TEXT("PlayerIsInteracting") && Then && Then->LinkedTo.Num() == 1)
+        {
+            UEdGraphPin* GateInput = Then->LinkedTo[0];
+            const UEdGraphPin* Endpoint = GateInput;
+            TSet<const UEdGraphNode*> Reroutes;
+            while (const auto* Reroute = Cast<UK2Node_Knot>(Endpoint->GetOwningNode()))
+            {
+                if (Reroutes.Contains(Reroute) || Reroute->GetOutputPin()->LinkedTo.Num() != 1)
+                {
+                    return false;
+                }
+                Reroutes.Add(Reroute);
+                Endpoint = Reroute->GetOutputPin()->LinkedTo[0];
+            }
+            if (Endpoint->PinName != TEXT("Open"))
+            {
+                continue;
+            }
+            if (GateOpen)
+            {
+                return false;
+            }
+            GateOpen = GateInput;
+        }
+    }
+    if (!GateOpen)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Player interaction did not lead to the playback cancellation gate."));
+        return false;
+    }
+
+    TSet<UEdGraphNode*> Remove = CollectExecutionNodes(*Trigger, GateOpen->GetOwningNode());
+    CollectUnusedInputs(Remove, *Action);
+    for (const UEdGraphNode* Node : Remove)
+    {
+        for (const UEdGraphPin* Pin : Node->Pins)
+        {
+            const bool bExec = Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec;
+            if (bExec || Pin->Direction == EGPD_Output)
+            {
+                for (const UEdGraphPin* Peer : Pin->LinkedTo)
+                {
+                    if (Peer != Trigger && Peer != GateOpen && !Remove.Contains(Peer->GetOwningNode()))
+                    {
+                        UE_LOG(LogTemp, Warning, TEXT("Player interaction shares pin %s.%s with %s.%s."),
+                            *Node->GetName(), *Pin->PinName.ToString(), *Peer->GetOwningNode()->GetName(), *Peer->PinName.ToString());
+                        return false;
+                    }
+                }
+            }
+        }
+    }
+
+    const UEdGraphNode* First = GetOnlyPeer(Trigger);
+    FGraphNodeCreator<UK2Node_CallFunction> CreateCall(*EventGraph);
+    UK2Node_CallFunction* Call = CreateCall.CreateNode();
+    Call->SetFromFunction(Function);
+    Call->NodePosX = First->NodePosX;
+    Call->NodePosY = First->NodePosY;
+    CreateCall.Finalize();
+    FGraphNodeCreator<UK2Node_IfThenElse> CreateBranch(*EventGraph);
+    UK2Node_IfThenElse* Branch = CreateBranch.CreateNode();
+    Branch->NodePosX = Call->NodePosX + 350;
+    Branch->NodePosY = Call->NodePosY;
+    CreateBranch.Finalize();
+
+    RemoveNodes(*Blueprint, *EventGraph, Remove);
+    const UEdGraphSchema* Schema = EventGraph->GetSchema();
+    return Schema->TryCreateConnection(Trigger, Call->GetExecPin()) &&
+        Schema->TryCreateConnection(Call->GetThenPin(), Branch->FindPin(UEdGraphSchema_K2::PN_Execute)) &&
+        Schema->TryCreateConnection(Call->GetReturnValuePin(), Branch->FindPin(UEdGraphSchema_K2::PN_Condition)) &&
+        Schema->TryCreateConnection(Branch->FindPin(UEdGraphSchema_K2::PN_Then), GateOpen);
 }

@@ -1,9 +1,92 @@
 #include "SampleSmartObjectInteractionComponent.h"
 
+#include "Blueprint/AIBlueprintHelperLibrary.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Components/StateTreeComponent.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameplayInteractionSmartObjectBehaviorDefinition.h"
+#include "GameplayStateTreeBlueprintFunctionLibrary.h"
+#include "Kismet/KismetSystemLibrary.h"
+#include "MoverComponent.h"
+#include "SmartObjectBlueprintFunctionLibrary.h"
+#include "SmartObjectRequestTypes.h"
+#include "SmartObjectSubsystem.h"
+#include "StateTree.h"
+#include "UObject/StructOnScope.h"
 #include "UObject/UnrealType.h"
+
+namespace
+{
+    void CacheInteractionComponent(UActorComponent& Receiver, FName Name, UActorComponent* Component)
+    {
+        const auto* Property = FindFProperty<FObjectPropertyBase>(Receiver.GetClass(), Name);
+        if (Property && (!Component || Component->IsA(Property->PropertyClass)))
+        {
+            Property->SetObjectPropertyValue_InContainer(&Receiver, Component);
+        }
+    }
+
+    FSmartObjectSlotHandle SelectPlayerSlot(const USmartObjectSubsystem& Subsystem,
+        const TArray<FSmartObjectRequestResult>& Results, const FVector& Origin)
+    {
+        FSmartObjectSlotHandle Selected;
+        double BestDistanceSquared = FMath::Square(300.0);
+        for (const FSmartObjectRequestResult& Result : Results)
+        {
+            const TOptional<FTransform> Transform = Subsystem.GetSlotTransform(Result);
+            if (Transform && Subsystem.GetSlotState(Result.SlotHandle) == ESmartObjectSlotState::Free)
+            {
+                const double DistanceSquared = FVector::DistSquared(Origin, Transform->GetLocation());
+                if (DistanceSquared < BestDistanceSquared)
+                {
+                    Selected = Result.SlotHandle;
+                    BestDistanceSquared = DistanceSquared;
+                }
+            }
+        }
+        return Selected;
+    }
+
+    bool SendPlayerInteraction(UStateTreeComponent& Tree, UScriptStruct& Type, FGameplayTag Tag,
+        AActor& Target, const FSmartObjectSlotHandle& Slot)
+    {
+        const FObjectPropertyBase* ActorField = nullptr;
+        const FStructProperty* SlotField = nullptr;
+        for (TFieldIterator<FProperty> It(&Type); It; ++It)
+        {
+            if (const auto* Actor = CastField<FObjectPropertyBase>(*It);
+                Actor && Actor->PropertyClass->IsChildOf(AActor::StaticClass()))
+            {
+                if (ActorField || !Target.IsA(Actor->PropertyClass))
+                {
+                    return false;
+                }
+                ActorField = Actor;
+            }
+            if (const auto* Struct = CastField<FStructProperty>(*It); Struct && Struct->Struct == FSmartObjectSlotHandle::StaticStruct())
+            {
+                if (SlotField)
+                {
+                    return false;
+                }
+                SlotField = Struct;
+            }
+        }
+        if (!ActorField || !SlotField)
+        {
+            return false;
+        }
+
+        FStructOnScope Payload(&Type);
+        uint8* Data = Payload.GetStructMemory();
+        ActorField->SetObjectPropertyValue_InContainer(Data, &Target);
+        *SlotField->ContainerPtrToValuePtr<FSmartObjectSlotHandle>(Data) = Slot;
+        Tree.SendStateTreeEvent(Tag, FConstStructView(&Type, Data));
+        return true;
+    }
+}
 
 void USampleSmartObjectInteractionComponent::UpdateInteractionCollision(bool bShouldIgnore, AActor* OtherActor)
 {
@@ -33,4 +116,85 @@ void USampleSmartObjectInteractionComponent::UpdateInteractionMovementCorrection
     {
         Movement->bIgnoreClientMovementErrorChecksAndCorrection = IgnoreCorrections;
     }
+}
+
+void USampleSmartObjectInteractionComponent::CacheInteractionComponents()
+{
+    const AActor* Owner = GetOwner();
+    if (!Owner)
+    {
+        return;
+    }
+    CacheInteractionComponent(*this, TEXT("Owner Skeletal Mesh"), Owner->FindComponentByClass<USkeletalMeshComponent>());
+    if (auto* Movement = Owner->FindComponentByClass<UCharacterMovementComponent>())
+    {
+        CacheInteractionComponent(*this, TEXT("Character Movement Component"), Movement);
+    }
+    else
+    {
+        CacheInteractionComponent(*this, TEXT("Mover Component"), Owner->FindComponentByClass<UMoverComponent>());
+    }
+}
+
+bool USampleSmartObjectInteractionComponent::TryStartPlayerInteraction()
+{
+    AActor* Owner = GetOwner();
+    const auto* IsInteracting = FindFProperty<FBoolProperty>(GetClass(), TEXT("PlayerIsInteracting"));
+    const auto* TreeProperty = FindFProperty<FObjectPropertyBase>(GetClass(), TEXT("StateTreeComponent"));
+    if (!IsValid(Owner) || !IsInteracting || !TreeProperty || UAIBlueprintHelperLibrary::GetAIController(Owner))
+    {
+        return false;
+    }
+
+    auto* Tree = Cast<UStateTreeComponent>(TreeProperty->GetObjectPropertyValue_InContainer(this));
+    if (!IsValid(Tree))
+    {
+        if (!UGameplayStateTreeBlueprintFunctionLibrary::RunStateTree(Owner, PlayerInteractionTree.LoadSynchronous()))
+        {
+            return false;
+        }
+        Tree = Owner->FindComponentByClass<UStateTreeComponent>();
+        CacheInteractionComponent(*this, TEXT("StateTreeComponent"), Tree);
+    }
+    const auto* Subsystem = USmartObjectSubsystem::GetCurrent(GetWorld());
+    const FGameplayTag Tag = FGameplayTag::RequestGameplayTag(TEXT("SmartObject.ObjectType.Player"), false);
+    if (!Tree || !Subsystem || !Tag.IsValid())
+    {
+        return false;
+    }
+
+    const FVector Origin = Owner->GetActorLocation();
+    const FVector Forward = Owner->GetActorForwardVector();
+    FHitResult Hit;
+    if (!UKismetSystemLibrary::BoxTraceSingleForObjects(Owner, Origin + Forward * 15.0, Origin + Forward * 200.0,
+        FVector(1.0, 64.0, 86.0), Owner->GetActorRotation(), {EObjectTypeQuery::ObjectTypeQuery1}, false, {Owner},
+        EDrawDebugTrace::None, Hit, true))
+    {
+        return false;
+    }
+
+    AActor* Target = Hit.GetActor();
+    FSmartObjectRequestFilter Filter;
+    Filter.UserTags.AddTag(Tag);
+    Filter.BehaviorDefinitionClasses.Add(UGameplayInteractionSmartObjectBehaviorDefinition::StaticClass());
+    TArray<FSmartObjectRequestResult> Results;
+    if (!IsValid(Target) || !USmartObjectBlueprintFunctionLibrary::FindSmartObjectsInActor(Filter, Target, Results, Owner))
+    {
+        return false;
+    }
+    const FSmartObjectSlotHandle Slot = SelectPlayerSlot(*Subsystem, Results, Origin);
+    if (Target->GetActorTransform().InverseTransformPosition(Origin).X <= 0.0 ||
+        IsInteracting->GetPropertyValue_InContainer(this) || !Slot.IsValid())
+    {
+        IsInteracting->SetPropertyValue_InContainer(this, false);
+        return false;
+    }
+
+    UScriptStruct* Payload = PlayerInteractionPayload.LoadSynchronous();
+    if (!Payload || !SendPlayerInteraction(*Tree, *Payload, Tag, *Target, Slot))
+    {
+        return false;
+    }
+    IsInteracting->SetPropertyValue_InContainer(this, true);
+    return true;
 }
