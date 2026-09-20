@@ -150,4 +150,14 @@ public:
      */
     UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
     static bool ReplaceRagdollLifecycle(UBlueprint* Blueprint, UEdGraph* EventGraph, UEdGraph* ModeGraph);
+
+    /**
+     * Routes the authored interact input through the native player request.
+     * Keeps the shared animation cancellation gate and opens it only on a successful request.
+     * @param Blueprint Imported Smart Object interaction component.
+     * @param EventGraph Its original event graph.
+     * @return True when the input is routed to C++.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
+    static bool ReplacePlayerSmartObjectInput(UBlueprint* Blueprint, UEdGraph* EventGraph);
 };
