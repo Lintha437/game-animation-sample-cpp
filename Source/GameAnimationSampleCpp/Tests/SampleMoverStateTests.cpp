@@ -3,9 +3,15 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "DefaultMovementSet/CharacterMoverComponent.h"
+#include "Engine/Engine.h"
 #include "Engine/EngineBaseTypes.h"
+#include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
+#include "EnhancedInputComponent.h"
+#include "EnhancedPlayerInput.h"
+#include "GameFramework/PlayerController.h"
 #include "HAL/IConsoleManager.h"
+#include "InputAction.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/ScopeExit.h"
 #include "MoverDataModelTypes.h"
@@ -167,6 +173,67 @@ bool FSampleMoverStateMigrationTest::RunTest(const FString& Parameters)
         TestTrue(TEXT("Subsequent device input does not modify an issued command"),
             CommandCrouch->GetPropertyValue_InContainer(CustomCommand->StructInstance.GetMemory()));
     }
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FSampleMoverDeviceInputTest,
+    "GameAnimationSampleCpp.Migration.MoverDeviceInput",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FSampleMoverDeviceInputTest::RunTest(const FString& Parameters)
+{
+    UClass* Class = LoadClass<ASampleMoverCharacter>(nullptr,
+        TEXT("/Game/Blueprints/SandboxCharacter_Mover.SandboxCharacter_Mover_C"));
+    if (!TestNotNull(TEXT("Saved native Mover pawn"), Class))
+    {
+        return false;
+    }
+    const auto* Enabled = FindFProperty<FBoolProperty>(Class, TEXT("bUseNativeMoverDeviceInput"));
+    TestTrue(TEXT("Saved pawn enables the native bindings"), Enabled && Enabled->GetPropertyValue_InContainer(Class->GetDefaultObject()));
+    UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
+    if (!TestNotNull(TEXT("Transient game world"), World))
+    {
+        return false;
+    }
+    ON_SCOPE_EXIT { World->DestroyWorld(false); };
+    World->InitializeActorsForPlay(FURL());
+    ASampleMoverCharacter* Pawn = World->SpawnActor<ASampleMoverCharacter>(Class);
+    APlayerController* Controller = World->SpawnActor<APlayerController>();
+    if (!TestNotNull(TEXT("Mover pawn"), Pawn) || !TestNotNull(TEXT("Local controller"), Controller))
+    {
+        return false;
+    }
+    Controller->Player = NewObject<ULocalPlayer>(GEngine);
+    Controller->Possess(Pawn);
+    Pawn->PawnClientRestart();
+    auto* Input = Cast<UEnhancedInputComponent>(Pawn->InputComponent);
+    if (!TestNotNull(TEXT("Possession creates Enhanced Input"), Input))
+    {
+        return false;
+    }
+
+    auto* PlayerInput = NewObject<UEnhancedPlayerInput>(Controller);
+    Controller->PlayerInput = PlayerInput;
+    const TArray<UInputComponent*> Stack{Input};
+    const auto Apply = [&](const TCHAR* Name, const FInputActionValue& Value)
+    {
+        const FString Path = FString::Printf(TEXT("/Game/Input/%s.%s"), Name, Name);
+        if (const auto* Action = LoadObject<UInputAction>(nullptr, *Path); TestNotNull(Name, Action))
+        {
+            PlayerInput->InjectInputForAction(Action, Value);
+            PlayerInput->ProcessInputStack(Stack, 1.0f / 60.0f, false);
+        }
+    };
+
+    Controller->SetControlRotation(FRotator(0.0, 90.0, 0.0));
+    Apply(TEXT("IA_Move"), FVector2D(0.0, 0.5));
+    TestTrue(TEXT("Device move is normalized in the control yaw frame"),
+        Pawn->ResolveMoverDirection().Equals(FVector::RightVector));
+    Apply(TEXT("IA_Strafe"), true);
+    TestEqual(TEXT("Strafe toggles the authored facing mode"), Pawn->ResolveMoverRotationMode(), uint8{1});
+    Apply(TEXT("IA_Aim"), true);
+    TestEqual(TEXT("Aim takes priority over strafe"), Pawn->ResolveMoverRotationMode(), uint8{2});
     return true;
 }
 

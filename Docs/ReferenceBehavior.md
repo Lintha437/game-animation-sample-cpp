@@ -389,4 +389,16 @@ $script = (Resolve-Path Scripts/migrate_player_smart_object.py).Path
 
 The Win64 Editor target built, and the installer compiled the interaction component. In `NPCLevel` PIE, the player request rejected a bench from behind and accepted a bench from the front. The StateTree was running, and its player task resolved the slot transform at (430, 35, 0). This smoke check called the request directly. Enhanced Input dispatch, multiplayer, and full get-up playback are **Not run**.
 
+### Mover device input
+
+The migrated pawn binds its authored Enhanced Input actions in C++ on local possession. The movement query normalizes device input in the control-rotation frame and consumes navigation velocity for AI. Mouse and gamepad look retain their different time scaling. Walk, sprint, strafe, aim, and crouch write the existing intent snapshot. The typed rotation mode query retains the target, aim and twin-stick priorities.
+
+```powershell
+$script = (Resolve-Path Scripts/migrate_mover_device_input.py).Path
+& $editor $project -run=PythonScript "-script=$script" -Unattended -NullRHI
+& $editor $project -Unattended -NullRHI '-ExecCmds=Automation RunTests GameAnimationSampleCpp.Migration.MoverDeviceInput' '-TestExit=Automation Test Queue Empty'
+```
+
+The installer backs up the local pawn under `Saved/BlueprintMigration/MoverDeviceInput/`. The jump and traversal input still uses the authored event. The Win64 Editor target built and the focused test passed. It possessed the migrated pawn and injected move, strafe, and aim actions through Enhanced Input. It verified control-yaw movement and aim precedence. Multiplayer, analog gamepad view, and standalone Game are **Not run** for this batch.
+
 See the [Epic sample documentation](https://dev.epicgames.com/documentation/unreal-engine/game-animation-sample-project-in-unreal-engine) for the sample's public controls and architecture.
