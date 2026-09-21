@@ -1,11 +1,15 @@
 #include "SampleMoverCharacter.h"
 
+#include "AIController.h"
 #include "Animation/AnimInstance.h"
 #include "Components/CapsuleComponent.h"
 #include "DefaultMovementSet/CharacterMoverComponent.h"
+#include "DefaultMovementSet/NavMoverComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "EnhancedInputComponent.h"
 #include "Engine/World.h"
 #include "GameplayTagContainer.h"
+#include "InputAction.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "MoveLibrary/FloorQueryUtils.h"
 #include "MoverDataModelTypes.h"
@@ -21,8 +25,15 @@ namespace
     constexpr uint8 MoverGaitWalk = 0;
     constexpr uint8 MoverGaitRun = 1;
     constexpr uint8 MoverGaitSprint = 2;
-    constexpr int64 FaceMovement = 0;
-    constexpr int64 AimRotationMode = 2;
+    constexpr uint8 FaceMovement = 0;
+    constexpr uint8 StrafeRotationMode = 1;
+    constexpr uint8 AimRotationMode = 2;
+    const FName MoverPlayerInputState(TEXT("PlayerInputState"));
+    const FName MoverSprintIntent(TEXT("WantsToSprint_1_840C190D4B23289C5C46E0B5A4C5C936"));
+    const FName MoverWalkIntent(TEXT("WantsToWalk_3_78963B154975E3BDE244A3BE438473E3"));
+    const FName MoverStrafeIntent(TEXT("WantsToStrafe_5_64E842184F7691CD179DFCBA7158A4D9"));
+    const FName MoverAimIntent(TEXT("WantsToAim_7_3A4AA0AA4DE529A3B213E68BECD246F8"));
+    const FName MoverCrouchIntent(TEXT("WantsToCrouch_9_47D0791142F36BB93FFD9EA12F96F2B9"));
     const FName RagdollMode(TEXT("Ragdoll"));
     const FName RagdollTransformField(TEXT("RagdollTransform_33_5FE542414D593629259855B867DEA655"));
     const FName DefaultRagdollProfile(TEXT("DefaultPhysicsProfile"));
@@ -73,6 +84,22 @@ namespace
     {
         const auto* Property = Snapshot ? FindFProperty<FBoolProperty>(Snapshot->Struct, Name) : nullptr;
         return Property && Property->GetPropertyValue_InContainer(Snapshot->ContainerPtrToValuePtr<void>(&Pawn));
+    }
+
+    void WriteMoverIntent(ASampleMoverCharacter& Pawn, FName Name, bool bValue)
+    {
+        const auto* Snapshot = FindSnapshot(Pawn, MoverPlayerInputState);
+        const auto* Property = Snapshot ? FindFProperty<FBoolProperty>(Snapshot->Struct, Name) : nullptr;
+        if (Property)
+        {
+            Property->SetPropertyValue_InContainer(Snapshot->ContainerPtrToValuePtr<void>(&Pawn), bValue);
+        }
+    }
+
+    bool IsMoverTwinStick(const ASampleMoverCharacter& Pawn)
+    {
+        const auto* Mode = FindFProperty<FBoolProperty>(Pawn.GetClass(), TEXT("TwinStickMode"));
+        return Mode && Mode->GetPropertyValue_InContainer(&Pawn);
     }
 
     int64 GetPreSimRotationMode(const ASampleMoverCharacter& Pawn)
@@ -235,10 +262,149 @@ uint8 ASampleMoverCharacter::ResolveMovementModeValue() const
     return Value ? static_cast<uint8>(ReadEnum(*Map->ValueProp, Value)) : 0;
 }
 
+void ASampleMoverCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
+{
+    Super::SetupPlayerInputComponent(PlayerInputComponent);
+    auto* Input = Cast<UEnhancedInputComponent>(PlayerInputComponent);
+    if (!Input || !bUseNativeMoverDeviceInput)
+    {
+        return;
+    }
+    for (const auto& ValueAction : {MoverMoveAction, MoverTwinStickAimAction})
+    {
+        if (const UInputAction* Action = ValueAction.LoadSynchronous())
+        {
+            Input->BindActionValue(Action);
+        }
+    }
+    const auto Bind = [this, Input](const TSoftObjectPtr<UInputAction>& Action, auto Handler)
+    {
+        if (const UInputAction* Loaded = Action.LoadSynchronous())
+        {
+            Input->BindAction(Loaded, ETriggerEvent::Triggered, this, Handler);
+        }
+    };
+    Bind(MoverLookAction, &ASampleMoverCharacter::HandleMoverLook);
+    Bind(MoverGamepadLookAction, &ASampleMoverCharacter::HandleMoverGamepadLook);
+    Bind(MoverCrouchAction, &ASampleMoverCharacter::HandleMoverCrouch);
+    Bind(MoverWalkAction, &ASampleMoverCharacter::HandleMoverWalk);
+    Bind(MoverSprintAction, &ASampleMoverCharacter::HandleMoverSprint);
+    Bind(MoverStrafeAction, &ASampleMoverCharacter::HandleMoverStrafe);
+    Bind(MoverAimAction, &ASampleMoverCharacter::HandleMoverAim);
+}
+
+FVector2D ASampleMoverCharacter::ReadMoverAction(const TSoftObjectPtr<UInputAction>& Action) const
+{
+    const auto* Input = Cast<UEnhancedInputComponent>(InputComponent);
+    const UInputAction* Loaded = Action.Get();
+    return Input && Loaded ? Input->GetBoundActionValue(Loaded).Get<FVector2D>() : FVector2D::ZeroVector;
+}
+
+FVector ASampleMoverCharacter::ResolveMoverDirection()
+{
+    if (Cast<AAIController>(GetController()))
+    {
+        FVector Intent = FVector::ZeroVector;
+        FVector Velocity = FVector::ZeroVector;
+        if (auto* NavMover = FindComponentByClass<UNavMoverComponent>())
+        {
+            NavMover->ConsumeNavMovementData(Intent, Velocity);
+        }
+        return Velocity.GetSafeNormal();
+    }
+
+    const FVector2D Device = ReadMoverAction(MoverMoveAction);
+    const FRotator View = GetControlRotation();
+    const bool bFlying = ResolveMovementModeValue() == static_cast<uint8>(EAuthoredMovementMode::Flying);
+    const FRotator Basis = bFlying ? View : FRotator(0.0, View.Yaw, 0.0);
+    const FVector Direction = FVector(Device.Y, Device.X, 0.0).GetClampedToMaxSize(1.0);
+    return Basis.RotateVector(Direction).GetSafeNormal();
+}
+
+uint8 ASampleMoverCharacter::ResolveMoverRotationMode() const
+{
+    const auto* State = FindSnapshot(*this, MoverPlayerInputState);
+    const bool bAiming = ReadIntent(State, *this, MoverAimIntent);
+    const auto* Target = FindFProperty<FObjectPropertyBase>(GetClass(), TEXT("TargetedActor"));
+    if (Target && IsValid(Target->GetObjectPropertyValue_InContainer(this)))
+    {
+        return bAiming ? AimRotationMode : StrafeRotationMode;
+    }
+    if (IsMoverTwinStick(*this))
+    {
+        return ReadMoverAction(MoverTwinStickAimAction).IsNearlyZero()
+            ? FaceMovement : (bAiming ? AimRotationMode : StrafeRotationMode);
+    }
+    if (bAiming)
+    {
+        return AimRotationMode;
+    }
+    return ReadIntent(State, *this, MoverStrafeIntent) ? StrafeRotationMode : FaceMovement;
+}
+
+void ASampleMoverCharacter::HandleMoverLook(const FInputActionValue& Value)
+{
+    const FVector2D Delta = Value.Get<FVector2D>();
+    AddControllerYawInput(Delta.X);
+    AddControllerPitchInput(Delta.Y);
+}
+
+void ASampleMoverCharacter::HandleMoverGamepadLook(const FInputActionValue& Value)
+{
+    if (!IsMoverTwinStick(*this) && GetWorld())
+    {
+        const FVector2D Delta = Value.Get<FVector2D>() * GetWorld()->GetDeltaSeconds();
+        AddControllerYawInput(Delta.X);
+        AddControllerPitchInput(Delta.Y);
+    }
+}
+
+void ASampleMoverCharacter::HandleMoverCrouch()
+{
+    const auto Mode = static_cast<EAuthoredMovementMode>(ResolveMovementModeValue());
+    const auto* Mover = FindComponentByClass<UCharacterMoverComponent>();
+    if (Mover && (Mode == EAuthoredMovementMode::Grounded || Mode == EAuthoredMovementMode::Sliding))
+    {
+        WriteMoverIntent(*this, MoverCrouchIntent, !Mover->IsCrouching());
+    }
+}
+
+void ASampleMoverCharacter::HandleMoverWalk()
+{
+    const auto* State = FindSnapshot(*this, MoverPlayerInputState);
+    if (!ReadIntent(State, *this, MoverSprintIntent))
+    {
+        WriteMoverIntent(*this, MoverWalkIntent, !ReadIntent(State, *this, MoverWalkIntent));
+    }
+}
+
+void ASampleMoverCharacter::HandleMoverSprint(const FInputActionValue& Value)
+{
+    const bool bSprint = Value.Get<bool>();
+    WriteMoverIntent(*this, MoverSprintIntent, bSprint);
+    WriteMoverIntent(*this, MoverWalkIntent, false);
+    const auto* Mover = FindComponentByClass<UCharacterMoverComponent>();
+    if (bSprint && Mover && Mover->IsCrouching())
+    {
+        WriteMoverIntent(*this, MoverCrouchIntent, false);
+    }
+}
+
+void ASampleMoverCharacter::HandleMoverStrafe()
+{
+    const auto* State = FindSnapshot(*this, MoverPlayerInputState);
+    WriteMoverIntent(*this, MoverStrafeIntent, !ReadIntent(State, *this, MoverStrafeIntent));
+}
+
+void ASampleMoverCharacter::HandleMoverAim(const FInputActionValue& Value)
+{
+    WriteMoverIntent(*this, MoverAimIntent, Value.Get<bool>());
+}
+
 uint8 ASampleMoverCharacter::ResolveGaitValue() const
 {
-    const FStructProperty* Player = FindSnapshot(*this, TEXT("PlayerInputState"));
-    if (ReadIntent(Player, *this, TEXT("WantsToSprint_1_840C190D4B23289C5C46E0B5A4C5C936")))
+    const FStructProperty* Player = FindSnapshot(*this, MoverPlayerInputState);
+    if (ReadIntent(Player, *this, MoverSprintIntent))
     {
         switch (GetPreSimRotationMode(*this))
         {

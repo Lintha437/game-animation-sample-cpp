@@ -4,6 +4,9 @@
 #include "MoverSimulationTypes.h"
 #include "SampleMoverCharacter.generated.h"
 
+class UInputAction;
+struct FInputActionValue;
+
 /** Native state queries and gameplay movement for the reference Mover pawn. */
 UCLASS(Abstract, Blueprintable)
 class GAMEANIMATIONSAMPLECPP_API ASampleMoverCharacter : public APawn
@@ -78,6 +81,18 @@ public:
      */
     UFUNCTION(BlueprintPure, Category = "Sample|Mover")
     FVector ResolveOrientationIntent() const;
+
+    /**
+     * Samples navigation intent for AI and camera-relative device input for players.
+     * AI navigation data are consumed at the command boundary. Flying also uses camera pitch.
+     * @return Normalized world-space movement intent.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Input")
+    FVector ResolveMoverDirection();
+
+    /** @return Authored facing mode from the current target, aim, strafe and twin-stick state. */
+    UFUNCTION(BlueprintPure, Category = "Sample|Mover|Input")
+    uint8 ResolveMoverRotationMode() const;
 
     /** Updates the blocking floor, contact point, and surface normal from Mover. */
     UFUNCTION(BlueprintCallable, Category = "Sample|Mover")
@@ -167,7 +182,51 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Ragdoll")
     void TraceRagdollObstacles();
 
+protected:
+    /** Binds sampled direction values and the migrated player events on local possession. */
+    virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
+
 private:
+    /** Enable after removing the equivalent Blueprint action events from the local asset. */
+    UPROPERTY(EditDefaultsOnly, Category = "Sample|Mover|Input")
+    bool bUseNativeMoverDeviceInput = false;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Sample|Mover|Input")
+    TSoftObjectPtr<UInputAction> MoverMoveAction{FSoftObjectPath(TEXT("/Game/Input/IA_Move.IA_Move"))};
+
+    UPROPERTY(EditDefaultsOnly, Category = "Sample|Mover|Input")
+    TSoftObjectPtr<UInputAction> MoverTwinStickAimAction{FSoftObjectPath(TEXT("/Game/Input/IA_TwinStick_AimDirection.IA_TwinStick_AimDirection"))};
+
+    UPROPERTY(EditDefaultsOnly, Category = "Sample|Mover|Input")
+    TSoftObjectPtr<UInputAction> MoverLookAction{FSoftObjectPath(TEXT("/Game/Input/IA_Look.IA_Look"))};
+
+    UPROPERTY(EditDefaultsOnly, Category = "Sample|Mover|Input")
+    TSoftObjectPtr<UInputAction> MoverGamepadLookAction{FSoftObjectPath(TEXT("/Game/Input/IA_Look_Gamepad.IA_Look_Gamepad"))};
+
+    UPROPERTY(EditDefaultsOnly, Category = "Sample|Mover|Input")
+    TSoftObjectPtr<UInputAction> MoverCrouchAction{FSoftObjectPath(TEXT("/Game/Input/IA_Crouch.IA_Crouch"))};
+
+    UPROPERTY(EditDefaultsOnly, Category = "Sample|Mover|Input")
+    TSoftObjectPtr<UInputAction> MoverWalkAction{FSoftObjectPath(TEXT("/Game/Input/IA_Walk.IA_Walk"))};
+
+    UPROPERTY(EditDefaultsOnly, Category = "Sample|Mover|Input")
+    TSoftObjectPtr<UInputAction> MoverSprintAction{FSoftObjectPath(TEXT("/Game/Input/IA_Sprint.IA_Sprint"))};
+
+    UPROPERTY(EditDefaultsOnly, Category = "Sample|Mover|Input")
+    TSoftObjectPtr<UInputAction> MoverStrafeAction{FSoftObjectPath(TEXT("/Game/Input/IA_Strafe.IA_Strafe"))};
+
+    UPROPERTY(EditDefaultsOnly, Category = "Sample|Mover|Input")
+    TSoftObjectPtr<UInputAction> MoverAimAction{FSoftObjectPath(TEXT("/Game/Input/IA_Aim.IA_Aim"))};
+
+    void HandleMoverLook(const FInputActionValue& Value);
+    void HandleMoverGamepadLook(const FInputActionValue& Value);
+    void HandleMoverCrouch();
+    void HandleMoverWalk();
+    void HandleMoverSprint(const FInputActionValue& Value);
+    void HandleMoverStrafe();
+    void HandleMoverAim(const FInputActionValue& Value);
+    FVector2D ReadMoverAction(const TSoftObjectPtr<UInputAction>& Action) const;
+
     /** Physics body names on the sample skeleton. Adjust both groups when using another rig. */
     UPROPERTY(EditDefaultsOnly, Category = "Sample|Mover|Ragdoll")
     TArray<FName> LeftLegPhysicsBodies{TEXT("thigh_l"), TEXT("calf_l"), TEXT("foot_l")};
