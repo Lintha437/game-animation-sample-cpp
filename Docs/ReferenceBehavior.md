@@ -399,6 +399,17 @@ $script = (Resolve-Path Scripts/migrate_mover_device_input.py).Path
 & $editor $project -Unattended -NullRHI '-ExecCmds=Automation RunTests GameAnimationSampleCpp.Migration.MoverDeviceInput' '-TestExit=Automation Test Queue Empty'
 ```
 
-The installer backs up the local pawn under `Saved/BlueprintMigration/MoverDeviceInput/`. The jump and traversal input still uses the authored event. The Win64 Editor target built and the focused test passed. It possessed the migrated pawn and injected move, strafe, and aim actions through Enhanced Input. It verified control-yaw movement and aim precedence. Multiplayer, analog gamepad view, and standalone Game are **Not run** for this batch.
+The installer backs up the local pawn under `Saved/BlueprintMigration/MoverDeviceInput/`. The Win64 Editor target built and the focused test passed. It possessed the migrated pawn and injected move, strafe, and aim actions through Enhanced Input. It verified control-yaw movement and aim precedence. Multiplayer, analog gamepad view, and standalone Game are **Not run** for this batch.
+
+### Mover jump and traversal input
+
+The native press handler checks movement state, the existing montage slot, and traversal activity. It builds the ground or air approach for the authored traversal call. A rejected probe requests uncrouch when applicable or publishes the one-frame Mover jump edge. Held input can retry the traversal probe. Grounded ragdoll presses request the existing recovery flow.
+
+```powershell
+$script = (Resolve-Path Scripts/migrate_mover_jump.py).Path
+& $editor $project -run=PythonScript "-script=$script" -Unattended -NullRHI
+```
+
+The Win64 Editor built and both pawn packages compiled. In `DefaultLevel` PIE, the authored Enhanced Input action produced an unobstructed jump with a 110 cm rise and returned to Walking. From the approach to `LevelBlock_Traversable_C_4`, the same action entered Traversing, advanced 196 cm during the sample, and returned to Walking. The test placed the pawn at the obstacle approach. Multiplayer and the ragdoll-specific jump binding are **Not run**.
 
 See the [Epic sample documentation](https://dev.epicgames.com/documentation/unreal-engine/game-animation-sample-project-in-unreal-engine) for the sample's public controls and architecture.

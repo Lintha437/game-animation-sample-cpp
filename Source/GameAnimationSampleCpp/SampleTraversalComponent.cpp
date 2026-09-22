@@ -82,6 +82,12 @@ void USampleTraversalComponent::SetTraversalActionActive(bool bActive)
     }
 }
 
+bool USampleTraversalComponent::IsTraversalActionActive() const
+{
+    const auto* Activity = FindFProperty<FBoolProperty>(GetClass(), TEXT("DoingTraversalAction"));
+    return Activity && Activity->GetPropertyValue_InContainer(this);
+}
+
 void USampleTraversalComponent::BeginTraversalCollision(UPrimitiveComponent* Capsule, UPrimitiveComponent* Obstacle,
     UPrimitiveComponent* Mesh)
 {

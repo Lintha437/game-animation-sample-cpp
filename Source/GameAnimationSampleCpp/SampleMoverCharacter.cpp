@@ -15,6 +15,8 @@
 #include "MoverDataModelTypes.h"
 #include "PhysicsControlBPLibrary.h"
 #include "PhysicsControlComponent.h"
+#include "SampleTraversalClearance.h"
+#include "SampleTraversalComponent.h"
 #include "StructUtils/UserDefinedStruct.h"
 #include "UObject/StructOnScope.h"
 #include "UObject/UnrealType.h"
@@ -40,6 +42,8 @@ namespace
     const FName KinematicRagdollProfile(TEXT("Kinematic"));
     const FName PhysicalAnimationProfile(TEXT("PhysicalAnimation"));
     const FName CapsuleProfile(TEXT("CharacterCapsule"));
+    const FName MoverJumpEdge(TEXT("Jump_JustPressed"));
+    constexpr int32 ClearMoverJumpEdgeAction = 0x4D4F5601;
     // Dedicated latent-action keys on the pawn, distinct from Blueprint node IDs.
     constexpr int32 ConfirmRagdollEntryAction = 0x52414701;
     constexpr int32 ReleaseRagdollFacingAction = 0x52414702;
@@ -208,7 +212,7 @@ namespace
             Source->ContainerPtrToValuePtr<void>(SourceContainer));
     }
 
-    void SetEnumByte(const UScriptStruct* Type, void* Data, FName Name, uint8 Value)
+    void SetEnumByte(const UStruct* Type, void* Data, FName Name, uint8 Value)
     {
         if (const auto* Byte = FindFProperty<FByteProperty>(Type, Name))
         {
@@ -266,7 +270,19 @@ void ASampleMoverCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInp
 {
     Super::SetupPlayerInputComponent(PlayerInputComponent);
     auto* Input = Cast<UEnhancedInputComponent>(PlayerInputComponent);
-    if (!Input || !bUseNativeMoverDeviceInput)
+    if (!Input)
+    {
+        return;
+    }
+    if (bUseNativeMoverJumpInput)
+    {
+        if (const UInputAction* Jump = MoverJumpAction.LoadSynchronous())
+        {
+            Input->BindAction(Jump, ETriggerEvent::Started, this, &ASampleMoverCharacter::HandleMoverJumpStarted);
+            Input->BindAction(Jump, ETriggerEvent::Triggered, this, &ASampleMoverCharacter::HandleMoverJumpTriggered);
+        }
+    }
+    if (!bUseNativeMoverDeviceInput)
     {
         return;
     }
@@ -340,6 +356,127 @@ uint8 ASampleMoverCharacter::ResolveMoverRotationMode() const
         return AimRotationMode;
     }
     return ReadIntent(State, *this, MoverStrafeIntent) ? StrafeRotationMode : FaceMovement;
+}
+
+bool ASampleMoverCharacter::CanStartMoverTraversal() const
+{
+    const auto Mode = static_cast<EAuthoredMovementMode>(ResolveMovementModeValue());
+    const auto* Traversal = FindComponentByClass<USampleTraversalComponent>();
+    if (!Traversal || Traversal->IsTraversalActionActive() ||
+        (Mode != EAuthoredMovementMode::Grounded && Mode != EAuthoredMovementMode::Airborne))
+    {
+        return false;
+    }
+    const auto* Mesh = GetRagdollMesh(*this);
+    const auto* Anim = Mesh ? Mesh->GetAnimInstance() : nullptr;
+    return !Anim || !Anim->IsSlotActive(TEXT("DefaultSlot"));
+}
+
+bool ASampleMoverCharacter::TryMoverTraversal(bool bDrawForDuration)
+{
+    auto* Traversal = FindComponentByClass<USampleTraversalComponent>();
+    const auto* Mover = FindComponentByClass<UCharacterMoverComponent>();
+    UFunction* Try = Traversal ? Traversal->FindFunction(TEXT("TryTraversalAction")) : nullptr;
+    const auto* Inputs = Try ? FindFProperty<FStructProperty>(Try, TEXT("Inputs")) : nullptr;
+    const auto* CheckFailed = Try ? FindFProperty<FBoolProperty>(Try, TEXT("TraversalCheckFailed")) : nullptr;
+    const auto* MontageFailed = Try ? FindFProperty<FBoolProperty>(Try, TEXT("MontageSelectionFailed")) : nullptr;
+    if (!Mover || !Inputs || Inputs->Struct->GetFName() != TEXT("S_TraversalCheckInputs") || !CheckFailed || !MontageFailed)
+    {
+        return false;
+    }
+
+    FSampleTraversalApproach Approach;
+    Approach.Radius = 30.0f;
+    if (ResolveMovementModeValue() == static_cast<uint8>(EAuthoredMovementMode::Airborne))
+    {
+        const auto* Snapshot = FindSnapshot(*this, TEXT("MoverDefaultInputs_PostSim"));
+        const FVector Move = Snapshot && Snapshot->Struct == FCharacterDefaultInputs::StaticStruct()
+            ? Snapshot->ContainerPtrToValuePtr<FCharacterDefaultInputs>(this)->GetMoveInput() : FVector::ZeroVector;
+        Approach.Direction = Move.IsNearlyZero() ? GetActorForwardVector() : Move.GetSafeNormal();
+        Approach.Distance = 75.0;
+        Approach.HalfHeight = 86.0f;
+        Approach.EndOffset.Z = 50.0;
+    }
+    else
+    {
+        const FVector Velocity = Mover->GetVelocity();
+        Approach.Direction = Velocity.SizeSquared2D() > FMath::Square(50.0)
+            ? Velocity.GetSafeNormal() : Mover->GetTargetOrientation().Vector();
+        const double LocalSpeed = GetActorQuat().UnrotateVector(Velocity).X;
+        Approach.Distance = FMath::GetMappedRangeValueClamped(FVector2D(0.0, 375.0), FVector2D(75.0, 300.0), LocalSpeed);
+        Approach.HalfHeight = 60.0f;
+    }
+
+    FStructOnScope Args(Try);
+    uint8* Data = Args.GetStructMemory();
+    void* Probe = Inputs->ContainerPtrToValuePtr<void>(Data);
+    const auto SetVector = [&](FName Name, const FVector& Value)
+    {
+        const auto* Field = FindFProperty<FStructProperty>(Inputs->Struct, Name);
+        if (Field && Field->Struct == TBaseStructure<FVector>::Get())
+        {
+            *Field->ContainerPtrToValuePtr<FVector>(Probe) = Value;
+        }
+    };
+    SetVector(TEXT("TraceForwardDirection_5_84E06003419F502C44036B9424B39047"), Approach.Direction);
+    SetVector(TEXT("TraceOriginOffset_7_2757E2FF43A7611D7F46EE9AAA15F8C0"), Approach.StartOffset);
+    SetVector(TEXT("TraceEndOffset_15_35E488F2478DA8D4D7E69FB93494661B"), Approach.EndOffset);
+    WriteNumber(Inputs->Struct, Probe, TEXT("TraceForwardDistance_2_07F489F3465D510BFC123689985564DC"), Approach.Distance);
+    WriteNumber(Inputs->Struct, Probe, TEXT("TraceRadius_10_FF044CA546FFD12BAA4D4E93460A273A"), Approach.Radius);
+    WriteNumber(Inputs->Struct, Probe, TEXT("TraceHalfHeight_12_019A16DE47BB8535C3C0CF8AA6E355EB"), Approach.HalfHeight);
+    SetEnumByte(Try, Data, TEXT("DebugType"), bDrawForDuration ? EDrawDebugTrace::ForDuration : EDrawDebugTrace::ForOneFrame);
+    Traversal->ProcessEvent(Try, Data);
+    return !CheckFailed->GetPropertyValue_InContainer(Data) && !MontageFailed->GetPropertyValue_InContainer(Data);
+}
+
+void ASampleMoverCharacter::HandleMoverJumpStarted()
+{
+    const auto Mode = static_cast<EAuthoredMovementMode>(ResolveMovementModeValue());
+    if (Mode == EAuthoredMovementMode::Ragdoll && FindSnapshot(*this, TEXT("RagdollInputs_PreSim")))
+    {
+        const auto* HasFloor = FindFProperty<FBoolProperty>(GetClass(), TEXT("HasFloor"));
+        if (HasFloor && HasFloor->GetPropertyValue_InContainer(this))
+        {
+            RequestRagdollRecovery();
+        }
+        return;
+    }
+    if (Mode == EAuthoredMovementMode::Sliding)
+    {
+        WriteMoverIntent(*this, MoverCrouchIntent, false);
+    }
+    if (!CanStartMoverTraversal() || TryMoverTraversal(true))
+    {
+        return;
+    }
+    const auto* Mover = FindComponentByClass<UCharacterMoverComponent>();
+    if (Mover && Mover->IsCrouching())
+    {
+        WriteMoverIntent(*this, MoverCrouchIntent, false);
+        return;
+    }
+    if (const auto* Edge = FindFProperty<FBoolProperty>(GetClass(), MoverJumpEdge); Edge && GetWorld())
+    {
+        Edge->SetPropertyValue_InContainer(this, true);
+        UKismetSystemLibrary::DelayUntilNextFrame(this, FLatentActionInfo(
+            0, ClearMoverJumpEdgeAction, GET_FUNCTION_NAME_STRING_CHECKED(ASampleMoverCharacter, ClearMoverJumpEdge), this));
+    }
+}
+
+void ASampleMoverCharacter::HandleMoverJumpTriggered()
+{
+    if (CanStartMoverTraversal())
+    {
+        TryMoverTraversal(false);
+    }
+}
+
+void ASampleMoverCharacter::ClearMoverJumpEdge()
+{
+    if (const auto* Edge = FindFProperty<FBoolProperty>(GetClass(), MoverJumpEdge))
+    {
+        Edge->SetPropertyValue_InContainer(this, false);
+    }
 }
 
 void ASampleMoverCharacter::HandleMoverLook(const FInputActionValue& Value)
@@ -453,7 +590,7 @@ FMoverInputCmdContext ASampleMoverCharacter::BuildMoverInputCommand(int32 SimTim
     Input->SetMoveInput(EMoveInputType::DirectionalIntent,
         ReadStructResult(*this, TEXT("Get_MoveInput"), FVector::ZeroVector));
     Input->ControlRotation = ResolveAimingRotation();
-    const auto* Jump = FindFProperty<FBoolProperty>(GetClass(), TEXT("Jump_JustPressed"));
+    const auto* Jump = FindFProperty<FBoolProperty>(GetClass(), MoverJumpEdge);
     Input->bIsJumpJustPressed = Jump && Jump->GetPropertyValue_InContainer(this);
     if (UFunction* Rotation = FindFunction(TEXT("Get_RotationMode")))
     {
