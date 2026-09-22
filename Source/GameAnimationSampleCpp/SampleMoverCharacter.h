@@ -94,6 +94,10 @@ public:
     UFUNCTION(BlueprintPure, Category = "Sample|Mover|Input")
     uint8 ResolveMoverRotationMode() const;
 
+    /** @return Whether movement and the active montage slot allow a new traversal request. */
+    UFUNCTION(BlueprintPure, Category = "Sample|Mover|Input")
+    bool CanStartMoverTraversal() const;
+
     /** Updates the blocking floor, contact point, and surface normal from Mover. */
     UFUNCTION(BlueprintCallable, Category = "Sample|Mover")
     void UpdateMoverFloor();
@@ -218,6 +222,13 @@ private:
     UPROPERTY(EditDefaultsOnly, Category = "Sample|Mover|Input")
     TSoftObjectPtr<UInputAction> MoverAimAction{FSoftObjectPath(TEXT("/Game/Input/IA_Aim.IA_Aim"))};
 
+    /** Enable after the primary and ragdoll pawn jump events are removed. */
+    UPROPERTY(EditDefaultsOnly, Category = "Sample|Mover|Input")
+    bool bUseNativeMoverJumpInput = false;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Sample|Mover|Input")
+    TSoftObjectPtr<UInputAction> MoverJumpAction{FSoftObjectPath(TEXT("/Game/Input/IA_Jump.IA_Jump"))};
+
     void HandleMoverLook(const FInputActionValue& Value);
     void HandleMoverGamepadLook(const FInputActionValue& Value);
     void HandleMoverCrouch();
@@ -226,6 +237,19 @@ private:
     void HandleMoverStrafe();
     void HandleMoverAim(const FInputActionValue& Value);
     FVector2D ReadMoverAction(const TSoftObjectPtr<UInputAction>& Action) const;
+
+    /** Handles press-time traversal, jump, stance exit, or ragdoll recovery. */
+    void HandleMoverJumpStarted();
+
+    /** Retries traversal while the action remains triggered. */
+    void HandleMoverJumpTriggered();
+
+    /** @return True when the authored traversal call accepted the approach and selected a montage. */
+    bool TryMoverTraversal(bool bDrawForDuration);
+
+    /** Clears the one-frame jump edge after it is available to Mover's input producer. */
+    UFUNCTION()
+    void ClearMoverJumpEdge();
 
     /** Physics body names on the sample skeleton. Adjust both groups when using another rig. */
     UPROPERTY(EditDefaultsOnly, Category = "Sample|Mover|Ragdoll")

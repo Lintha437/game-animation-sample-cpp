@@ -70,6 +70,9 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Traversal")
     void SetTraversalActionActive(bool bActive);
 
+    /** @return Whether an authored traversal action currently owns movement and collision. */
+    bool IsTraversalActionActive() const;
+
     /**
      * Suspends collision with the struck component for this traversal.
      * Replacing an active target releases its changes first. Repeating the same
