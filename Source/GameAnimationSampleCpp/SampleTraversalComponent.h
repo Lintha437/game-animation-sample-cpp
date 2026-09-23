@@ -8,6 +8,7 @@
 
 class UPrimitiveComponent;
 class UMoverComponent;
+struct FSampleTraversalApproach;
 
 /**
  * Native movement hooks for the reference traversal component.
@@ -72,6 +73,14 @@ public:
 
     /** @return Whether an authored traversal action currently owns movement and collision. */
     bool IsTraversalActionActive() const;
+
+    /**
+     * Sends a native approach to the imported chooser and playback graph.
+     * @param Approach World-space sweep direction, offsets, and capsule dimensions.
+     * @param DebugType Visualization mode for this input attempt.
+     * @return True once geometry and montage selection both succeed.
+     */
+    bool TryAuthoredTraversal(const FSampleTraversalApproach& Approach, EDrawDebugTrace::Type DebugType);
 
     /**
      * Suspends collision with the struck component for this traversal.

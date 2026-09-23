@@ -212,7 +212,7 @@ namespace
             Source->ContainerPtrToValuePtr<void>(SourceContainer));
     }
 
-    void SetEnumByte(const UStruct* Type, void* Data, FName Name, uint8 Value)
+    void SetEnumByte(const UScriptStruct* Type, void* Data, FName Name, uint8 Value)
     {
         if (const auto* Byte = FindFProperty<FByteProperty>(Type, Name))
         {
@@ -376,11 +376,7 @@ bool ASampleMoverCharacter::TryMoverTraversal(bool bDrawForDuration)
 {
     auto* Traversal = FindComponentByClass<USampleTraversalComponent>();
     const auto* Mover = FindComponentByClass<UCharacterMoverComponent>();
-    UFunction* Try = Traversal ? Traversal->FindFunction(TEXT("TryTraversalAction")) : nullptr;
-    const auto* Inputs = Try ? FindFProperty<FStructProperty>(Try, TEXT("Inputs")) : nullptr;
-    const auto* CheckFailed = Try ? FindFProperty<FBoolProperty>(Try, TEXT("TraversalCheckFailed")) : nullptr;
-    const auto* MontageFailed = Try ? FindFProperty<FBoolProperty>(Try, TEXT("MontageSelectionFailed")) : nullptr;
-    if (!Mover || !Inputs || Inputs->Struct->GetFName() != TEXT("S_TraversalCheckInputs") || !CheckFailed || !MontageFailed)
+    if (!Mover || !Traversal)
     {
         return false;
     }
@@ -407,26 +403,7 @@ bool ASampleMoverCharacter::TryMoverTraversal(bool bDrawForDuration)
         Approach.HalfHeight = 60.0f;
     }
 
-    FStructOnScope Args(Try);
-    uint8* Data = Args.GetStructMemory();
-    void* Probe = Inputs->ContainerPtrToValuePtr<void>(Data);
-    const auto SetVector = [&](FName Name, const FVector& Value)
-    {
-        const auto* Field = FindFProperty<FStructProperty>(Inputs->Struct, Name);
-        if (Field && Field->Struct == TBaseStructure<FVector>::Get())
-        {
-            *Field->ContainerPtrToValuePtr<FVector>(Probe) = Value;
-        }
-    };
-    SetVector(TEXT("TraceForwardDirection_5_84E06003419F502C44036B9424B39047"), Approach.Direction);
-    SetVector(TEXT("TraceOriginOffset_7_2757E2FF43A7611D7F46EE9AAA15F8C0"), Approach.StartOffset);
-    SetVector(TEXT("TraceEndOffset_15_35E488F2478DA8D4D7E69FB93494661B"), Approach.EndOffset);
-    WriteNumber(Inputs->Struct, Probe, TEXT("TraceForwardDistance_2_07F489F3465D510BFC123689985564DC"), Approach.Distance);
-    WriteNumber(Inputs->Struct, Probe, TEXT("TraceRadius_10_FF044CA546FFD12BAA4D4E93460A273A"), Approach.Radius);
-    WriteNumber(Inputs->Struct, Probe, TEXT("TraceHalfHeight_12_019A16DE47BB8535C3C0CF8AA6E355EB"), Approach.HalfHeight);
-    SetEnumByte(Try, Data, TEXT("DebugType"), bDrawForDuration ? EDrawDebugTrace::ForDuration : EDrawDebugTrace::ForOneFrame);
-    Traversal->ProcessEvent(Try, Data);
-    return !CheckFailed->GetPropertyValue_InContainer(Data) && !MontageFailed->GetPropertyValue_InContainer(Data);
+    return Traversal->TryAuthoredTraversal(Approach, bDrawForDuration ? EDrawDebugTrace::ForDuration : EDrawDebugTrace::ForOneFrame);
 }
 
 void ASampleMoverCharacter::HandleMoverJumpStarted()
