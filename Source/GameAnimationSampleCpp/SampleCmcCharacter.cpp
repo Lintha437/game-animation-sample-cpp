@@ -1,5 +1,7 @@
 #include "SampleCmcCharacter.h"
 
+#include "Animation/AnimInstance.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Curves/CurveFloat.h"
 #include "EnhancedInputComponent.h"
 #include "Engine/World.h"
@@ -9,6 +11,8 @@
 #include "KismetAnimationLibrary.h"
 #include "Math/RotationMatrix.h"
 #include "Net/Core/PushModel/PushModel.h"
+#include "SampleTraversalClearance.h"
+#include "SampleTraversalComponent.h"
 #include "UObject/UnrealType.h"
 
 namespace
@@ -117,6 +121,14 @@ void ASampleCmcCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInput
     {
         Input->BindActionValue(WorldMove);
     }
+    if (bUseNativeCmcJumpInput)
+    {
+        if (const UInputAction* Jump = CmcJumpAction.LoadSynchronous())
+        {
+            Input->BindAction(Jump, ETriggerEvent::Started, this, &ASampleCmcCharacter::HandleCmcJumpStarted);
+            Input->BindAction(Jump, ETriggerEvent::Triggered, this, &ASampleCmcCharacter::HandleCmcJumpTriggered);
+        }
+    }
     if (!bUseNativeInputHandlers)
     {
         return;
@@ -140,6 +152,56 @@ void ASampleCmcCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInput
         Bind(SprintAction.LoadSynchronous(), &ASampleCmcCharacter::HandleSprintIntent);
         Bind(StrafeAction.LoadSynchronous(), &ASampleCmcCharacter::HandleStrafeIntent);
         Bind(AimAction.LoadSynchronous(), &ASampleCmcCharacter::HandleAimIntent);
+    }
+}
+
+bool ASampleCmcCharacter::CanStartCmcJump() const
+{
+    const USkeletalMeshComponent* SkeletalMesh = GetMesh();
+    const UAnimInstance* Anim = SkeletalMesh ? SkeletalMesh->GetAnimInstance() : nullptr;
+    return !Anim || !Anim->IsSlotActive(TEXT("DefaultSlot"));
+}
+
+bool ASampleCmcCharacter::TryCmcTraversal(bool bDrawForDuration)
+{
+    auto* Traversal = FindComponentByClass<USampleTraversalComponent>();
+    const UCharacterMovementComponent* Movement = GetCharacterMovement();
+    if (!Traversal || !Movement)
+    {
+        return false;
+    }
+
+    FSampleTraversalApproach Approach;
+    Approach.Direction = GetActorForwardVector();
+    Approach.Radius = 30.0f;
+    if (Movement->MovementMode == MOVE_Falling || Movement->MovementMode == MOVE_Flying)
+    {
+        Approach.Distance = 75.0;
+        Approach.EndOffset.Z = 50.0;
+        Approach.HalfHeight = 86.0f;
+    }
+    else
+    {
+        const double LocalSpeed = GetActorQuat().UnrotateVector(Movement->Velocity).X;
+        Approach.Distance = FMath::GetMappedRangeValueClamped(FVector2D(0.0, 500.0), FVector2D(75.0, 350.0), LocalSpeed);
+        Approach.HalfHeight = 60.0f;
+    }
+    return Traversal->TryAuthoredTraversal(Approach, bDrawForDuration ? EDrawDebugTrace::ForDuration : EDrawDebugTrace::ForOneFrame);
+}
+
+void ASampleCmcCharacter::HandleCmcJumpStarted()
+{
+    if (CanStartCmcJump() && !TryCmcTraversal(true))
+    {
+        Jump();
+    }
+}
+
+void ASampleCmcCharacter::HandleCmcJumpTriggered()
+{
+    if (CanStartCmcJump())
+    {
+        TryCmcTraversal(false);
     }
 }
 
