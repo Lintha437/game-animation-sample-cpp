@@ -2,6 +2,7 @@
 
 #include "Components/CapsuleComponent.h"
 #include "SampleTraversalClearance.h"
+#include "UObject/StructOnScope.h"
 #include "UObject/UnrealType.h"
 
 namespace
@@ -115,6 +116,39 @@ bool USampleTraversalComponent::EvaluateTraversalClearance(int32&, TEnumAsByte<E
 {
     checkNoEntry();
     return false;
+}
+
+bool USampleTraversalComponent::TryAuthoredTraversal(const FSampleTraversalApproach& Approach, EDrawDebugTrace::Type DebugType)
+{
+    UFunction* Function = FindFunction(TEXT("TryTraversalAction"));
+    const auto* Inputs = Function ? FindFProperty<FStructProperty>(Function, TEXT("Inputs")) : nullptr;
+    const auto* CheckFailed = Function ? FindFProperty<FBoolProperty>(Function, TEXT("TraversalCheckFailed")) : nullptr;
+    const auto* MontageFailed = Function ? FindFProperty<FBoolProperty>(Function, TEXT("MontageSelectionFailed")) : nullptr;
+    if (!Inputs || Inputs->Struct->GetFName() != TEXT("S_TraversalCheckInputs") || !CheckFailed || !MontageFailed)
+    {
+        return false;
+    }
+
+    FStructOnScope Args(Function);
+    uint8* Data = Args.GetStructMemory();
+    const FBlueprintStructure Probe{Inputs->Struct.Get(), Inputs->ContainerPtrToValuePtr<void>(Data)};
+    Probe.Set(TEXT("TraceForwardDirection_5_84E06003419F502C44036B9424B39047"), Approach.Direction);
+    Probe.Set(TEXT("TraceOriginOffset_7_2757E2FF43A7611D7F46EE9AAA15F8C0"), Approach.StartOffset);
+    Probe.Set(TEXT("TraceEndOffset_15_35E488F2478DA8D4D7E69FB93494661B"), Approach.EndOffset);
+    Probe.Set(TEXT("TraceForwardDistance_2_07F489F3465D510BFC123689985564DC"), Approach.Distance);
+    Probe.Set(TEXT("TraceRadius_10_FF044CA546FFD12BAA4D4E93460A273A"), static_cast<double>(Approach.Radius));
+    Probe.Set(TEXT("TraceHalfHeight_12_019A16DE47BB8535C3C0CF8AA6E355EB"), static_cast<double>(Approach.HalfHeight));
+    if (const auto* Debug = FindFProperty<FByteProperty>(Function, TEXT("DebugType")))
+    {
+        Debug->SetPropertyValue_InContainer(Data, static_cast<uint8>(DebugType));
+    }
+    else if (const auto* DebugEnum = FindFProperty<FEnumProperty>(Function, TEXT("DebugType")))
+    {
+        DebugEnum->GetUnderlyingProperty()->SetIntPropertyValue(DebugEnum->ContainerPtrToValuePtr<void>(Data),
+            static_cast<uint64>(DebugType));
+    }
+    ProcessEvent(Function, Data);
+    return !CheckFailed->GetPropertyValue_InContainer(Data) && !MontageFailed->GetPropertyValue_InContainer(Data);
 }
 
 DEFINE_FUNCTION(USampleTraversalComponent::execEvaluateTraversalClearance)

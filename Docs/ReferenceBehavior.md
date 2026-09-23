@@ -412,4 +412,15 @@ $script = (Resolve-Path Scripts/migrate_mover_jump.py).Path
 
 The Win64 Editor built and both pawn packages compiled. In `DefaultLevel` PIE, the authored Enhanced Input action produced an unobstructed jump with a 110 cm rise and returned to Walking. From the approach to `LevelBlock_Traversable_C_4`, the same action entered Traversing, advanced 196 cm during the sample, and returned to Walking. The test placed the pawn at the obstacle approach. Multiplayer and the ragdoll-specific jump binding are **Not run**.
 
+### CMC jump and traversal input
+
+The native CMC pawn checks the original default montage slot and builds the ground or air approach at the jump input boundary. It attempts traversal first on press and invokes the normal CMC jump if geometry or montage selection fails. The CMC and Mover paths now use the same adapter to call the authored traversal component.
+
+```powershell
+$script = (Resolve-Path Scripts/migrate_cmc_jump.py).Path
+& $editor $project -run=PythonScript "-script=$script" -Unattended -NullRHI
+```
+
+The Win64 Editor built and the CMC pawn compiled. In `DefaultLevel` PIE, the authored Enhanced Input action jumped 117.5 cm on clear ground and returned to Walking. From the approach to `LevelBlock_Traversable_C_4`, it entered Flying for the vault, moved 195.7 cm, and eventually restored Walking, cleared traversal activity, and restored CMC correction. The test supplied the obstacle approach. Multiplayer and standalone Game are **Not run** for this batch.
+
 See the [Epic sample documentation](https://dev.epicgames.com/documentation/unreal-engine/game-animation-sample-project-in-unreal-engine) for the sample's public controls and architecture.

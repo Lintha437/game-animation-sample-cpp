@@ -106,6 +106,10 @@ public:
     UFUNCTION(BlueprintPure, Category = "Sample|Movement")
     double CalculateMaxCrouchSpeed() const;
 
+    /** @return Whether the character's default montage slot permits a jump or traversal request. */
+    UFUNCTION(BlueprintPure, Category = "Sample|Input")
+    bool CanStartCmcJump() const;
+
 protected:
     /** Binds raw action values and the installed native handlers on local possession. */
     virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
@@ -121,6 +125,10 @@ private:
     /** Enables native intent bindings after the matching Blueprint events are removed. */
     UPROPERTY(EditDefaultsOnly, Category = "Sample|Input")
     bool bUseNativeInputIntentHandlers = false;
+
+    /** Enable after the imported jump and traversal action has been removed. */
+    UPROPERTY(EditDefaultsOnly, Category = "Sample|Input")
+    bool bUseNativeCmcJumpInput = false;
 
     /** @return Walking deceleration in cm/s², with lighter braking while input remains queued. */
     double CalculateBrakingDeceleration() const;
@@ -160,6 +168,19 @@ private:
     /** Authored aim state action. */
     UPROPERTY(EditDefaultsOnly, Category = "Sample|Input")
     TSoftObjectPtr<UInputAction> AimAction;
+
+    /** Authored jump action used for the initial press and held traversal retry. */
+    UPROPERTY(EditDefaultsOnly, Category = "Sample|Input")
+    TSoftObjectPtr<UInputAction> CmcJumpAction{FSoftObjectPath(TEXT("/Game/Input/IA_Jump.IA_Jump"))};
+
+    /** Attempts traversal first and requests the CMC jump if the approach is rejected. */
+    void HandleCmcJumpStarted();
+
+    /** Retries traversal while jump input remains triggered. */
+    void HandleCmcJumpTriggered();
+
+    /** @return Whether the authored traversal component accepted the native CMC approach. */
+    bool TryCmcTraversal(bool bDrawForDuration);
 
     /** Queues camera-relative movement using the authored stick mode. */
     void HandleCameraRelativeMove(const FInputActionValue& Value);

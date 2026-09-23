@@ -32,6 +32,8 @@ Read the movement action values before applying any normalization for fixed-spee
 
 ### Replace existing input handlers
 
+For CMC jump input, keep the authored montage slot gate and attempt traversal before issuing the usual CMC jump. The ground probe scales its reach with forward speed. Falling and flying use the shorter, taller approach. Both movement systems send the native approach to the same traversal component so the original chooser and playback callbacks can consume it.
+
 Bind movement and look on the pawn's local input component during possession. Keep the host's mapping contexts in their existing owner and preserve each action's trigger phase, dead zone and modifiers. If moving an existing Blueprint pawn to native bindings, switch each action's handler at the same time as removing its original event chain. In the editor, verify one callback per trigger phase after possession and after a pawn swap. Test mouse look as a per-update delta and stick look as a turn rate evaluated at several frame rates.
 
 When adapting the sample's input intent for networking, keep one authoritative state and feed the same state to camera and animation consumers. Inspect both the press and release rules on each action. The reference CMC pawn applies intent locally, sends an unreliable snapshot to the server, and replicates the shared state to observers. In the destination, verify press and release under latency and packet loss, especially the final release. Select a delivery rule that matches the destination's movement prediction and correction requirements.
