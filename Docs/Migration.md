@@ -58,6 +58,10 @@ Start skeletal physics before applying an entry impulse. Request the ragdoll mod
 
 Configure the leg body groups with the host Physics Asset's body names. The sample allows the two groups to collide in ragdoll and switches back to its `Free` joint constraint profile when animation drives the mesh. Reuse the obstacle trace only if the host supplies its object channel and neck and foot socket names. The sample sweeps from the neck to the midpoint between the feet, using a 15 cm radius and its authored Obstacle object type.
 
+### Connect CMC ragdoll transitions
+
+The CMC ragdoll hooks stop character movement, disable capsule collision, and simulate the pelvis and its descendants. Recovery restores the sample's pawn mesh and capsule collision settings before normal falling and landing resume. A host with different channel or capsule settings should restore its own policy at this boundary. The CMC ledge callback also clears crouch when leaving walkable ground.
+
 ### Integrate pawn selection with the host GameMode
 
 The sandbox uses `DDCvar.PawnClass` to switch demonstration pawns for everyone in the active world. Keep the production game's existing login, spawn, and restart policies. If the host needs a pawn switch, resolve the permitted class on the authority before restarting the player. Check the spawn location and restore view rotation after possession. Keep any client-facing selection UI separate from the authoritative validation and restart.
