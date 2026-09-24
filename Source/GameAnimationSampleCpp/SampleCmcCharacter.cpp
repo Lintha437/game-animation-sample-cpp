@@ -1,6 +1,7 @@
 #include "SampleCmcCharacter.h"
 
 #include "Animation/AnimInstance.h"
+#include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Curves/CurveFloat.h"
 #include "EnhancedInputComponent.h"
@@ -160,6 +161,57 @@ bool ASampleCmcCharacter::CanStartCmcJump() const
     const USkeletalMeshComponent* SkeletalMesh = GetMesh();
     const UAnimInstance* Anim = SkeletalMesh ? SkeletalMesh->GetAnimInstance() : nullptr;
     return !Anim || !Anim->IsSlotActive(TEXT("DefaultSlot"));
+}
+
+void ASampleCmcCharacter::BeginCmcRagdoll()
+{
+    USkeletalMeshComponent* SkeletalMesh = GetMesh();
+    UCapsuleComponent* Capsule = GetCapsuleComponent();
+    UCharacterMovementComponent* Movement = GetCharacterMovement();
+    if (!SkeletalMesh || !Capsule || !Movement)
+    {
+        return;
+    }
+
+    Movement->SetMovementMode(MOVE_None);
+    SetCmcRagdollFlag(true);
+    Capsule->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    SkeletalMesh->SetCollisionObjectType(ECC_PhysicsBody);
+    SkeletalMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+    SkeletalMesh->SetAllBodiesBelowSimulatePhysics(TEXT("pelvis"), true, true);
+}
+
+void ASampleCmcCharacter::EndCmcRagdoll()
+{
+    USkeletalMeshComponent* SkeletalMesh = GetMesh();
+    UCapsuleComponent* Capsule = GetCapsuleComponent();
+    UCharacterMovementComponent* Movement = GetCharacterMovement();
+    if (!SkeletalMesh || !Capsule || !Movement)
+    {
+        return;
+    }
+
+    SetCmcRagdollFlag(false);
+    Movement->SetMovementMode(MOVE_Falling);
+    Capsule->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+    SkeletalMesh->SetCollisionObjectType(ECC_Pawn);
+    SkeletalMesh->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+    SkeletalMesh->SetAllBodiesSimulatePhysics(false);
+}
+
+void ASampleCmcCharacter::SetCmcRagdollFlag(bool bActive)
+{
+    if (const auto* Rag = FindFProperty<FBoolProperty>(GetClass(), TEXT("IsRagdolling")))
+    {
+        Rag->SetPropertyValue_InContainer(this, bActive);
+    }
+}
+
+void ASampleCmcCharacter::OnWalkingOffLedge_Implementation(const FVector& PreviousFloorImpactNormal,
+    const FVector& PreviousFloorContactNormal, const FVector& PreviousLocation, float TimeDelta)
+{
+    Super::OnWalkingOffLedge_Implementation(PreviousFloorImpactNormal, PreviousFloorContactNormal, PreviousLocation, TimeDelta);
+    UnCrouch();
 }
 
 bool ASampleCmcCharacter::TryCmcTraversal(bool bDrawForDuration)

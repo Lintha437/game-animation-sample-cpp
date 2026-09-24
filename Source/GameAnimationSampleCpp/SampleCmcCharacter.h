@@ -110,9 +110,21 @@ public:
     UFUNCTION(BlueprintPure, Category = "Sample|Input")
     bool CanStartCmcJump() const;
 
+    /** Disables character movement and hands the skeletal bodies below the pelvis to physics. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Movement|Ragdoll")
+    void BeginCmcRagdoll();
+
+    /** Restores the authored capsule and skeletal collision policy and resumes CMC in Falling. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Movement|Ragdoll")
+    void EndCmcRagdoll();
+
 protected:
     /** Binds raw action values and the installed native handlers on local possession. */
     virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
+
+    /** Ends the grounded crouch when CMC leaves a ledge. */
+    virtual void OnWalkingOffLedge_Implementation(const FVector& PreviousFloorImpactNormal,
+        const FVector& PreviousFloorContactNormal, const FVector& PreviousLocation, float TimeDelta) override;
 
 private:
     /**
@@ -181,6 +193,9 @@ private:
 
     /** @return Whether the authored traversal component accepted the native CMC approach. */
     bool TryCmcTraversal(bool bDrawForDuration);
+
+    /** Mirrors the current ragdoll state to the original Blueprint property. */
+    void SetCmcRagdollFlag(bool bActive);
 
     /** Queues camera-relative movement using the authored stick mode. */
     void HandleCameraRelativeMove(const FInputActionValue& Value);
