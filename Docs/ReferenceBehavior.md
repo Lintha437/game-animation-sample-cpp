@@ -423,4 +423,15 @@ $script = (Resolve-Path Scripts/migrate_cmc_jump.py).Path
 
 The Win64 Editor built and the CMC pawn compiled. In `DefaultLevel` PIE, the authored Enhanced Input action jumped 117.5 cm on clear ground and returned to Walking. From the approach to `LevelBlock_Traversable_C_4`, it entered Flying for the vault, moved 195.7 cm, and eventually restored Walking, cleared traversal activity, and restored CMC correction. The test supplied the obstacle approach. Multiplayer and standalone Game are **Not run** for this batch.
 
+### CMC ragdoll and ledge transitions
+
+The original ragdoll functions forward to native CMC entry and recovery. Entry sets movement to None, disables capsule collision, and simulates bodies below the pelvis. Recovery changes the mesh to Pawn and QueryOnly as the source graph does, restores capsule collision, and resumes Falling. The native ledge callback ends crouch.
+
+```powershell
+$script = (Resolve-Path Scripts/migrate_cmc_ragdoll.py).Path
+& $editor $project -run=PythonScript "-script=$script" -Unattended -NullRHI
+```
+
+The Win64 Editor built and the pawn package compiled. In `DefaultLevel` PIE, the original function calls drove Walking, None, Falling, and Walking in order. Pelvis simulation was active only during ragdoll, and recovery restored capsule collision. Calling the ledge callback while crouched returned the pawn to a standing stance. Multiplayer and physical ledge geometry are **Not run** for this batch.
+
 See the [Epic sample documentation](https://dev.epicgames.com/documentation/unreal-engine/game-animation-sample-project-in-unreal-engine) for the sample's public controls and architecture.
