@@ -67,6 +67,17 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
     static bool RemoveIsolatedEventOverride(UBlueprint* Blueprint, UEdGraph* Graph, FName EventName);
 
+    /**
+     * Keeps a Blueprint event or interface entry and replaces its isolated body with a native call.
+     * @param Blueprint Owner of the event graph.
+     * @param Graph Graph containing the event.
+     * @param EventName Existing reflected event name.
+     * @param FunctionName Native function with matching inputs.
+     * @return True when the event forwards to the native function.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
+    static bool ForwardIsolatedEventOverride(UBlueprint* Blueprint, UEdGraph* Graph, FName EventName, FName FunctionName);
+
     /** Removes a declared Blueprint member before its value is moved to a native property. */
     UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
     static bool RemoveDeclaredVariable(UBlueprint* Blueprint, FName VariableName);

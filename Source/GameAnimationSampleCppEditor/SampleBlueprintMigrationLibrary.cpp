@@ -414,6 +414,62 @@ bool USampleBlueprintMigrationLibrary::RemoveIsolatedEventOverride(UBlueprint* B
     return true;
 }
 
+bool USampleBlueprintMigrationLibrary::ForwardIsolatedEventOverride(UBlueprint* Blueprint, UEdGraph* Graph,
+    FName EventName, FName FunctionName)
+{
+    if (!Blueprint || !Blueprint->ParentClass || !Graph || Graph->GetOuter() != Blueprint)
+    {
+        return false;
+    }
+    const UFunction* Function = Blueprint->ParentClass->FindFunctionByName(FunctionName);
+    TArray<UK2Node_Event*> Events;
+    Graph->GetNodesOfClass(Events);
+    const auto* Match = Events.FindByPredicate([&](const UK2Node_Event* Event)
+    {
+        return Event->EventReference.GetMemberName() == EventName;
+    });
+    UK2Node_Event* Event = Match ? *Match : nullptr;
+    UEdGraphPin* Then = Event ? Event->FindPin(UEdGraphSchema_K2::PN_Then, EGPD_Output) : nullptr;
+    UEdGraphNode* First = GetOnlyPeer(Then);
+    if (!Function || !First)
+    {
+        return false;
+    }
+    if (const auto* Existing = Cast<UK2Node_CallFunction>(First);
+        Existing && Existing->FunctionReference.GetMemberName() == FunctionName)
+    {
+        return true;
+    }
+    TSet<UEdGraphNode*> Remove;
+    if (!CollectIsolatedChain(Event, Remove))
+    {
+        return false;
+    }
+    Remove.Remove(Event);
+
+    FGraphNodeCreator<UK2Node_CallFunction> Creator(*Graph);
+    UK2Node_CallFunction* Call = Creator.CreateNode();
+    Call->SetFromFunction(Function);
+    Call->NodePosX = First->NodePosX;
+    Call->NodePosY = First->NodePosY;
+    Creator.Finalize();
+    const UEdGraphSchema* Schema = Graph->GetSchema();
+    for (UEdGraphPin* Pin : Call->Pins)
+    {
+        if (Pin->Direction == EGPD_Input && Pin->PinName != UEdGraphSchema_K2::PN_Self &&
+            Pin->PinType.PinCategory != UEdGraphSchema_K2::PC_Exec)
+        {
+            UEdGraphPin* Input = Event->FindPin(Pin->PinName, EGPD_Output);
+            if (!Input || !Schema->TryCreateConnection(Input, Pin))
+            {
+                return false;
+            }
+        }
+    }
+    RemoveNodes(*Blueprint, *Graph, Remove);
+    return Schema->TryCreateConnection(Then, Call->GetExecPin());
+}
+
 bool USampleBlueprintMigrationLibrary::RemoveDeclaredVariable(UBlueprint* Blueprint, FName VariableName)
 {
     if (!Blueprint || FBlueprintEditorUtils::FindNewVariableIndex(Blueprint, VariableName) == INDEX_NONE)
