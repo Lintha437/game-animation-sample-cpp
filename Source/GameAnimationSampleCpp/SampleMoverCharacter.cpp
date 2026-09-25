@@ -6,6 +6,7 @@
 #include "DefaultMovementSet/CharacterMoverComponent.h"
 #include "DefaultMovementSet/NavMoverComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "DrawDebugLibrary.h"
 #include "EnhancedInputComponent.h"
 #include "Engine/World.h"
 #include "GameplayTagContainer.h"
@@ -104,6 +105,13 @@ namespace
     {
         const auto* Mode = FindFProperty<FBoolProperty>(Pawn.GetClass(), TEXT("TwinStickMode"));
         return Mode && Mode->GetPropertyValue_InContainer(&Pawn);
+    }
+
+    const FArrayProperty* FindMoverTargets(const ASampleMoverCharacter& Pawn)
+    {
+        const auto* Array = FindFProperty<FArrayProperty>(Pawn.GetClass(), TEXT("TargetableActors"));
+        const auto* Inner = Array ? CastField<FObjectPropertyBase>(Array->Inner) : nullptr;
+        return Inner && Inner->PropertyClass == AActor::StaticClass() ? Array : nullptr;
     }
 
     int64 GetPreSimRotationMode(const ASampleMoverCharacter& Pawn)
@@ -356,6 +364,104 @@ uint8 ASampleMoverCharacter::ResolveMoverRotationMode() const
         return AimRotationMode;
     }
     return ReadIntent(State, *this, MoverStrafeIntent) ? StrafeRotationMode : FaceMovement;
+}
+
+void ASampleMoverCharacter::AddMoverTarget(AActor* TargetToAdd)
+{
+    if (const auto* Property = FindMoverTargets(*this))
+    {
+        FScriptArrayHelper Targets(Property, Property->ContainerPtrToValuePtr<void>(this));
+        const auto* Item = CastFieldChecked<FObjectPropertyBase>(Property->Inner);
+        Item->SetObjectPropertyValue(Targets.GetRawPtr(Targets.AddValue()), TargetToAdd);
+    }
+}
+
+void ASampleMoverCharacter::RemoveMoverTarget(AActor* TargetToRemove)
+{
+    if (const auto* Property = FindMoverTargets(*this))
+    {
+        FScriptArrayHelper Targets(Property, Property->ContainerPtrToValuePtr<void>(this));
+        const auto* Item = CastFieldChecked<FObjectPropertyBase>(Property->Inner);
+        for (int32 Index = Targets.Num() - 1; Index >= 0; --Index)
+        {
+            if (Item->GetObjectPropertyValue(Targets.GetRawPtr(Index)) == TargetToRemove)
+            {
+                Targets.RemoveValues(Index, 1);
+            }
+        }
+    }
+}
+
+void ASampleMoverCharacter::UpdateMoverTarget()
+{
+    const auto* Current = FindFProperty<FObjectPropertyBase>(GetClass(), TEXT("TargetedActor"));
+    const auto* Property = FindMoverTargets(*this);
+    if (!Current || !Property)
+    {
+        return;
+    }
+
+    FScriptArrayHelper Targets(Property, Property->ContainerPtrToValuePtr<void>(this));
+    const auto* Item = CastFieldChecked<FObjectPropertyBase>(Property->Inner);
+    const FVector Origin = GetActorLocation();
+    AActor* Nearest = nullptr;
+    double BestDistance = TNumericLimits<double>::Max();
+    for (int32 Index = 0; Index < Targets.Num(); ++Index)
+    {
+        auto* Candidate = Cast<AActor>(Item->GetObjectPropertyValue(Targets.GetRawPtr(Index)));
+        if (!IsValid(Candidate))
+        {
+            continue;
+        }
+        const double Distance = FVector::DistSquared(Origin, Candidate->GetActorLocation());
+        if (Distance < BestDistance)
+        {
+            Nearest = Candidate;
+            BestDistance = Distance;
+        }
+    }
+    Current->SetObjectPropertyValue_InContainer(this, Nearest);
+    if (Nearest)
+    {
+        UDrawDebugLibrary::DrawDebugCone(UDrawDebugLibrary::MakeDebugDrawer(this),
+            Nearest->GetActorLocation() + FVector(0.0, 0.0, 150.0), FRotator(0.0, 0.0, 180.0),
+            FDrawDebugLineStyle(FLinearColor::Red, 1.0f), true, 20.0f, 10.0f, 4);
+    }
+}
+
+void ASampleMoverCharacter::UpdateMoverTwinStick()
+{
+    const auto* Mode = FindFProperty<FBoolProperty>(GetClass(), TEXT("TwinStickMode"));
+    if (!Mode)
+    {
+        return;
+    }
+    const bool bTwinStick = UKismetSystemLibrary::GetConsoleVariableIntValue(TEXT("DDCvar.ControlStyle")) == 1;
+    Mode->SetPropertyValue_InContainer(this, bTwinStick);
+    AController* OwnerController = GetController();
+    if (!bTwinStick || !IsValid(OwnerController))
+    {
+        return;
+    }
+
+    OwnerController->SetControlRotation(FRotator::ZeroRotator);
+    const auto* Aim = FindSnapshot(*this, TEXT("TwinStickAimRotation"));
+    if (Aim && Aim->Struct == TBaseStructure<FRotator>::Get())
+    {
+        const FVector2D Direction = ReadMoverAction(MoverTwinStickAimAction);
+        *Aim->ContainerPtrToValuePtr<FRotator>(this) = Direction.IsNearlyZero(0.1)
+            ? GetActorRotation()
+            : FRotator(0.0, FMath::RadiansToDegrees(FMath::Atan2(Direction.Y, -Direction.X)), 0.0);
+    }
+}
+
+void ASampleMoverCharacter::UpdateMoverAnalogDeflection()
+{
+    const double Current = ReadNumber(GetClass(), this, TEXT("SmoothedAnalogInputAmount"));
+    const double Target = ReadMoverAction(MoverMoveAction).Size();
+    const double Delta = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.0;
+    WriteNumber(GetClass(), this, TEXT("SmoothedAnalogInputAmount"),
+        FMath::FInterpConstantTo(Current, Target, Delta, Target > Current ? 100.0 : 2.0));
 }
 
 bool ASampleMoverCharacter::CanStartMoverTraversal() const

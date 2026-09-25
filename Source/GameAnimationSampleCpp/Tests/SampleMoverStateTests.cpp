@@ -6,6 +6,7 @@
 #include "Engine/Engine.h"
 #include "Engine/EngineBaseTypes.h"
 #include "Engine/LocalPlayer.h"
+#include "Engine/TargetPoint.h"
 #include "Engine/World.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedPlayerInput.h"
@@ -230,10 +231,66 @@ bool FSampleMoverDeviceInputTest::RunTest(const FString& Parameters)
     Apply(TEXT("IA_Move"), FVector2D(0.0, 0.5));
     TestTrue(TEXT("Device move is normalized in the control yaw frame"),
         Pawn->ResolveMoverDirection().Equals(FVector::RightVector));
+    const auto* Analog = FindFProperty<FNumericProperty>(Class, TEXT("SmoothedAnalogInputAmount"));
+    if (TestNotNull(TEXT("Authored deflection snapshot"), Analog))
+    {
+        World->DeltaTimeSeconds = 0.02f;
+        void* Deflection = Analog->ContainerPtrToValuePtr<void>(Pawn);
+        Analog->SetFloatingPointPropertyValue(Deflection, 0.0);
+        Pawn->UpdateMoverAnalogDeflection();
+        TestEqual(TEXT("Rising deflection reaches the device amplitude"), Analog->GetFloatingPointPropertyValue(Deflection), 0.5);
+        Analog->SetFloatingPointPropertyValue(Deflection, 1.0);
+        Pawn->UpdateMoverAnalogDeflection();
+        TestEqual(TEXT("Falling deflection uses the slower rate"), Analog->GetFloatingPointPropertyValue(Deflection), 0.96);
+    }
     Apply(TEXT("IA_Strafe"), true);
     TestEqual(TEXT("Strafe toggles the authored facing mode"), Pawn->ResolveMoverRotationMode(), uint8{1});
     Apply(TEXT("IA_Aim"), true);
     TestEqual(TEXT("Aim takes priority over strafe"), Pawn->ResolveMoverRotationMode(), uint8{2});
+
+    const FVector Origin = Pawn->GetActorLocation();
+    AActor* Far = World->SpawnActor<ATargetPoint>(Origin + FVector(100.0, 0.0, 0.0), FRotator::ZeroRotator);
+    AActor* Near = World->SpawnActor<ATargetPoint>(Origin + FVector(0.0, 40.0, 0.0), FRotator::ZeroRotator);
+    const auto* Target = FindFProperty<FObjectPropertyBase>(Class, TEXT("TargetedActor"));
+    const auto Invoke = [&](FName Event, FName Argument, AActor* Actor)
+    {
+        UFunction* Function = Class->FindFunctionByName(Event);
+        const auto* Parameter = Function ? FindFProperty<FObjectPropertyBase>(Function, Argument) : nullptr;
+        if (TestNotNull(*Event.ToString(), Parameter))
+        {
+            FStructOnScope Args(Function);
+            Parameter->SetObjectPropertyValue_InContainer(Args.GetStructMemory(), Actor);
+            Pawn->ProcessEvent(Function, Args.GetStructMemory());
+        }
+    };
+    if (TestNotNull(TEXT("Near target"), Near) && TestNotNull(TEXT("Far target"), Far) &&
+        TestNotNull(TEXT("Authored target snapshot"), Target))
+    {
+        Invoke(TEXT("AddTarget"), TEXT("TargetToAdd"), Far);
+        Invoke(TEXT("AddTarget"), TEXT("TargetToAdd"), Near);
+        Pawn->UpdateMoverTarget();
+        TestTrue(TEXT("Target interface selects the nearest actor"), Target->GetObjectPropertyValue_InContainer(Pawn) == Near);
+        Invoke(TEXT("RemoveTarget"), TEXT("TargetToRemove"), Near);
+        Pawn->UpdateMoverTarget();
+        TestTrue(TEXT("Removing the nearest actor retargets the next one"), Target->GetObjectPropertyValue_InContainer(Pawn) == Far);
+        Invoke(TEXT("RemoveTarget"), TEXT("TargetToRemove"), Far);
+        Pawn->UpdateMoverTarget();
+        TestNull(TEXT("An empty target list clears the selected actor"), Target->GetObjectPropertyValue_InContainer(Pawn));
+    }
+
+    IConsoleVariable* ControlStyle = IConsoleManager::Get().FindConsoleVariable(TEXT("DDCvar.ControlStyle"));
+    if (TestNotNull(TEXT("Authored control style"), ControlStyle))
+    {
+        const int32 Original = ControlStyle->GetInt();
+        const auto Priority = static_cast<EConsoleVariableFlags>(ControlStyle->GetFlags() & ECVF_SetByMask);
+        ON_SCOPE_EXIT { ControlStyle->Set(Original, Priority); };
+        ControlStyle->Set(1, Priority);
+        Apply(TEXT("IA_TwinStick_AimDirection"), FVector2D(0.0, 1.0));
+        Pawn->UpdateMoverTwinStick();
+        TestTrue(TEXT("Twin-stick resets the control rotation"), Controller->GetControlRotation().IsNearlyZero());
+        TestTrue(TEXT("Twin-stick uses the authored stick axes"),
+            FMath::IsNearlyEqual(Pawn->ResolveAimingRotation().Yaw, 90.0));
+    }
     return true;
 }
 

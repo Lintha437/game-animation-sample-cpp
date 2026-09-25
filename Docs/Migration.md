@@ -46,6 +46,8 @@ Keep the input producer and the simulated snapshot separate. Assemble one comman
 
 Bind the host's Enhanced Input actions during local possession. Sample the bound movement value when producing the command. The sample swaps device axes into the pawn's forward and right axes, rotates the result by control yaw, and includes control pitch in Flying mode. AI consumes its navigation request at the same boundary. Keep the aim, strafe and stance intent fields in the snapshot shared with animation.
 
+Keep targeting registration and facing intent on the owning pawn. The sample's overlap actors use a stable interface to register candidates. The native pawn updates the nearest valid target and exposes it to the same camera and animation readers. When porting twin-stick input, retain the stick axis convention, dead zone, and control-rotation reset. Preserve the analog deflection's faster rise and slower decay when feeding gait.
+
 Route jump presses through the movement mode and traversal gate before publishing a jump edge. The sample builds separate ground and air probes for the traversal asset, which still chooses the montage. A rejected probe can request an uncrouch or publish a one-frame jump edge for prediction. Hold input can retry traversal without publishing additional jump edges. Keep ragdoll recovery tied to confirmed floor contact.
 
 Resolve orientation before finalizing each input command. Preserve stationary aim thresholds, the last facing on a moving base, and the precedence given to root motion. Cache floor contact from the same Mover component used for simulation. Dispatch presentation callbacks only when the finalized mode changes.

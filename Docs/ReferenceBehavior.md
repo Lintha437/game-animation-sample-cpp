@@ -434,4 +434,16 @@ $script = (Resolve-Path Scripts/migrate_cmc_ragdoll.py).Path
 
 The Win64 Editor built and the pawn package compiled. In `DefaultLevel` PIE, the original function calls drove Walking, None, Falling, and Walking in order. Pelvis simulation was active only during ragdoll, and recovery restored capsule collision. Calling the ledge callback while crouched returned the pawn to a standing stance. Multiplayer and physical ledge geometry are **Not run** for this batch.
 
+### Mover targeting and stick updates
+
+The Mover pawn's target interface forwards registration and removal to C++. The native update selects the nearest valid candidate and publishes it to the existing camera and animation readers. The sample's debug marker uses the original cone style. C++ also updates twin-stick aim and the asymmetrically smoothed move deflection from the already bound actions.
+
+```powershell
+$script = (Resolve-Path Scripts/migrate_mover_targeting.py).Path
+& $editor $project -run=PythonScript "-script=$script" -Unattended -NullRHI
+& $editor $project -Unattended -NullRHI '-ExecCmds=Automation RunTests GameAnimationSampleCpp.Migration.MoverDeviceInput' '-TestExit=Automation Test Queue Empty'
+```
+
+The Win64 Editor built and the focused test passed. It verified target registration and removal through the imported interface, nearest-target fallback, the twin-stick heading, and both deflection rates. Rendered marker appearance and multiplayer are **Not run** for this batch.
+
 See the [Epic sample documentation](https://dev.epicgames.com/documentation/unreal-engine/game-animation-sample-project-in-unreal-engine) for the sample's public controls and architecture.

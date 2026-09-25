@@ -94,6 +94,26 @@ public:
     UFUNCTION(BlueprintPure, Category = "Sample|Mover|Input")
     uint8 ResolveMoverRotationMode() const;
 
+    /** Re-evaluates the nearest registered target and updates the sample's target marker. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Input")
+    void UpdateMoverTarget();
+
+    /** Registers an actor with the original target candidate list. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Input")
+    void AddMoverTarget(AActor* TargetToAdd);
+
+    /** Removes every matching entry from the original target candidate list. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Input")
+    void RemoveMoverTarget(AActor* TargetToRemove);
+
+    /** Updates the twin-stick control mode and heading from the current aim action value. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Input")
+    void UpdateMoverTwinStick();
+
+    /** Updates the analog deflection with the authored rise and decay speeds. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Input")
+    void UpdateMoverAnalogDeflection();
+
     /** @return Whether movement and the active montage slot allow a new traversal request. */
     UFUNCTION(BlueprintPure, Category = "Sample|Mover|Input")
     bool CanStartMoverTraversal() const;
