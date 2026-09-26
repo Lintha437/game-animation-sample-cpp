@@ -118,6 +118,9 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Movement|Ragdoll")
     void EndCmcRagdoll();
 
+    /** Replaces the navigation task's input snapshot with the requested walk or run intent. */
+    void ApplyNpcWalkIntent(bool bWalk);
+
 protected:
     /** Binds raw action values and the installed native handlers on local possession. */
     virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;

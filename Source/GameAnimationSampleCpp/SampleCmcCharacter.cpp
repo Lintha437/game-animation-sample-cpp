@@ -383,6 +383,13 @@ void ASampleCmcCharacter::CommitInputIntent(const FSampleCmcInputIntent& Intent)
     }
 }
 
+void ASampleCmcCharacter::ApplyNpcWalkIntent(bool bWalk)
+{
+    FSampleCmcInputIntent Intent;
+    Intent.bWantsToWalk = bWalk;
+    WriteInputIntentSnapshot(Intent);
+}
+
 void ASampleCmcCharacter::ServerCommitInputIntent_Implementation(FSampleCmcInputIntent Intent)
 {
     if (bUseNativeInputIntentHandlers)

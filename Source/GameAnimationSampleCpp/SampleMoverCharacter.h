@@ -114,6 +114,9 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Input")
     void UpdateMoverAnalogDeflection();
 
+    /** Replaces the navigation task's input snapshot with the requested walk or run intent. */
+    void ApplyNpcWalkIntent(bool bWalk);
+
     /** @return Whether movement and the active montage slot allow a new traversal request. */
     UFUNCTION(BlueprintPure, Category = "Sample|Mover|Input")
     bool CanStartMoverTraversal() const;

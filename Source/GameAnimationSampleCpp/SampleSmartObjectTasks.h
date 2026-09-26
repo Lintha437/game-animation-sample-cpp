@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Blueprint/StateTreeConditionBlueprintBase.h"
+#include "Blueprint/StateTreeEvaluatorBlueprintBase.h"
 #include "Blueprint/StateTreeTaskBlueprintBase.h"
 #include "GameFramework/Actor.h"
 #include "SampleSmartObjectTasks.generated.h"
@@ -136,4 +137,27 @@ class GAMEANIMATIONSAMPLECPP_API USampleCheckInteractionCooldownCondition : publ
 
 protected:
     virtual bool TestCondition(FStateTreeExecutionContext& Context) const override;
+};
+
+/** Publishes the AI controller associated with the actor bound to the evaluator. */
+UCLASS(Abstract, Blueprintable)
+class GAMEANIMATIONSAMPLECPP_API USampleNpcControllerEvaluator : public UStateTreeEvaluatorBlueprintBase
+{
+    GENERATED_BODY()
+
+protected:
+    /** Resolves the controller once at StateTree startup and retains the existing output binding. */
+    virtual void TreeStart(FStateTreeExecutionContext& Context) override;
+};
+
+/** Replaces the bound NPC's input snapshot with the StateTree's walk or run request. */
+UCLASS(Abstract, Blueprintable)
+class GAMEANIMATIONSAMPLECPP_API USampleSetNpcInputTask : public UStateTreeTaskBlueprintBase
+{
+    GENERATED_BODY()
+
+protected:
+    /** Applies input without completing the containing navigation state. */
+    virtual EStateTreeRunStatus EnterState(FStateTreeExecutionContext& Context,
+        const FStateTreeTransitionResult& Transition) override;
 };
