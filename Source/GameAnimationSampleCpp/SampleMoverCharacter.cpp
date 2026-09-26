@@ -464,6 +464,15 @@ void ASampleMoverCharacter::UpdateMoverAnalogDeflection()
         FMath::FInterpConstantTo(Current, Target, Delta, Target > Current ? 100.0 : 2.0));
 }
 
+void ASampleMoverCharacter::ApplyNpcWalkIntent(bool bWalk)
+{
+    WriteMoverIntent(*this, MoverWalkIntent, bWalk);
+    WriteMoverIntent(*this, MoverSprintIntent, false);
+    WriteMoverIntent(*this, MoverStrafeIntent, false);
+    WriteMoverIntent(*this, MoverAimIntent, false);
+    WriteMoverIntent(*this, MoverCrouchIntent, false);
+}
+
 bool ASampleMoverCharacter::CanStartMoverTraversal() const
 {
     const auto Mode = static_cast<EAuthoredMovementMode>(ResolveMovementModeValue());

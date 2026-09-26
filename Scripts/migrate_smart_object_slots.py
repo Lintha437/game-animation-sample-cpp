@@ -11,6 +11,8 @@ NPC_ROOT = "/Game/Blueprints/AI/StateTree/TasksAndConditions"
 NATIVE_PACKAGE = "/Script/GameAnimationSampleCpp"
 TASK_PARENT = "/Script/StateTreeModule.StateTreeTaskBlueprintBase"
 CONDITION_PARENT = "/Script/StateTreeModule.StateTreeConditionBlueprintBase"
+EVALUATOR_PARENT = "/Script/StateTreeModule.StateTreeEvaluatorBlueprintBase"
+CONTROLLER_PARENT = "/Script/AIModule.AIController"
 TASKS = {
     f"{ROOT}/STT_FindSmartObject": "SampleFindSmartObjectTask",
     f"{ROOT}/STT_ClaimSlot": "SampleClaimSmartObjectTask",
@@ -22,8 +24,18 @@ TASKS = {
     f"{NPC_ROOT}/STT_ClearFocus": "SampleClearInteractionFocusTask",
     f"{NPC_ROOT}/STT_FindSlotTransforms": "SampleFindSlotTransformTask",
     f"{NPC_ROOT}/STT_CharacterIgnoreCollisionsWithOtherActor": "SampleSetInteractionCollisionTask",
+    f"{NPC_ROOT}/STT_SetCharacterInputState": "SampleSetNpcInputTask",
 }
 CONDITIONS = {f"{ROOT}/STC_CheckCooldown": "SampleCheckInteractionCooldownCondition"}
+EVALUATORS = {f"{ROOT}/STE_GetAIData": "SampleNpcControllerEvaluator"}
+CONTROLLERS = {"/Game/Blueprints/AI/AIC_NPC_SmartObject": "SampleNpcController"}
+
+NODE_GROUPS = (
+    (TASKS, TASK_PARENT, "EventGraph", "ReceiveLatentEnterState"),
+    (CONDITIONS, CONDITION_PARENT, "ReceiveTestCondition", None),
+    (EVALUATORS, EVALUATOR_PARENT, "EventGraph", "ReceiveTreeStart"),
+    (CONTROLLERS, CONTROLLER_PARENT, "EventGraph", "ReceiveBeginPlay"),
+)
 
 
 def migrate():
@@ -34,9 +46,9 @@ def migrate():
     assets = unreal.get_editor_subsystem(unreal.EditorAssetSubsystem)
     dirty = {package.get_name() for package in unreal.EditorLoadingAndSavingUtils.get_dirty_content_packages()}
     pending = []
-    for asset_path, class_name in (TASKS | CONDITIONS).items():
-        is_task = asset_path in TASKS
-        expected_parent = TASK_PARENT if is_task else CONDITION_PARENT
+    nodes = ((path, name, parent, graph, event)
+             for group, parent, graph, event in NODE_GROUPS for path, name in group.items())
+    for asset_path, class_name, expected_parent, graph_name, event in nodes:
         asset = unreal.load_asset(asset_path)
         native = unreal.load_class(None, f"{NATIVE_PACKAGE}.{class_name}")
         current = editor.get_blueprint_parent_class(asset) if asset else None
@@ -46,7 +58,6 @@ def migrate():
             continue
         if current.get_path_name() != expected_parent or asset_path in dirty or not editor.can_reparent_blueprint(asset, native):
             raise RuntimeError(f"Node is dirty or its parent differs from the reference: {asset_path}")
-        graph_name = "EventGraph" if is_task else "ReceiveTestCondition"
         graph = next((graph for graph in editor.list_graphs(asset) if graph.get_name() == graph_name), None)
         if not graph:
             raise RuntimeError(f"No {graph_name} graph for {asset_path}")
@@ -54,17 +65,17 @@ def migrate():
         backup = descriptor.parent / "Saved/BlueprintMigration/SmartObjectSlots" / package.name
         if backup.exists() and backup.read_bytes() != package.read_bytes():
             raise RuntimeError(f"Task backup differs from the current package: {backup}")
-        pending.append((asset, graph, native, package, backup, is_task))
+        pending.append((asset, graph, native, package, backup, event))
 
-    for asset, graph, native, package, backup, is_task in pending:
+    for asset, graph, native, package, backup, event in pending:
         backup.parent.mkdir(parents=True, exist_ok=True)
         if not backup.exists():
             shutil.copy2(package, backup)
-        if is_task:
-            if not unreal.SampleBlueprintMigrationLibrary.remove_isolated_event_override(asset, graph, "ReceiveLatentEnterState"):
-                raise RuntimeError(f"Task has a shared entry graph: {asset.get_path_name()}")
+        if event:
+            if not unreal.SampleBlueprintMigrationLibrary.remove_isolated_event_override(asset, graph, event):
+                raise RuntimeError(f"Cannot isolate the node entry graph: {asset.get_path_name()}")
         else:
-            editor.remove_function_graph(asset, "ReceiveTestCondition")
+            editor.remove_function_graph(asset, graph.get_name())
         editor.reparent_blueprint(asset, native)
         if editor.get_blueprint_parent_class(asset) != native or not editor.compile_blueprint(asset):
             raise RuntimeError(f"Task failed to compile: {asset.get_path_name()}")

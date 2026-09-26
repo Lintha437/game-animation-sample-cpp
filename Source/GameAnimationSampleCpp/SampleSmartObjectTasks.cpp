@@ -1,6 +1,7 @@
 #include "SampleSmartObjectTasks.h"
 
 #include "AIController.h"
+#include "Blueprint/AIBlueprintHelperLibrary.h"
 #include "Components/ActorComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
@@ -8,6 +9,8 @@
 #include "GameplayTask.h"
 #include "Kismet/GameplayStatics.h"
 #include "NavigationSystem.h"
+#include "SampleCmcCharacter.h"
+#include "SampleMoverCharacter.h"
 #include "SmartObjectBlueprintFunctionLibrary.h"
 #include "SmartObjectComponent.h"
 #include "SmartObjectRequestTypes.h"
@@ -370,4 +373,48 @@ bool USampleCheckInteractionCooldownCondition::TestCondition(FStateTreeExecution
         Entries.RemovePair(&Key);
     }
     return true;
+}
+
+void USampleNpcControllerEvaluator::TreeStart(FStateTreeExecutionContext& Context)
+{
+    Super::TreeStart(Context);
+    AAIController* Controller = UAIBlueprintHelperLibrary::GetAIController(ReadActor(*this, TEXT("Actor")));
+    const auto* Output = FindActorProperty(*this, TEXT("AIController"));
+    if (Output && IsValid(Controller) && Controller->IsA(Output->PropertyClass))
+    {
+        Output->SetObjectPropertyValue_InContainer(this, Controller);
+    }
+}
+
+EStateTreeRunStatus USampleSetNpcInputTask::EnterState(FStateTreeExecutionContext& Context,
+    const FStateTreeTransitionResult& Transition)
+{
+    AActor* Actor = ReadActor(*this, TEXT("Character"));
+    const auto* Walk = FindFProperty<FBoolProperty>(GetClass(), TEXT("WantsToWalk"));
+    if (!IsValid(Actor) || !Walk)
+    {
+        return EStateTreeRunStatus::Running;
+    }
+    const bool bWalk = Walk->GetPropertyValue_InContainer(this);
+    if (auto* Cmc = Cast<ASampleCmcCharacter>(Actor))
+    {
+        Cmc->ApplyNpcWalkIntent(bWalk);
+    }
+    else if (auto* Mover = Cast<ASampleMoverCharacter>(Actor))
+    {
+        Mover->ApplyNpcWalkIntent(bWalk);
+    }
+    else if (UFunction* Function = Actor->FindFunction(TEXT("Set_CharacterInputState")))
+    {
+        const auto* State = FindFProperty<FStructProperty>(Function, TEXT("Desired Input State"));
+        const auto* WalkField = State ? FindFProperty<FBoolProperty>(State->Struct,
+            TEXT("WantsToWalk_3_78963B154975E3BDE244A3BE438473E3")) : nullptr;
+        if (WalkField)
+        {
+            FStructOnScope Args(Function);
+            WalkField->SetPropertyValue_InContainer(State->ContainerPtrToValuePtr<void>(Args.GetStructMemory()), bWalk);
+            Actor->ProcessEvent(Function, Args.GetStructMemory());
+        }
+    }
+    return EStateTreeRunStatus::Running;
 }
