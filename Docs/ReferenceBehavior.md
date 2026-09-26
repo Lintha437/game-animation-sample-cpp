@@ -446,4 +446,12 @@ $script = (Resolve-Path Scripts/migrate_mover_targeting.py).Path
 
 The Win64 Editor built and the focused test passed. It verified target registration and removal through the imported interface, nearest-target fallback, the twin-stick heading, and both deflection rates. Rendered marker appearance and multiplayer are **Not run** for this batch.
 
+### NPC startup and input routing
+
+The native AI controller schedules the authored StateTree component with the original two-second or eight-second startup delay. The native evaluator resolves the AI controller from the bound actor. The navigation task writes walk intent to the original CMC or Mover input snapshot and clears the other intents as the authored task did. Other pawn implementations can still receive the original Blueprint interface call.
+
+Re-run `Scripts/migrate_smart_object_slots.py` to install the controller, evaluator, and input task.
+
+The Win64 Editor built and the three migrated assets compiled. In `NPCLevel` PIE, five controllers started their original StateTrees, five evaluators populated their AI controller output, and both CMC and Mover pawns reflected the sampled walk requests. Dedicated-server startup timing and standalone Game are **Not run** for this batch.
+
 See the [Epic sample documentation](https://dev.epicgames.com/documentation/unreal-engine/game-animation-sample-project-in-unreal-engine) for the sample's public controls and architecture.
