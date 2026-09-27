@@ -50,6 +50,8 @@ Keep targeting registration and facing intent on the owning pawn. The sample's o
 
 Route jump presses through the movement mode and traversal gate before publishing a jump edge. The sample builds separate ground and air probes for the traversal asset, which still chooses the montage. A rejected probe can request an uncrouch or publish a one-frame jump edge for prediction. Hold input can retry traversal without publishing additional jump edges. Keep ragdoll recovery tied to confirmed floor contact.
 
+The sample falling mode extends stock Mover air movement with command-driven facing at up to 300 degrees per second. Preserve the custom command's rotation offset and verify the turn after a jump. Its slide transitions enter above 380 cm/s while crouched and exit at or below 200 cm/s or when standing. Keep both thresholds aligned with the destination's authored movement speeds.
+
 Resolve orientation before finalizing each input command. Preserve stationary aim thresholds, the last facing on a moving base, and the precedence given to root motion. Cache floor contact from the same Mover component used for simulation. Dispatch presentation callbacks only when the finalized mode changes.
 
 When adapting a sandbox teleport or reset, update orientation intent alongside the actor transform. Let the host assign the next movement mode through Mover's simulation queue. Verify absolute teleports, relative orientation offsets, and the reset transform independently. Keep the host's authority and prediction policy for any replicated teleport.
