@@ -454,4 +454,15 @@ Re-run `Scripts/migrate_smart_object_slots.py` to install the controller, evalua
 
 The Win64 Editor built and the three migrated assets compiled. In `NPCLevel` PIE, five controllers started their original StateTrees, five evaluators populated their AI controller output, and both CMC and Mover pawns reflected the sampled walk requests. Dedicated-server startup timing and standalone Game are **Not run** for this batch.
 
+### Mover falling and slide transitions
+
+The falling mode keeps the stock linear movement proposal and uses the command's facing and authored offset to calculate angular velocity. The imported assets retain their movement settings and native engine simulation. C++ now evaluates both slide transitions against the original proposed horizontal speed and crouch state.
+
+```powershell
+$script = (Resolve-Path Scripts/migrate_mover_falling_and_transitions.py).Path
+& $editor $project -run=PythonScript "-script=$script" -Unattended -NullRHI
+```
+
+The Win64 Editor built and the three imported assets compiled. In `DefaultLevel` PIE, Enhanced Input jump entered Falling and returned to Walking. The pawn reached 411 cm/s before crouching, entered Sliding, and dropped back to Walking as speed decayed. Isolated air turn rate and multiplayer prediction are **Not run** for this batch.
+
 See the [Epic sample documentation](https://dev.epicgames.com/documentation/unreal-engine/game-animation-sample-project-in-unreal-engine) for the sample's public controls and architecture.
