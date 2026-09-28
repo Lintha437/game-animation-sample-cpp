@@ -52,6 +52,8 @@ Route jump presses through the movement mode and traversal gate before publishin
 
 The sample falling mode extends stock Mover air movement with command-driven facing at up to 300 degrees per second. Preserve the custom command's rotation offset and verify the turn after a jump. Its slide transitions enter above 380 cm/s while crouched and exit at or below 200 cm/s or when standing. Keep both thresholds aligned with the destination's authored movement speeds.
 
+The sample ground modes use the original smooth walking solver. Carry over the walk, run, sprint, and crouch speeds, along with their braking and facing settings. The walking mode preserves the short landing brake window and can align input velocity with the floor. The sliding mode uses a timed entry boost and slope-dependent speed and braking. Keep the mode instance settings with the pawn so changed tuning follows the same simulation path.
+
 Resolve orientation before finalizing each input command. Preserve stationary aim thresholds, the last facing on a moving base, and the precedence given to root motion. Cache floor contact from the same Mover component used for simulation. Dispatch presentation callbacks only when the finalized mode changes.
 
 When adapting a sandbox teleport or reset, update orientation intent alongside the actor transform. Let the host assign the next movement mode through Mover's simulation queue. Verify absolute teleports, relative orientation offsets, and the reset transform independently. Keep the host's authority and prediction policy for any replicated teleport.
