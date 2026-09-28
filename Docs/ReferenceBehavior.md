@@ -465,4 +465,10 @@ $script = (Resolve-Path Scripts/migrate_mover_falling_and_transitions.py).Path
 
 The Win64 Editor built and the three imported assets compiled. In `DefaultLevel` PIE, Enhanced Input jump entered Falling and returned to Walking. The pawn reached 411 cm/s before crouching, entered Sliding, and dropped back to Walking as speed decayed. Isolated air turn rate and multiplayer prediction are **Not run** for this batch.
 
+### Mover walking and sliding
+
+The walking and sliding assets use native smooth-walking subclasses with their existing tuning. Walking selects gait and crouch speed, handles root-motion and slope-relative velocity, and adjusts braking and turn response. Sliding applies the native entry boost and slope tuning while retaining the engine solver. The walking landing flag and slide boost retain their original latent timing.
+
+Run the updated `Scripts/migrate_mover_falling_and_transitions.py` to apply the two ground modes. The Win64 Editor built and both packages compiled. In `DefaultLevel` PIE, sprint used the authored 585 cm/s speed cap. Jump recovery observed the 20,000 cm/s² landing brake and subsequent flag expiry. Sliding entered with its boost, remained active after the boost expired, and returned to Walking. Slope comparisons and multiplayer prediction are **Not run**.
+
 See the [Epic sample documentation](https://dev.epicgames.com/documentation/unreal-engine/game-animation-sample-project-in-unreal-engine) for the sample's public controls and architecture.
