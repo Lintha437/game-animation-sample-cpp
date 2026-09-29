@@ -472,3 +472,9 @@ The walking and sliding assets use native smooth-walking subclasses with their e
 Run the updated `Scripts/migrate_mover_falling_and_transitions.py` to apply the two ground modes. The Win64 Editor built and both packages compiled. In `DefaultLevel` PIE, sprint used the authored 585 cm/s speed cap. Jump recovery observed the 20,000 cm/s² landing brake and subsequent flag expiry. Sliding entered with its boost, remained active after the boost expired, and returned to Walking. Slope comparisons and multiplayer prediction are **Not run**.
 
 See the [Epic sample documentation](https://dev.epicgames.com/documentation/unreal-engine/game-animation-sample-project-in-unreal-engine) for the sample's public controls and architecture.
+
+### Mover flying and ragdoll
+
+The Flying asset retains stock Mover simulation and uses native damping for linear velocity and facing. The Ragdoll asset uses the command's pelvis transform to follow the ragdoll, applies ground clearance from the downward sphere trace, and writes the capsule transform and velocities to the sync state. A missing pelvis snapshot holds the capsule for that step. The original animation assets still drive the recovery pose and get-up.
+
+Run `Scripts/migrate_mover_falling_and_transitions.py` to install both modes. The Win64 Editor built and both assets compiled. In `RagdollLevel` PIE, Enhanced Input moved the pawn in Flying mode. The native Ragdoll mode aligned the capsule horizontally with the pelvis and kept the capsule above it on the floor. Recovery returned to Walking. Flight trajectory comparison and multiplayer prediction are **Not run** for this batch.
