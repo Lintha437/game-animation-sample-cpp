@@ -1,8 +1,10 @@
 #include "SampleMoverModes.h"
 
+#include "Components/SceneComponent.h"
 #include "DefaultMovementSet/CharacterMoverComponent.h"
 #include "Engine/World.h"
 #include "GameplayTagContainer.h"
+#include "Kismet/BlueprintSpringMathLibrary.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "MoveLibrary/MovementUtils.h"
 #include "MoverDataModelTypes.h"
@@ -12,7 +14,11 @@
 
 namespace
 {
-    const FInstancedStruct* FindSampleMoverModeInput(const FMoverDataCollection& Command)
+    const FName LocomotionInputType(TEXT("S_MoverCustomInputs"));
+    const FName RagdollInputType(TEXT("S_MoverCustomInputs_Ragdoll"));
+    const FName RagdollTransformField(TEXT("RagdollTransform_33_5FE542414D593629259855B867DEA655"));
+
+    const FInstancedStruct* FindSampleMoverModeInput(const FMoverDataCollection& Command, FName TypeName = LocomotionInputType)
     {
         for (const TSharedPtr<FMoverDataStructBase>& Data : Command.GetDataArray())
         {
@@ -22,12 +28,20 @@ namespace
             }
             const auto& Snapshot = static_cast<const FMoverUserDefinedDataStruct&>(*Data).StructInstance;
             const UScriptStruct* Type = Snapshot.GetScriptStruct();
-            if (Type && Type->GetFName() == TEXT("S_MoverCustomInputs"))
+            if (Type && Type->GetFName() == TypeName)
             {
                 return &Snapshot;
             }
         }
         return nullptr;
+    }
+
+    const FTransform* FindSampleRagdollModeTransform(const FMoverDataCollection& Command)
+    {
+        const auto* Snapshot = FindSampleMoverModeInput(Command, RagdollInputType);
+        const auto* Field = Snapshot ? FindFProperty<FStructProperty>(Snapshot->GetScriptStruct(), RagdollTransformField) : nullptr;
+        return Field && Field->Struct == TBaseStructure<FTransform>::Get()
+            ? Field->ContainerPtrToValuePtr<FTransform>(Snapshot->GetMemory()) : nullptr;
     }
 
     constexpr int32 MoverLandingWindowAction = 0x4D4F5701;
@@ -282,4 +296,62 @@ void USampleMoverSlidingMode::GenerateWalkMove_Implementation(FMoverTickStartDat
     const FQuat Facing = OffsetSampleMoverFacing(DesiredFacing, CurrentOffset, Input);
     Super::GenerateWalkMove_Implementation(StartState, DeltaSeconds, SimContext, DesiredVelocity, Facing, CurrentFacing,
         InOutAngularVelocityDegrees, InOutVelocity);
+}
+
+void USampleMoverFlyingMode::GenerateFlyingMove_Implementation(FMoverTickStartData& StartState, float DeltaSeconds,
+    const FVector& DesiredVelocity, const FQuat& DesiredFacing, const FQuat& CurrentFacing,
+    FVector& InOutAngularVelocityDegrees, FVector& InOutVelocity)
+{
+    InOutVelocity = UBlueprintSpringMathLibrary::DampVector(InOutVelocity, DesiredVelocity, DeltaSeconds, 0.1f);
+    const FQuat Facing = UBlueprintSpringMathLibrary::DampQuat(CurrentFacing, DesiredFacing, DeltaSeconds);
+    InOutAngularVelocityDegrees = UMovementUtils::ComputeAngularVelocityDegrees(
+        CurrentFacing.Rotator(), Facing.Rotator(), DeltaSeconds);
+}
+
+void USampleMoverRagdollMode::SimulationTick_Implementation(const FSimulationTickParams& Params, FMoverTickEndData& OutputState)
+{
+    OutputState.MovementEndState.RemainingMs = 0.0f;
+    USceneComponent* UpdatedComponent = Params.MovingComps.UpdatedComponent.Get();
+    if (!UpdatedComponent)
+    {
+        return;
+    }
+
+    const auto& Command = Params.StartState.InputCmd.InputCollection;
+    const auto* Pelvis = FindSampleRagdollModeTransform(Command);
+    const auto* Previous = Params.StartState.SyncState.SyncStateCollection.FindDataByType<FMoverDefaultSyncState>();
+    const float DeltaSeconds = Params.TimeStep.StepMs * 0.001f;
+    FVector Velocity = FVector::ZeroVector;
+    FVector AngularVelocity = FVector::ZeroVector;
+
+    if (Pelvis && Previous && DeltaSeconds > 0.0f)
+    {
+        constexpr double TraceDepth = 88.0;
+        constexpr float TraceRadius = 30.0f;
+        constexpr double CapsuleHeightFromGround = 86.0 + 1.9;
+        FVector Location = Pelvis->GetLocation();
+        const int32 Debug = UKismetSystemLibrary::GetConsoleVariableIntValue(TEXT("DDCVar.CharacterPhysics.DrawDebug"));
+        FHitResult Ground;
+        if (UKismetSystemLibrary::SphereTraceSingle(this, Location, Location - FVector(0.0, 0.0, TraceDepth),
+            TraceRadius, UEngineTypes::ConvertToTraceType(ECC_Visibility), false, {},
+            Debug == 1 ? EDrawDebugTrace::ForOneFrame : EDrawDebugTrace::None, Ground, true))
+        {
+            Location.Z += CapsuleHeightFromGround - FMath::Abs(Ground.ImpactPoint.Z - Ground.TraceStart.Z);
+        }
+
+        const auto* Inputs = Command.FindDataByType<FCharacterDefaultInputs>();
+        const FRotator Facing = Inputs ? Inputs->OrientationIntent.Rotation() : FRotator::ZeroRotator;
+        const FVector Delta = Location - Previous->GetLocation_WorldSpace();
+        FHitResult MoveHit;
+        UMovementUtils::TrySafeMoveAndSlideUpdatedComponentNoMovementRecord(
+            Params.MovingComps, Delta, Facing.Quaternion(), false, MoveHit, ETeleportType::None);
+        Velocity = Delta / DeltaSeconds;
+        AngularVelocity = UMovementUtils::ComputeAngularVelocityDegrees(
+            Previous->GetOrientation_WorldSpace(), Facing, DeltaSeconds);
+    }
+
+    auto& State = OutputState.SyncState.SyncStateCollection.FindOrAddMutableDataByType<FMoverDefaultSyncState>();
+    State = FMoverDefaultSyncState();
+    State.SetTransforms_WorldSpace(UpdatedComponent->GetComponentLocation(), UpdatedComponent->GetComponentRotation(),
+        Velocity, AngularVelocity);
 }

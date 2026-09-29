@@ -1,4 +1,4 @@
-"""Reparent the imported air and ground modes and slide transitions to native classes."""
+"""Reparent the imported Mover modes and slide transitions to native classes."""
 
 from pathlib import Path
 import shutil
@@ -14,6 +14,8 @@ MODES = {
     "BP_MovementTransition_FromSlide": ("BaseMovementModeTransition", "SampleMoverExitSlideTransition", "Evaluate"),
     "BP_MovementMode_Walking": ("SmoothWalkingMode", "SampleMoverWalkingMode", "GenerateWalkMove"),
     "BP_MovementMode_Slide": ("SmoothWalkingMode", "SampleMoverSlidingMode", "GenerateWalkMove"),
+    "B_MovementMode_Flying": ("SimpleFlyingMode", "SampleMoverFlyingMode", "GenerateFlyingMove"),
+    "BP_MovementMode_Ragdoll": ("BaseMovementMode", "SampleMoverRagdollMode", "SimulationTick"),
 }
 
 
@@ -42,7 +44,11 @@ def migrate():
         if function not in graphs or (stock == "SmoothWalkingMode" and not event):
             raise RuntimeError(f"The imported movement override is missing: {path}")
         package = descriptor.parent / f"Content/{path.removeprefix('/Game/')}.uasset"
-        group = "MoverGroundModes" if event else "MoverFallingAndTransitions"
+        group = {
+            "SmoothWalkingMode": "MoverGroundModes",
+            "SimpleFlyingMode": "MoverSpecialModes",
+            "BaseMovementMode": "MoverSpecialModes",
+        }.get(stock, "MoverFallingAndTransitions")
         backup = descriptor.parent / "Saved/BlueprintMigration" / group / package.name
         if backup.exists() and backup.read_bytes() != package.read_bytes():
             raise RuntimeError(f"Asset differs from its backup: {backup}")
