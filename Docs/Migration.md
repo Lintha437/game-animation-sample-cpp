@@ -54,6 +54,8 @@ The sample falling mode extends stock Mover air movement with command-driven fac
 
 The sample ground modes use the original smooth walking solver. Carry over the walk, run, sprint, and crouch speeds, along with their braking and facing settings. The walking mode preserves the short landing brake window and can align input velocity with the floor. The sliding mode uses a timed entry boost and slope-dependent speed and braking. Keep the mode instance settings with the pawn so changed tuning follows the same simulation path.
 
+For Flying, keep Mover's stock flight solver and apply the sample's linear and facing damping to its movement proposal. Configure the speed on the mode asset or with the destination's shared movement settings. For Ragdoll, feed the capsule solver a pelvis transform per simulated command. Match the downward sphere trace to the destination's ground collision channel, probe radius, and standing capsule height. Publish the resulting capsule transform without a movement base. A missing snapshot holds the capsule until the next command.
+
 Resolve orientation before finalizing each input command. Preserve stationary aim thresholds, the last facing on a moving base, and the precedence given to root motion. Cache floor contact from the same Mover component used for simulation. Dispatch presentation callbacks only when the finalized mode changes.
 
 When adapting a sandbox teleport or reset, update orientation intent alongside the actor transform. Let the host assign the next movement mode through Mover's simulation queue. Verify absolute teleports, relative orientation offsets, and the reset transform independently. Keep the host's authority and prediction policy for any replicated teleport.

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "DefaultMovementSet/Modes/FallingMode.h"
+#include "DefaultMovementSet/Modes/SimpleFlyingMode.h"
 #include "DefaultMovementSet/Modes/SmoothWalkingMode.h"
 #include "MovementModeTransition.h"
 #include "SampleMoverModes.generated.h"
@@ -89,4 +90,32 @@ private:
 
     UFUNCTION()
     void ClearMoverSlideBoost();
+};
+
+/** Smooths the sample's flight inputs while the stock mode owns movement and collision. */
+UCLASS(Blueprintable)
+class GAMEANIMATIONSAMPLECPP_API USampleMoverFlyingMode : public USimpleFlyingMode
+{
+    GENERATED_BODY()
+
+public:
+    /** Dampens linear velocity and derives angular velocity from the damped facing. */
+    virtual void GenerateFlyingMove_Implementation(FMoverTickStartData& StartState, float DeltaSeconds,
+        const FVector& DesiredVelocity, const FQuat& DesiredFacing, const FQuat& CurrentFacing,
+        FVector& InOutAngularVelocityDegrees, FVector& InOutVelocity) override;
+};
+
+/** Follows the physics-driven pelvis using the ragdoll transform carried by each Mover command. */
+UCLASS(Blueprintable)
+class GAMEANIMATIONSAMPLECPP_API USampleMoverRagdollMode : public UBaseMovementMode
+{
+    GENERATED_BODY()
+
+public:
+    /**
+     * Uses a downward sphere trace to lift the capsule off nearby ground and publishes its
+     * resulting world transform without a movement base. Consumes the full step. If the
+     * command has no ragdoll snapshot, the capsule holds position until the next command.
+     */
+    virtual void SimulationTick_Implementation(const FSimulationTickParams& Params, FMoverTickEndData& OutputState) override;
 };
