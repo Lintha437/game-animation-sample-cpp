@@ -174,6 +174,15 @@ public:
     UFUNCTION(BlueprintPure, Category = "Sample|Mover|Ragdoll")
     bool CanReceiveRagdollCharacterInteraction() const;
 
+    /**
+     * Rebuilds the imported interaction candidates in the initiator's forward arc.
+     * The list is empty when the initiator cannot act. Each accepted pawn is grounded,
+     * within 50 cm vertically, and reachable with the sample capsule profile.
+     * The imported chooser and pose search consume this list for paired animation.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Interaction")
+    void UpdateCharacterInteractionCandidates();
+
     /** Starts physics immediately, queues the Ragdoll mode, and freezes capsule facing briefly. */
     UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Ragdoll")
     void BeginRagdollPhysics();

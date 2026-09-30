@@ -11,6 +11,7 @@
 #include "Engine/World.h"
 #include "GameplayTagContainer.h"
 #include "InputAction.h"
+#include "Kismet/KismetMathLibrary.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "MoveLibrary/FloorQueryUtils.h"
 #include "MoverDataModelTypes.h"
@@ -1004,6 +1005,66 @@ bool ASampleMoverCharacter::CanStartRagdollCharacterInteraction() const
 bool ASampleMoverCharacter::CanReceiveRagdollCharacterInteraction() const
 {
     return ResolveMovementModeValue() == static_cast<uint8>(EAuthoredMovementMode::Grounded);
+}
+
+void ASampleMoverCharacter::UpdateCharacterInteractionCandidates()
+{
+    const auto* Property = FindFProperty<FArrayProperty>(GetClass(), TEXT("InteractableActors"));
+    const auto* Item = Property ? CastField<FObjectPropertyBase>(Property->Inner) : nullptr;
+    if (!Item)
+    {
+        return;
+    }
+
+    FScriptArrayHelper Candidates(Property, Property->ContainerPtrToValuePtr<void>(this));
+    Candidates.EmptyValues();
+    if (!CanStartRagdollCharacterInteraction())
+    {
+        return;
+    }
+
+    constexpr float SearchRadius = 200.0f;
+    constexpr double HeightTolerance = 50.0;
+    constexpr double HalfArcDegrees = 60.0;
+    constexpr float ProbeRadius = 20.0f;
+    constexpr float ProbeHalfHeight = 60.0f;
+    const FTransform Transform = GetActorTransform();
+    const FVector Origin = Transform.GetLocation();
+    TArray<AActor*> Nearby;
+    const TArray<TEnumAsByte<EObjectTypeQuery>> ObjectTypes{ObjectTypeQuery3};
+    UKismetSystemLibrary::SphereOverlapActors(this, Origin, SearchRadius, ObjectTypes,
+        Property->GetOwnerClass(), {this}, Nearby);
+
+    for (AActor* Actor : Nearby)
+    {
+        const auto* Target = Cast<ASampleMoverCharacter>(Actor);
+        if (!IsValid(Target) || !Target->CanReceiveRagdollCharacterInteraction())
+        {
+            continue;
+        }
+
+        const FVector Destination = Target->GetActorLocation();
+        const FRotator RelativeFacing = UKismetMathLibrary::FindRelativeLookAtRotation(Transform, Destination);
+        if (!FMath::IsNearlyEqual(Origin.Z, Destination.Z, HeightTolerance) ||
+            FMath::Abs(RelativeFacing.Yaw) > HalfArcDegrees)
+        {
+            continue;
+        }
+
+        FHitResult Hit;
+        if (UKismetSystemLibrary::CapsuleTraceSingleByProfile(this, Origin, Destination, ProbeRadius,
+            ProbeHalfHeight, CapsuleProfile, false, {Actor}, EDrawDebugTrace::None, Hit, true))
+        {
+            continue;
+        }
+
+        Item->SetObjectPropertyValue(Candidates.GetRawPtr(Candidates.AddValue()), Actor);
+        if (IsPlayerControlled())
+        {
+            UKismetSystemLibrary::DrawDebugSphere(this, Destination + FVector(0.0, 0.0, 20.0), 1.0f,
+                25, FLinearColor::White, 0.0f, 0.5f, EDrawDebugSceneDepthPriorityGroup::Foreground);
+        }
+    }
 }
 
 void ASampleMoverCharacter::BeginRagdollPhysics()

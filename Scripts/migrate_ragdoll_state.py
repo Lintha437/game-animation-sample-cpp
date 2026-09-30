@@ -16,6 +16,7 @@ FORWARDS = {
     "Ragdoll_UpdateGravity": ("UpdateRagdollGravity", "None"),
     "CanDoCharacterInteraction": ("CanStartRagdollCharacterInteraction", "ReturnValue"),
     "CanBeInteractedWith": ("CanReceiveRagdollCharacterInteraction", "ReturnValue"),
+    "CheckForInteractableCharacters": ("UpdateCharacterInteractionCandidates", "None"),
 }
 
 
@@ -42,6 +43,12 @@ def migrate():
     if not FORWARDS.keys() <= graphs.keys():
         raise RuntimeError("The required ragdoll functions differ from the reference.")
 
+    package = descriptor.parent / "Content/Blueprints/SandboxCharacter_Mover_Ragdoll.uasset"
+    backup_root = descriptor.parent / "Saved/BlueprintMigration"
+    # Install over the original package or over a pawn that already has the earlier state hooks.
+    original_backup = backup_root / "RagdollState" / package.name
+    backup = (backup_root / "RagdollInteractionCandidates" / package.name
+              if original_backup.exists() else original_backup)
     migration = unreal.SampleBlueprintMigrationLibrary
     for name, (function, output) in FORWARDS.items():
         if not migration.replace_mover_input_function(asset, graphs[name], function, output):
@@ -50,8 +57,6 @@ def migrate():
         unreal.log("Ragdoll state already migrated.")
         return
 
-    package = descriptor.parent / "Content/Blueprints/SandboxCharacter_Mover_Ragdoll.uasset"
-    backup = descriptor.parent / "Saved/BlueprintMigration/RagdollState" / package.name
     backup.parent.mkdir(parents=True, exist_ok=True)
     if backup.exists() and backup.read_bytes() != package.read_bytes():
         raise RuntimeError(f"The ragdoll backup differs from the current pawn: {backup}")
