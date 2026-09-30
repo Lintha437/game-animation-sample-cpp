@@ -478,3 +478,9 @@ See the [Epic sample documentation](https://dev.epicgames.com/documentation/unre
 The Flying asset retains stock Mover simulation and uses native damping for linear velocity and facing. The Ragdoll asset uses the command's pelvis transform to follow the ragdoll, applies ground clearance from the downward sphere trace, and writes the capsule transform and velocities to the sync state. A missing pelvis snapshot holds the capsule for that step. The original animation assets still drive the recovery pose and get-up.
 
 Run `Scripts/migrate_mover_falling_and_transitions.py` to install both modes. The Win64 Editor built and both assets compiled. In `RagdollLevel` PIE, Enhanced Input moved the pawn in Flying mode. The native Ragdoll mode aligned the capsule horizontally with the pelvis and kept the capsule above it on the floor. Recovery returned to Walking. Flight trajectory comparison and multiplayer prediction are **Not run** for this batch.
+
+### Mover interaction candidates
+
+The ragdoll pawn polls for eligible characters in a 200 cm overlap, checks the 50 cm height tolerance and 60-degree facing half-angle, and rejects blocked paths using the `CharacterCapsule` profile. The resulting actor list still feeds the authored paired pose search and montage logic.
+
+Run `Scripts/migrate_ragdoll_state.py` to forward the imported candidate poll to C++. The Win64 Editor built and the asset compiled. In `RagdollLevel` PIE, the original tick published a nearby forward candidate and cleared the list when the initiator entered Flying. Direct calls also rejected targets behind the pawn, above the height tolerance, and outside the overlap. Blocked-path and paired montage playback comparisons are **Not run** for this batch.
