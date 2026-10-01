@@ -484,3 +484,9 @@ Run `Scripts/migrate_mover_falling_and_transitions.py` to install both modes. Th
 The ragdoll pawn polls for eligible characters in a 200 cm overlap, checks the 50 cm height tolerance and 60-degree facing half-angle, and rejects blocked paths using the `CharacterCapsule` profile. The resulting actor list still feeds the authored paired pose search and montage logic.
 
 Run `Scripts/migrate_ragdoll_state.py` to forward the imported candidate poll to C++. The Win64 Editor built and the asset compiled. In `RagdollLevel` PIE, the original tick published a nearby forward candidate and cleared the list when the initiator entered Flying. Direct calls also rejected targets behind the pawn, above the height tolerance, and outside the overlap. Blocked-path and paired montage playback comparisons are **Not run** for this batch.
+
+### Sandbox obstacles and zero gravity
+
+Run `Scripts/migrate_sandbox_obstacles.py` to install the native initialization and overlap handlers. The three source packages matched the reference project before migration. The installer preserves the authored components and obstacle timelines and saves the previous packages under `Saved/BlueprintMigration/SandboxObstacles/`.
+
+The Win64 Editor built and all three assets compiled. In `RagdollLevel` PIE, both physics obstacles used their path controller as the Mover input producer. All 18 timeline instances matched their configured play rates and loop flags, and each looping instance set to start automatically was playing. Entering the zero-gravity zone set both Mover gravity and the ragdoll multiplier to zero. Exiting restored −980 cm/s² and a multiplier of 1. Exact delayed-start timing and a standalone Game build are **Not run** for this batch.
