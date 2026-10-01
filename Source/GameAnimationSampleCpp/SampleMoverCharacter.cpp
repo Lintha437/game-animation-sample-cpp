@@ -993,6 +993,17 @@ void ASampleMoverCharacter::UpdateRagdollGravity()
     }
 }
 
+void ASampleMoverCharacter::ApplySandboxZeroGravity(bool bEnabled)
+{
+    const auto* Gravity = FindFProperty<FNumericProperty>(GetClass(), TEXT("Ragdoll_GravityMultiplier"));
+    auto* Mover = FindComponentByClass<UCharacterMoverComponent>();
+    if (Mover && Gravity && Gravity->IsFloatingPoint())
+    {
+        Mover->SetGravityOverride(bEnabled, FVector::ZeroVector);
+        Gravity->SetFloatingPointPropertyValue(Gravity->ContainerPtrToValuePtr<void>(this), bEnabled ? 0.0 : 1.0);
+    }
+}
+
 bool ASampleMoverCharacter::CanStartRagdollCharacterInteraction() const
 {
     const USkeletalMeshComponent* Mesh = GetRagdollMesh(*this);

@@ -166,6 +166,9 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Ragdoll")
     void UpdateRagdollGravity();
 
+    /** Toggles both movement and ragdoll gravity on pawns with the sample's ragdoll settings. */
+    void ApplySandboxZeroGravity(bool bEnabled);
+
     /** @return Whether this grounded pawn can start an interaction given its aim intent and active montage slot. */
     UFUNCTION(BlueprintPure, Category = "Sample|Mover|Ragdoll")
     bool CanStartRagdollCharacterInteraction() const;
