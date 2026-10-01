@@ -114,6 +114,10 @@ The Smart Object use step dispatches the engine's Gameplay Interaction AI task f
 
 For player interactions, configure the StateTree and matching payload type on the interaction component. Supply the player interaction gameplay tag and register interactable world geometry on the query's object type. The request accepts the nearest free slot within 300 cm from the object's front side. Keep the playback-cancellation gate tied to accepted requests and retain the StateTree's claim step to handle contention between search and use.
 
+## Port sandbox obstacles
+
+Keep each obstacle's authored mesh, collision, and movement curve on its asset. For physics obstacles, connect the path controller to Mover as the input producer and carry over the destination's simulation settings. For timeline obstacles, preserve the same curve length, reciprocal duration, looping, and startup delay. For the zero-gravity zone, update both Mover gravity and the ragdoll physics multiplier on overlap. The sample restores its default gravity on exit. A host with stacked gravity zones should route these events through its existing gravity owner.
+
 ## Bring in licensed animation data
 
 When using the Epic sample assets, acquire the sample under the applicable terms. In a scratch branch of the destination project, use Content Browser → Asset Actions → Migrate, review Asset Report dependencies, and target the destination's `Content/` directory. Review package name conflicts before accepting an overwrite. Preserve referenced package paths and enable required plugins for each migrated feature. For instance, a Motion Matching graph needs Pose Search assets and may also depend on Chooser, Motion Warping, Animation Warping, and Control Rig.
