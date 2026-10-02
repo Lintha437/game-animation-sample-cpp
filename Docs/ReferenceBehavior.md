@@ -490,3 +490,9 @@ Run `Scripts/migrate_ragdoll_state.py` to forward the imported candidate poll to
 Run `Scripts/migrate_sandbox_obstacles.py` to install the native initialization and overlap handlers. The three source packages matched the reference project before migration. The installer preserves the authored components and obstacle timelines and saves the previous packages under `Saved/BlueprintMigration/SandboxObstacles/`.
 
 The Win64 Editor built and all three assets compiled. In `RagdollLevel` PIE, both physics obstacles used their path controller as the Mover input producer. All 18 timeline instances matched their configured play rates and loop flags, and each looping instance set to start automatically was playing. Entering the zero-gravity zone set both Mover gravity and the ragdoll multiplier to zero. Exiting restored −980 cm/s² and a multiplier of 1. Exact delayed-start timing and a standalone Game build are **Not run** for this batch.
+
+### Intra-level teleporters and targeting dummies
+
+Run `Scripts/migrate_sandbox_fixtures.py` to install the native actors while retaining the imported meshes, trigger shapes, and instance references. The source packages matched the reference project. A missing destination leaves overlap travel idle and produces the missing-destination label.
+
+The Win64 Editor unity build passed. All three migrated assets and the dependent level button compiled. In `DefaultLevel` PIE, all 15 senders had a destination. The tested sender displayed its configured label and moved the pawn to the exact arrival location with yaw unchanged. Entering and leaving the tested dummy trigger added and removed it from the Mover pawn's candidate list. Visual material comparison, networked teleport, and standalone Game are **Not run** for this batch.
