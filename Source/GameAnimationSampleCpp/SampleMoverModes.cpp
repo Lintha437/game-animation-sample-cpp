@@ -16,7 +16,7 @@ namespace
 {
     const FName LocomotionInputType(TEXT("S_MoverCustomInputs"));
     const FName RagdollInputType(TEXT("S_MoverCustomInputs_Ragdoll"));
-    const FName RagdollTransformField(TEXT("RagdollTransform_33_5FE542414D593629259855B867DEA655"));
+    const FName RagdollModeTransformField(TEXT("RagdollTransform_33_5FE542414D593629259855B867DEA655"));
 
     const FInstancedStruct* FindSampleMoverModeInput(const FMoverDataCollection& Command, FName TypeName = LocomotionInputType)
     {
@@ -39,7 +39,7 @@ namespace
     const FTransform* FindSampleRagdollModeTransform(const FMoverDataCollection& Command)
     {
         const auto* Snapshot = FindSampleMoverModeInput(Command, RagdollInputType);
-        const auto* Field = Snapshot ? FindFProperty<FStructProperty>(Snapshot->GetScriptStruct(), RagdollTransformField) : nullptr;
+        const auto* Field = Snapshot ? FindFProperty<FStructProperty>(Snapshot->GetScriptStruct(), RagdollModeTransformField) : nullptr;
         return Field && Field->Struct == TBaseStructure<FTransform>::Get()
             ? Field->ContainerPtrToValuePtr<FTransform>(Snapshot->GetMemory()) : nullptr;
     }
