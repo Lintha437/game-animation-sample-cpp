@@ -1,4 +1,4 @@
-"""Install native intra-level teleporters and the sandbox targeting dummy."""
+"""Install the native sandbox teleporters, targeting dummy, and level button."""
 
 from hashlib import sha256
 from pathlib import Path
@@ -16,6 +16,7 @@ FIXTURES = {
     "Teleporter_Destination": (
         "SampleTeleporterDestination", "c0843323cda8d08d32cfe1c8d3a6830e02b3495b93639e97dae64ed3732d7279"
     ),
+    "LevelButton": ("SampleLevelButton", "e3412979c50c306de435b6e10cbc579c1a89d954c55f6502c509989fc15c5928"),
 }
 
 
@@ -45,23 +46,20 @@ def migrate():
         backup = descriptor.parent / "Saved/BlueprintMigration/SandboxFixtures" / package.name
         if backup.exists() and sha256(backup.read_bytes()).hexdigest() != digest:
             raise RuntimeError(f"The fixture backup differs from the reference: {backup}")
-        pending.append((asset, native, package, backup))
+        pending.append((name, asset, native, package, backup))
 
-    for asset, native, package, backup in pending:
+    for name, asset, native, package, backup in pending:
         backup.parent.mkdir(parents=True, exist_ok=True)
         if not backup.exists():
             shutil.copy2(package, backup)
         for graph in editor.list_graphs(asset):
-            editor.remove_graph(asset, graph)
+            if (name, graph.get_name()) != ("LevelButton", "ButtonPressed"):
+                editor.remove_graph(asset, graph)
         editor.reparent_blueprint(asset, native)
         if editor.get_blueprint_parent_class(asset) != native or not editor.compile_blueprint(asset):
             raise RuntimeError(f"The fixture failed to compile: {asset.get_path_name()}")
 
-    if pending:
-        button = unreal.load_asset(f"{ROOT}/LevelButton")
-        if not button or not editor.compile_blueprint(button):
-            raise RuntimeError("The level button could not resolve the inherited sender functions.")
-    for asset, _, _, _ in pending:
+    for _, asset, _, _, _ in pending:
         if not assets.save_loaded_asset(asset, only_if_is_dirty=False):
             raise RuntimeError(f"Could not save the fixture: {asset.get_path_name()}")
     unreal.log("Native sandbox fixtures installed." if pending else "Sandbox fixtures already migrated.")

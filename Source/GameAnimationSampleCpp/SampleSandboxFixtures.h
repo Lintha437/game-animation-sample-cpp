@@ -73,3 +73,31 @@ private:
     /** Calls the Blueprint interface while preserving any implementation supplied by the receiver. */
     void NotifyTargetReceiver(AActor* OtherActor, FName FunctionName);
 };
+
+/** Dispatches a level button's authored action and debounces physical overlap presses. */
+UCLASS(Blueprintable)
+class GAMEANIMATIONSAMPLECPP_API ASampleLevelButton : public AActor
+{
+    GENERATED_BODY()
+
+public:
+    /**
+     * Broadcasts the existing ButtonPressed delegate, then dispatches the configured command
+     * when enabled. Explicit presses bypass the overlap cooldown.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Button")
+    void SimulatePress();
+
+protected:
+    /** Applies the per-instance text, material color, and plate scale. */
+    virtual void OnConstruction(const FTransform& Transform) override;
+    virtual void PostInitializeComponents() override;
+
+private:
+    UFUNCTION()
+    void OnTriggerEntered(UPrimitiveComponent* Trigger, AActor* OtherActor, UPrimitiveComponent* OtherComponent,
+        int32 BodyIndex, bool bFromSweep, const FHitResult& Sweep);
+
+    /** Owns the overlap-only cooldown in world time. Further overlaps do not extend it. */
+    double NextOverlapPressTime = 0.0;
+};

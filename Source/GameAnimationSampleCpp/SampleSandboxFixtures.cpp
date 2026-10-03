@@ -4,6 +4,7 @@
 #include "Components/TextRenderComponent.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "Kismet/KismetSystemLibrary.h"
 #include "UObject/StructOnScope.h"
 #include "UObject/UnrealType.h"
 
@@ -198,6 +199,69 @@ void ASampleTargetDummy::NotifyTargetReceiver(AActor* OtherActor, FName Function
                 OtherActor->ProcessEvent(Function, Parameters.GetStructMemory());
                 return;
             }
+        }
+    }
+}
+
+void ASampleLevelButton::OnConstruction(const FTransform& Transform)
+{
+    Super::OnConstruction(Transform);
+    if (auto* Label = ReadFixtureObject<UTextRenderComponent>(*this, TEXT("Name")))
+    {
+        Label->SetText(ReadFixtureText(*this, TEXT("ButtonName")));
+        const auto* TextColor = FindFProperty<FStructProperty>(GetClass(), TEXT("TextColor"));
+        if (TextColor && TextColor->Struct == TBaseStructure<FLinearColor>::Get())
+        {
+            Label->SetTextRenderColor(TextColor->ContainerPtrToValuePtr<FLinearColor>(this)->ToFColor(false));
+        }
+    }
+    UpdateFixtureColor(*this, TEXT("Plate"), ReadFixtureColor(*this));
+    if (auto* Plate = ReadFixtureObject<USceneComponent>(*this, TEXT("Plate")))
+    {
+        Plate->SetWorldScale3D(ReadFixturePlateScale(*this));
+    }
+}
+
+void ASampleLevelButton::PostInitializeComponents()
+{
+    Super::PostInitializeComponents();
+    if (auto* Trigger = ReadFixtureObject<UPrimitiveComponent>(*this, TEXT("Trigger")))
+    {
+        Trigger->OnComponentBeginOverlap.AddUniqueDynamic(this, &ASampleLevelButton::OnTriggerEntered);
+    }
+}
+
+void ASampleLevelButton::OnTriggerEntered(UPrimitiveComponent* Trigger, AActor* OtherActor,
+    UPrimitiveComponent* OtherComponent, int32 BodyIndex, bool bFromSweep, const FHitResult& Sweep)
+{
+    constexpr double Cooldown = 0.2;
+    const double Now = GetWorld()->GetTimeSeconds();
+    if (Now >= NextOverlapPressTime)
+    {
+        NextOverlapPressTime = Now + Cooldown;
+        SimulatePress();
+    }
+}
+
+void ASampleLevelButton::SimulatePress()
+{
+    const auto* Event = FindFProperty<FMulticastDelegateProperty>(GetClass(), TEXT("ButtonPressed"));
+    if (Event && Event->SignatureFunction && Event->SignatureFunction->NumParms == 0)
+    {
+        if (const auto* Delegate = Event->GetMulticastDelegate(Event->ContainerPtrToValuePtr<void>(this)))
+        {
+            Delegate->ProcessDelegate<UObject>(nullptr);
+        }
+    }
+
+    const auto* Enabled = FindFProperty<FBoolProperty>(GetClass(), TEXT("ExecuteConsoleCommand"));
+    const auto* Command = FindFProperty<FStrProperty>(GetClass(), TEXT("ConsoleCommand"));
+    if (IsValid(this) && Enabled && Enabled->GetPropertyValue_InContainer(this) && Command)
+    {
+        const FString Value = Command->GetPropertyValue_InContainer(this);
+        if (!Value.IsEmpty())
+        {
+            UKismetSystemLibrary::ExecuteConsoleCommand(this, Value, nullptr);
         }
     }
 }
