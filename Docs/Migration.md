@@ -120,6 +120,8 @@ Keep each obstacle's authored mesh, collision, and movement curve on its asset. 
 
 For an intra-level portal, bind the sender trigger to the destination's arrival component. Preserve the entering actor's rotation and let Unreal resolve collision at the arrival point. If a level designer moves or edits a destination, refresh the linked senders' labels, colors, facing, and plate widths. For targeting dummies, route both overlap edges through the host's target receiver interface so the owning pawn can add and remove candidates.
 
+When porting a sandbox button, bind its press delegate or replace its authored console command with the destination's gameplay action. Trigger overlaps share a 0.2-second cooldown per actor. Explicit presses dispatch immediately. Keep level bindings to the button's delegate when replacing the overlap handler.
+
 ## Bring in licensed animation data
 
 When using the Epic sample assets, acquire the sample under the applicable terms. In a scratch branch of the destination project, use Content Browser → Asset Actions → Migrate, review Asset Report dependencies, and target the destination's `Content/` directory. Review package name conflicts before accepting an overwrite. Preserve referenced package paths and enable required plugins for each migrated feature. For instance, a Motion Matching graph needs Pose Search assets and may also depend on Chooser, Motion Warping, Animation Warping, and Control Rig.
