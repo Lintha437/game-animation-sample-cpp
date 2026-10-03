@@ -496,3 +496,9 @@ The Win64 Editor built and all three assets compiled. In `RagdollLevel` PIE, bot
 Run `Scripts/migrate_sandbox_fixtures.py` to install the native actors while retaining the imported meshes, trigger shapes, and instance references. The source packages matched the reference project. A missing destination leaves overlap travel idle and produces the missing-destination label.
 
 The Win64 Editor unity build passed. All three migrated assets and the dependent level button compiled. In `DefaultLevel` PIE, all 15 senders had a destination. The tested sender displayed its configured label and moved the pawn to the exact arrival location with yaw unchanged. Entering and leaving the tested dummy trigger added and removed it from the Mover pawn's candidate list. Visual material comparison, networked teleport, and standalone Game are **Not run** for this batch.
+
+### Sandbox level button
+
+The fixture installer moves the level button's construction settings, overlap cooldown, manual press, and console-command dispatch to C++. It preserves the authored `ButtonPressed` delegate and instance settings for existing level bindings.
+
+The Win64 Editor unity build passed, and the imported button compiled. In `DefaultLevel` PIE, two immediate overlaps emitted one delegate broadcast, the enabled command updated a test console variable, and a manual press still broadcast during the cooldown. A later overlap broadcast again after the cooldown. The test restored the console variable and removed its temporary listener. Multiplayer and standalone Game are **Not run**.
