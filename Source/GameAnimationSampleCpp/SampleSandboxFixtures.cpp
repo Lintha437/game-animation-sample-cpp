@@ -49,6 +49,21 @@ namespace
             Mesh->SetVectorParameterValueOnMaterials(TEXT("Base Color"), Color);
         }
     }
+
+    const FTransform* ReadBlockTransform(const AActor& Owner, FName Name)
+    {
+        const auto* Field = FindFProperty<FStructProperty>(Owner.GetClass(), Name);
+        return Field && Field->Struct == TBaseStructure<FTransform>::Get()
+            ? Field->ContainerPtrToValuePtr<FTransform>(&Owner) : nullptr;
+    }
+
+    FVector SampleBlockVector(const FVector& Min, const FVector& Max)
+    {
+        const double X = FMath::FRandRange(Min.X, Max.X);
+        const double Y = FMath::FRandRange(Min.Y, Max.Y);
+        const double Z = FMath::FRandRange(Min.Z, Max.Z);
+        return FVector(X, Y, Z);
+    }
 }
 
 ASampleTeleporterDestination* ASampleTeleporterSender::GetDestination() const
@@ -263,5 +278,57 @@ void ASampleLevelButton::SimulatePress()
         {
             UKismetSystemLibrary::ExecuteConsoleCommand(this, Value, nullptr);
         }
+    }
+}
+
+void ASampleLevelBlock::RandomizeBlockOffset()
+{
+    const auto* Initial = ReadBlockTransform(*this, TEXT("InitialTransform"));
+    const auto* Min = ReadBlockTransform(*this, TEXT("MinTransformOffset"));
+    const auto* Max = ReadBlockTransform(*this, TEXT("MaxTransformOffset"));
+    if (!Initial || !Min || !Max)
+    {
+        return;
+    }
+
+    const FVector Location = SampleBlockVector(Min->GetLocation(), Max->GetLocation());
+    const FRotator MinRotation = Min->Rotator();
+    const FRotator MaxRotation = Max->Rotator();
+    const double Roll = FMath::FRandRange(MinRotation.Roll, MaxRotation.Roll);
+    const double Pitch = FMath::FRandRange(MinRotation.Pitch, MaxRotation.Pitch);
+    const double Yaw = FMath::FRandRange(MinRotation.Yaw, MaxRotation.Yaw);
+    const FVector Scale = Initial->GetScale3D() + SampleBlockVector(Min->GetScale3D(), Max->GetScale3D());
+    SetActorTransform(*Initial);
+    AddActorLocalTransform(FTransform(FRotator(Pitch, Yaw, Roll), Location, Scale));
+    RefreshBlockText();
+}
+
+void ASampleLevelBlock::ResetBlockOffset()
+{
+    if (const auto* Initial = ReadBlockTransform(*this, TEXT("InitialTransform")))
+    {
+        SetActorTransform(*Initial);
+        RefreshBlockText();
+    }
+}
+
+void ASampleLevelBlock::RefreshBlockText()
+{
+    auto* Label = ReadFixtureObject<UTextRenderComponent>(*this, TEXT("TextRender"));
+    if (!Label)
+    {
+        return;
+    }
+
+    const auto* AutoName = FindFProperty<FBoolProperty>(GetClass(), TEXT("AutoNameFromHeight"));
+    if (AutoName && AutoName->GetPropertyValue_InContainer(this))
+    {
+        const FNumberFormattingOptions Format = FNumberFormattingOptions().SetMaximumFractionalDigits(2);
+        Label->SetText(FText::Format(NSLOCTEXT("SampleLevelBlock", "HeightLabel", "{0} M"),
+            FText::AsNumber(GetActorScale3D().Z, &Format)));
+    }
+    else
+    {
+        Label->SetText(ReadFixtureText(*this, TEXT("Name")));
     }
 }
