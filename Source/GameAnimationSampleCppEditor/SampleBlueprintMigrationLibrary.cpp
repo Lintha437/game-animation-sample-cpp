@@ -426,6 +426,10 @@ bool USampleBlueprintMigrationLibrary::ForwardIsolatedEventOverride(UBlueprint* 
     Graph->GetNodesOfClass(Events);
     const auto* Match = Events.FindByPredicate([&](const UK2Node_Event* Event)
     {
+        if (const auto* CustomEvent = Cast<UK2Node_CustomEvent>(Event))
+        {
+            return CustomEvent->CustomFunctionName == EventName;
+        }
         return Event->EventReference.GetMemberName() == EventName;
     });
     UK2Node_Event* Event = Match ? *Match : nullptr;

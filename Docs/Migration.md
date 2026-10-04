@@ -122,6 +122,8 @@ For an intra-level portal, bind the sender trigger to the destination's arrival 
 
 When porting a sandbox button, bind its press delegate or replace its authored console command with the destination's gameplay action. Trigger overlaps share a 0.2-second cooldown per actor. Explicit presses dispatch immediately. Keep level bindings to the button's delegate when replacing the overlap handler.
 
+For a randomized test obstacle, capture its starting transform during setup. Sample the authored translation, rotation, and scale ranges in actor-local space and reapply each result from that baseline. Restore the same baseline on reset, and update any height label after movement so it reflects the obstacle's current scale.
+
 ## Bring in licensed animation data
 
 When using the Epic sample assets, acquire the sample under the applicable terms. In a scratch branch of the destination project, use Content Browser → Asset Actions → Migrate, review Asset Report dependencies, and target the destination's `Content/` directory. Review package name conflicts before accepting an overwrite. Preserve referenced package paths and enable required plugins for each migrated feature. For instance, a Motion Matching graph needs Pose Search assets and may also depend on Chooser, Motion Warping, Animation Warping, and Control Rig.
