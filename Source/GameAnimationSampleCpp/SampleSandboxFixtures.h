@@ -101,3 +101,23 @@ private:
     /** Owns the overlap-only cooldown in world time. Further overlaps do not extend it. */
     double NextOverlapPressTime = 0.0;
 };
+
+/** Moves a sandbox block relative to the authored starting transform. */
+UCLASS(Blueprintable)
+class GAMEANIMATIONSAMPLECPP_API ASampleLevelBlock : public AActor
+{
+    GENERATED_BODY()
+
+public:
+    /** Samples the configured translation, rotation, and scale offsets from the starting transform. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Level Block")
+    void RandomizeBlockOffset();
+
+    /** Restores the construction-time transform and refreshes the height label. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Level Block")
+    void ResetBlockOffset();
+
+    /** Uses the configured label or the current block height in meters. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Level Block")
+    void RefreshBlockText();
+};

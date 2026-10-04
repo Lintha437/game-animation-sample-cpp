@@ -502,3 +502,9 @@ The Win64 Editor unity build passed. All three migrated assets and the dependent
 The fixture installer moves the level button's construction settings, overlap cooldown, manual press, and console-command dispatch to C++. It preserves the authored `ButtonPressed` delegate and instance settings for existing level bindings.
 
 The Win64 Editor unity build passed, and the imported button compiled. In `DefaultLevel` PIE, two immediate overlaps emitted one delegate broadcast, the enabled command updated a test console variable, and a manual press still broadcast during the cooldown. A later overlap broadcast again after the cooldown. The test restored the console variable and removed its temporary listener. Multiplayer and standalone Game are **Not run**.
+
+### Sandbox block offsets
+
+Run `Scripts/migrate_sandbox_block.py` to forward the existing randomize, reset, and text entry points to C++. The installer preserves the authored offset ranges, button binding, material selection, and traversal child assets.
+
+The Win64 Editor unity build passed and the imported block compiled. `DefaultLevel` PIE found 61 instances of the native block or its Blueprint subclasses. On the tested block, the original randomize event applied a fixed 35 cm test offset without accumulating it across presses. The original reset event restored the starting location. The native label displayed `2.5 M` for a scale of 2.5. No blocks in that level had a randomize button assigned during the run. A bound-button level and standalone Game are **Not run**.
