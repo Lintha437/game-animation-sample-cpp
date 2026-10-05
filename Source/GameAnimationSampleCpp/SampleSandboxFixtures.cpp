@@ -1,10 +1,14 @@
 #include "SampleSandboxFixtures.h"
 
 #include "Components/MeshComponent.h"
+#include "Components/DecalComponent.h"
+#include "Components/ExponentialHeightFogComponent.h"
 #include "Components/TextRenderComponent.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "LandscapeProxy.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "UObject/StructOnScope.h"
 #include "UObject/UnrealType.h"
 
@@ -63,6 +67,45 @@ namespace
         const double Y = FMath::FRandRange(Min.Y, Max.Y);
         const double Z = FMath::FRandRange(Min.Z, Max.Z);
         return FVector(X, Y, Z);
+    }
+
+    template <typename T>
+    T ReadStyleValue(const UStruct& Type, const void* Data, FName Name, const T& Default)
+    {
+        const auto* Field = FindFProperty<FStructProperty>(&Type, Name);
+        return Field && Field->Struct == TBaseStructure<T>::Get() ? *Field->ContainerPtrToValuePtr<T>(Data) : Default;
+    }
+
+    float ReadStyleNumber(const UStruct& Type, const void* Data, FName Name)
+    {
+        const auto* Field = FindFProperty<FNumericProperty>(&Type, Name);
+        return Field && Field->IsFloatingPoint()
+            ? Field->GetFloatingPointPropertyValue(Field->ContainerPtrToValuePtr<void>(Data)) : 0.0f;
+    }
+
+    struct FSampleGridMaterialParameters
+    {
+        FLinearColor GridColor;
+        FLinearColor SurfaceColor;
+        FVector GridSizes;
+        float Specularity;
+    };
+
+    FSampleGridMaterialParameters ReadGridMaterialParameters(const UScriptStruct& Type, const void* Values)
+    {
+        return {
+            ReadStyleValue(Type, Values, TEXT("GridColor_2_93C9D1544CE9BC2796D83F9E713DAB23"), FLinearColor::Black),
+            ReadStyleValue(Type, Values, TEXT("SurfaceColor_4_9B668B134E34B8A2B41BB98E51273395"), FLinearColor::Black),
+            ReadStyleValue(Type, Values, TEXT("GridSizes_16_782DDA9B42440FAB466A829B7C2E5482"), FVector::ZeroVector),
+            ReadStyleNumber(Type, Values, TEXT("Specularity_21_1B077FB34A0BA551F2D806BF119B8EA8"))
+        };
+    }
+
+    FMulticastScriptDelegate* FindFixtureButtonDelegate(ASampleLevelButton& Button)
+    {
+        const auto* Field = FindFProperty<FMulticastInlineDelegateProperty>(Button.GetClass(), TEXT("ButtonPressed"));
+        return Field && Field->SignatureFunction && Field->SignatureFunction->NumParms == 0
+            ? Field->ContainerPtrToValuePtr<FMulticastScriptDelegate>(&Button) : nullptr;
     }
 }
 
@@ -330,5 +373,208 @@ void ASampleLevelBlock::RefreshBlockText()
     else
     {
         Label->SetText(ReadFixtureText(*this, TEXT("Name")));
+    }
+}
+
+void ASampleLevelBlock::OnConstruction(const FTransform& Transform)
+{
+    Super::OnConstruction(Transform);
+    if (auto* Mesh = ReadFixtureObject<UPrimitiveComponent>(*this, TEXT("StaticMesh")))
+    {
+        auto* Base = ReadFixtureObject<UMaterialInterface>(*this, TEXT("BaseMaterial"));
+        if (const auto* Field = FindFProperty<FObjectPropertyBase>(GetClass(), TEXT("DynamicMaterial")))
+        {
+            Field->SetObjectPropertyValue_InContainer(this, Mesh->CreateDynamicMaterialInstance(0, Base));
+        }
+    }
+
+    const auto* UseTheme = FindFProperty<FBoolProperty>(GetClass(), TEXT("UseLevelVisualsColor"));
+    if (UseTheme && UseTheme->GetPropertyValue_InContainer(this))
+    {
+        if (UWorld* World = GetWorld())
+        {
+            TActorIterator<ASampleLevelVisuals> Visuals(World);
+            if (Visuals)
+            {
+                ApplyLevelStyle(**Visuals);
+            }
+        }
+    }
+    else if (const auto* Parameters = FindFProperty<FStructProperty>(GetClass(), TEXT("MaterialParams")))
+    {
+        ApplyGridMaterial(*Parameters->Struct, Parameters->ContainerPtrToValuePtr<void>(this));
+    }
+
+    RefreshBlockText();
+    const auto* Baseline = FindFProperty<FStructProperty>(GetClass(), TEXT("InitialTransform"));
+    if (Baseline && Baseline->Struct == TBaseStructure<FTransform>::Get())
+    {
+        *Baseline->ContainerPtrToValuePtr<FTransform>(this) = GetActorTransform();
+    }
+    BindRandomizeButton();
+}
+
+void ASampleLevelBlock::PostInitializeComponents()
+{
+    Super::PostInitializeComponents();
+    BindRandomizeButton();
+}
+
+void ASampleLevelBlock::BindRandomizeButton()
+{
+    auto* Button = ReadFixtureObject<ASampleLevelButton>(*this, TEXT("Randomize Button"));
+    FScriptDelegate Handler;
+    Handler.BindUFunction(this, GET_FUNCTION_NAME_CHECKED(ASampleLevelBlock, RandomizeBlockOffset));
+    if (auto* Previous = BoundRandomizeButton.Get(); Previous && Previous != Button)
+    {
+        if (auto* Delegate = FindFixtureButtonDelegate(*Previous))
+        {
+            Delegate->Remove(Handler);
+        }
+    }
+    BoundRandomizeButton = Button;
+    if (Button)
+    {
+        if (auto* Delegate = FindFixtureButtonDelegate(*Button))
+        {
+            FScriptDelegate LegacyHandler;
+            LegacyHandler.BindUFunction(this, TEXT("Randomize Offset"));
+            Delegate->Remove(LegacyHandler);
+            Delegate->AddUnique(Handler);
+        }
+    }
+}
+
+void ASampleLevelBlock::ApplyLevelStyle(const ASampleLevelVisuals& Visuals)
+{
+    const auto* UseTheme = FindFProperty<FBoolProperty>(GetClass(), TEXT("UseLevelVisualsColor"));
+    const auto* Group = FindFProperty<FNameProperty>(GetClass(), TEXT("ColorGroup"));
+    if (UseTheme && UseTheme->GetPropertyValue_InContainer(this) && Group)
+    {
+        const UScriptStruct* Type = nullptr;
+        if (const void* Values = Visuals.FindGridSettings(Group->GetPropertyValue_InContainer(this), Type))
+        {
+            ApplyGridMaterial(*Type, Values);
+        }
+    }
+}
+
+void ASampleLevelBlock::ApplyGridMaterial(const UScriptStruct& Type, const void* Values)
+{
+    const auto Parameters = ReadGridMaterialParameters(Type, Values);
+    if (auto* Material = ReadFixtureObject<UMaterialInstanceDynamic>(*this, TEXT("DynamicMaterial")))
+    {
+        Material->SetVectorParameterValue(TEXT("Grid Color"), Parameters.GridColor);
+        Material->SetVectorParameterValue(TEXT("Surface Color"), Parameters.SurfaceColor);
+        Material->SetScalarParameterValue(TEXT("Grid 1 Size"), Parameters.GridSizes.X);
+        Material->SetScalarParameterValue(TEXT("Grid 2 Size"), Parameters.GridSizes.Y);
+        Material->SetScalarParameterValue(TEXT("Grid 3 Size"), Parameters.GridSizes.Z);
+        Material->SetScalarParameterValue(TEXT("Base Specular"), Parameters.Specularity);
+    }
+    if (auto* Label = ReadFixtureObject<UTextRenderComponent>(*this, TEXT("TextRender")))
+    {
+        Label->SetTextRenderColor(Parameters.GridColor.ToFColor(false));
+    }
+}
+
+const void* ASampleLevelVisuals::FindStyle(const UScriptStruct*& OutType) const
+{
+    OutType = nullptr;
+    const auto* Property = FindFProperty<FArrayProperty>(GetClass(), TEXT("LevelStyles"));
+    const auto* Inner = Property ? CastField<FStructProperty>(Property->Inner) : nullptr;
+    const auto* Index = FindFProperty<FIntProperty>(GetClass(), TEXT("StyleIndex"));
+    if (!Inner || !Index)
+    {
+        return nullptr;
+    }
+    FScriptArrayHelper Styles(Property, Property->ContainerPtrToValuePtr<void>(this));
+    if (Styles.Num() == 0)
+    {
+        return nullptr;
+    }
+    OutType = Inner->Struct;
+    return Styles.GetRawPtr(FMath::Clamp(Index->GetPropertyValue_InContainer(this), 0, Styles.Num() - 1));
+}
+
+const void* ASampleLevelVisuals::FindGridSettings(FName Group, const UScriptStruct*& OutType) const
+{
+    const UScriptStruct* StyleType = nullptr;
+    const void* Style = FindStyle(StyleType);
+    const auto* Map = StyleType ? FindFProperty<FMapProperty>(StyleType, TEXT("BlockColors_19_BD7B5F9248A47F4BA4AEE2BCADEEA20F")) : nullptr;
+    const auto* Value = Map ? CastField<FStructProperty>(Map->ValueProp) : nullptr;
+    if (!Style || !Value || !CastField<FNameProperty>(Map->KeyProp))
+    {
+        OutType = nullptr;
+        return nullptr;
+    }
+    OutType = Value->Struct;
+    FScriptMapHelper Colors(Map, Map->ContainerPtrToValuePtr<void>(Style));
+    return Colors.FindValueFromHash(&Group);
+}
+
+void ASampleLevelVisuals::OnConstruction(const FTransform& Transform)
+{
+    Super::OnConstruction(Transform);
+    UpdateVisuals();
+}
+
+void ASampleLevelVisuals::BeginPlay()
+{
+    Super::BeginPlay();
+    UpdateVisuals();
+}
+
+void ASampleLevelVisuals::SetLevelStyle(int32 Index)
+{
+    if (const auto* Field = FindFProperty<FIntProperty>(GetClass(), TEXT("StyleIndex")))
+    {
+        Field->SetPropertyValue_InContainer(this, Index);
+        UpdateVisuals();
+    }
+}
+
+void ASampleLevelVisuals::UpdateVisuals()
+{
+    const UScriptStruct* Type = nullptr;
+    const void* Style = FindStyle(Type);
+    if (!Style)
+    {
+        return;
+    }
+
+    if (UWorld* World = GetWorld())
+    {
+        for (TActorIterator<ASampleLevelBlock> Block(World); Block; ++Block)
+        {
+            Block->ApplyLevelStyle(*this);
+        }
+    }
+    if (auto* Fog = ReadFixtureObject<UExponentialHeightFogComponent>(*this, TEXT("ExponentialHeightFog")))
+    {
+        Fog->SetFogInscatteringColor(ReadStyleValue(*Type, Style,
+            TEXT("FogColor_3_DA5FC03848B34AFC1BABBCB1640E14A6"), FLinearColor::Black));
+        Fog->SetFogDensity(ReadStyleNumber(*Type, Style, TEXT("FogDensity_22_21D76EA447CB464F8ECFC6B3D18938E0")));
+    }
+    if (auto* Decal = ReadFixtureObject<UDecalComponent>(*this, TEXT("Decal")))
+    {
+        Decal->SetDecalColor(ReadStyleValue(*Type, Style,
+            TEXT("DecalColor_12_1498C751435B031639098A8BF277CF4D"), FLinearColor::Black));
+    }
+    if (auto* Landscape = ReadFixtureObject<ALandscapeProxy>(*this, TEXT("Landscape")))
+    {
+        const UScriptStruct* SettingsType = nullptr;
+        const void* Settings = FindGridSettings(TEXT("Landscape"), SettingsType);
+        const FStructOnScope DefaultSettings(Settings ? nullptr : SettingsType);
+        if (SettingsType)
+        {
+            const auto Parameters = ReadGridMaterialParameters(*SettingsType,
+                Settings ? Settings : DefaultSettings.GetStructMemory());
+            Landscape->SetLandscapeMaterialVectorParameterValue(TEXT("Grid Color"), Parameters.GridColor);
+            Landscape->SetLandscapeMaterialVectorParameterValue(TEXT("Surface Color"), Parameters.SurfaceColor);
+            Landscape->SetLandscapeMaterialScalarParameterValue(TEXT("Grid 1 Size"), Parameters.GridSizes.X);
+            Landscape->SetLandscapeMaterialScalarParameterValue(TEXT("Grid 2 Size"), Parameters.GridSizes.Y);
+            Landscape->SetLandscapeMaterialScalarParameterValue(TEXT("Grid 3 Size"), Parameters.GridSizes.Z);
+            Landscape->SetLandscapeMaterialScalarParameterValue(TEXT("Base Specular"), Parameters.Specularity);
+        }
     }
 }
