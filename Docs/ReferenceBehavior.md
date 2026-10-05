@@ -508,3 +508,9 @@ The Win64 Editor unity build passed, and the imported button compiled. In `Defau
 Run `Scripts/migrate_sandbox_block.py` to forward the existing randomize, reset, and text entry points to C++. The installer preserves the authored offset ranges, button binding, material selection, and traversal child assets.
 
 The Win64 Editor unity build passed and the imported block compiled. `DefaultLevel` PIE found 61 instances of the native block or its Blueprint subclasses. On the tested block, the original randomize event applied a fixed 35 cm test offset without accumulating it across presses. The original reset event restored the starting location. The native label displayed `2.5 M` for a scale of 2.5. No blocks in that level had a randomize button assigned during the run. A bound-button level and standalone Game are **Not run**.
+
+### Sandbox visual themes
+
+Run `Scripts/migrate_sandbox_visuals.py` after the block offset migration. Native construction creates the dynamic grid materials, captures block baselines, and binds the existing randomize delegate. Native style updates apply the imported palette, fog, decal and landscape settings. The `GetLevelStyle` Blueprint accessor remains available for consumers of the imported struct type.
+
+The Win64 Editor unity build passed, and both assets compiled. In `DefaultLevel` PIE, all 61 blocks had dynamic materials. Requests below and above the style array bounds selected the first and last styles respectively. Fog density, decal color, and all 61 block grid colors matched both authored styles. Independent block palettes, landscape material values, fog color, and button rebinding are **Not run** for this batch.
