@@ -4,6 +4,7 @@
 #include "SampleSandboxFixtures.generated.h"
 
 class ASampleTeleporterDestination;
+class ASampleLevelVisuals;
 
 /** Routes the authored trigger to a destination in the current world. */
 UCLASS(Blueprintable)
@@ -120,4 +121,44 @@ public:
     /** Uses the configured label or the current block height in meters. */
     UFUNCTION(BlueprintCallable, Category = "Sample|Level Block")
     void RefreshBlockText();
+
+    /** Applies the active style's material group to a block that opts into level colors. */
+    void ApplyLevelStyle(const ASampleLevelVisuals& Visuals);
+
+protected:
+    /** Creates the dynamic grid material and captures the baseline for offset changes. */
+    virtual void OnConstruction(const FTransform& Transform) override;
+    virtual void PostInitializeComponents() override;
+
+private:
+    void ApplyGridMaterial(const UScriptStruct& Type, const void* Values);
+    void BindRandomizeButton();
+
+    TWeakObjectPtr<ASampleLevelButton> BoundRandomizeButton;
+};
+
+/** Applies the current authored style to blocks, fog, decal, and landscape. */
+UCLASS(Blueprintable)
+class GAMEANIMATIONSAMPLECPP_API ASampleLevelVisuals : public AActor
+{
+    GENERATED_BODY()
+
+public:
+    /** Saves the requested index and applies the style selected within the authored array bounds. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Level Visuals")
+    void SetLevelStyle(int32 Index);
+
+    /** Refreshes all presentation consumers from the current style. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Level Visuals")
+    void UpdateVisuals();
+
+    /** Looks up an authored grid group. The returned values remain owned by the style array. */
+    const void* FindGridSettings(FName Group, const UScriptStruct*& OutType) const;
+
+protected:
+    virtual void OnConstruction(const FTransform& Transform) override;
+    virtual void BeginPlay() override;
+
+private:
+    const void* FindStyle(const UScriptStruct*& OutType) const;
 };
