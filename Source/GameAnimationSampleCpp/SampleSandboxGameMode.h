@@ -37,6 +37,9 @@ public:
     /** Advances the authored presentation index, including the default selection at index -1. */
     void CycleVisualOverride();
 
+    /** Returns the configured visual class for the current selection, or an empty choice. */
+    TSoftClassPtr<AActor> GetSelectedVisualOverride() const;
+
 protected:
     /** Subscribes to the authored pawn-selection console variable. */
     virtual void BeginPlay() override;
