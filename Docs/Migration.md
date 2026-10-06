@@ -128,6 +128,8 @@ If the host uses sandbox themes, keep style data and material parameter names wi
 
 ## Bring in licensed animation data
 
+For optional character appearances, keep the selected visual actor class separate from the gameplay pawn. Resolve soft classes asynchronously and cancel superseded requests. Assign the visual actor to a tagged child component and restore the source mesh when the selected class clears. Carry the existing replication notification to the destination if remote peers must update the same appearance.
+
 When using the Epic sample assets, acquire the sample under the applicable terms. In a scratch branch of the destination project, use Content Browser → Asset Actions → Migrate, review Asset Report dependencies, and target the destination's `Content/` directory. Review package name conflicts before accepting an overwrite. Preserve referenced package paths and enable required plugins for each migrated feature. For instance, a Motion Matching graph needs Pose Search assets and may also depend on Chooser, Motion Warping, Animation Warping, and Control Rig.
 
 Skeleton, IK Rig, retargeter, Pose Search schema, databases and tuning curves form a coordinated set. Verify their bone names, units and curves before rebuilding the search databases. Merge any required gameplay tags, collision channels and project settings explicitly. Refer to [Epic's asset migration guide](https://dev.epicgames.com/documentation/en-us/unreal-engine/migrating-assets-in-unreal-engine).

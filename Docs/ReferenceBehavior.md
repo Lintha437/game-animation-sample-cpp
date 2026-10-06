@@ -514,3 +514,9 @@ The Win64 Editor unity build passed and the imported block compiled. `DefaultLev
 Run `Scripts/migrate_sandbox_visuals.py` after the block offset migration. Native construction creates the dynamic grid materials, captures block baselines, and binds the existing randomize delegate. Native style updates apply the imported palette, fog, decal and landscape settings. The `GetLevelStyle` Blueprint accessor remains available for consumers of the imported struct type.
 
 The Win64 Editor unity build passed, and both assets compiled. In `DefaultLevel` PIE, all 61 blocks had dynamic materials. Requests below and above the style array bounds selected the first and last styles respectively. Fog density, decal color, and all 61 block grid colors matched both authored styles. Independent block palettes, landscape material values, fog color, and button rebinding are **Not run** for this batch.
+
+### Sandbox character visual override
+
+Run `Scripts/migrate_visual_override.py` to install the native selection and child actor update. The existing component and class property keep their authored references and replication settings. The native component cancels pending requests when the selection changes and keeps the original mesh available when no override is selected.
+
+The Win64 Editor unity build passed, and the component compiled. In `DefaultLevel` PIE, console selections installed Echo and Manny on the same Mover pawn and hid the source mesh. Clearing the selection removed the child actor class and restored mesh visibility. These classes were already loaded during the smoke check. Cold asynchronous loading, replicated delivery, and other pawn variants are **Not run**.
