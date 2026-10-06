@@ -45,6 +45,22 @@ void ASampleSandboxGameMode::CycleVisualOverride()
     }
 }
 
+TSoftClassPtr<AActor> ASampleSandboxGameMode::GetSelectedVisualOverride() const
+{
+    const auto* Selection = IConsoleManager::Get().FindConsoleVariable(VisualOverrideVariable);
+    const int32 Index = Selection ? Selection->GetInt() : INDEX_NONE;
+    const auto* Options = FindFProperty<FArrayProperty>(GetClass(), TEXT("VisualOverrides_Soft"));
+    const auto* ActorClass = Options ? CastField<FSoftClassProperty>(Options->Inner) : nullptr;
+    if (!ActorClass)
+    {
+        return {};
+    }
+    FScriptArrayHelper Classes(Options, Options->ContainerPtrToValuePtr<void>(this));
+    return Classes.IsValidIndex(Index)
+        ? TSoftClassPtr<AActor>(ActorClass->GetPropertyValue(Classes.GetRawPtr(Index)).ToSoftObjectPath())
+        : TSoftClassPtr<AActor>();
+}
+
 TSoftClassPtr<APawn> ASampleSandboxGameMode::GetSelectedPawn() const
 {
     const IConsoleVariable* Selection = IConsoleManager::Get().FindConsoleVariable(PawnClassVariable);
