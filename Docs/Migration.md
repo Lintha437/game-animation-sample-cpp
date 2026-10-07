@@ -136,6 +136,8 @@ Skeleton, IK Rig, retargeter, Pose Search schema, databases and tuning curves fo
 
 ## Verify in the destination
 
+If you move the isolated Locomotor example, preserve its walker and animation assets. Install its Enhanced Input mapping context on the owning local player at possession or restart. Keep its normalized controller-relative movement and separate mouse and gamepad look sensitivities if you need the same feel.
+
 - Establish a reference capture before wiring the new code. Record the test level, movement component, input device, initial transform, and the expected state, montage, and interruption outcome for each replay.
 - Build the Editor and Game targets and cook a representative map.
 - Use the intended controller to compare walking, running, sprint release, crouch clearance, falling, landing, and camera-relative input with your target behavior. Repeat with digital and analog input.

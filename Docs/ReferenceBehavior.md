@@ -520,3 +520,9 @@ The Win64 Editor unity build passed, and both assets compiled. In `DefaultLevel`
 Run `Scripts/migrate_visual_override.py` to install the native selection and child actor update. The existing component and class property keep their authored references and replication settings. The native component cancels pending requests when the selection changes and keeps the original mesh available when no override is selected.
 
 The Win64 Editor unity build passed, and the component compiled. In `DefaultLevel` PIE, console selections installed Echo and Manny on the same Mover pawn and hid the source mesh. Clearing the selection removed the child actor class and restored mesh visibility. These classes were already loaded during the smoke check. Cold asynchronous loading, replicated delivery, and other pawn variants are **Not run**.
+
+### Locomotor example input
+
+Run `Scripts/migrate_locomotor_input.py` to install the native controller and walker hooks. The original GameMode still selects the imported controller and walker, and the walker retains its animation assets and movement component.
+
+The Win64 Editor unity build and both Blueprint compiles passed. In `LocomotorLevel` PIE, the sandbox mapping context was installed at priority zero. Enhanced Input forward action moved the walker along the control heading, and both look actions changed yaw. Physical device sensitivity and remote-client restart are **Not run**.
