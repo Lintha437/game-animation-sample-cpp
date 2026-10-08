@@ -526,3 +526,9 @@ The Win64 Editor unity build passed, and the component compiled. In `DefaultLeve
 Run `Scripts/migrate_locomotor_input.py` to install the native controller and walker hooks. The original GameMode still selects the imported controller and walker, and the walker retains its animation assets and movement component.
 
 The Win64 Editor unity build and both Blueprint compiles passed. In `LocomotorLevel` PIE, the sandbox mapping context was installed at priority zero. Enhanced Input forward action moved the walker along the control heading, and both look actions changed yaw. Physical device sensitivity and remote-client restart are **Not run**.
+
+### Look At POI controller
+
+Run `Scripts/migrate_look_at_controller.py` to install the native interface setup and possession switch. The Blueprint events remain callable by the authored interface and forward directly to C++. The existing look-at and gesture animation controls remain authored.
+
+The Win64 Editor unity build and controller Blueprint compile passed. In `LookAtPOI_Level` PIE, the controller initialized the widget and the 32-degree camera default. The original spawn event possessed the Mover pawn and reused it on a second call. The spectator event returned to the same spectator and cleared the spawned pawn reference and look-at flags. The smoke test called the existing events directly. Pointer interactions, selected-zone cleanup, and multiplayer are **Not run**.
