@@ -532,3 +532,9 @@ The Win64 Editor unity build and both Blueprint compiles passed. In `LocomotorLe
 Run `Scripts/migrate_look_at_controller.py` to install the native interface setup and possession switch. The Blueprint events remain callable by the authored interface and forward directly to C++. The existing look-at and gesture animation controls remain authored.
 
 The Win64 Editor unity build and controller Blueprint compile passed. In `LookAtPOI_Level` PIE, the controller initialized the widget and the 32-degree camera default. The original spawn event possessed the Mover pawn and reused it on a second call. The spectator event returned to the same spectator and cleared the spawned pawn reference and look-at flags. The smoke test called the existing events directly. Pointer interactions, selected-zone cleanup, and multiplayer are **Not run**.
+
+### Look At POI zone selection
+
+Run `Scripts/migrate_look_at_zones.py` to install native selection and gizmo lifetime. The existing click event and deselect event forward to C++. Hover presentation and the animation callbacks remain authored. C++ finds neighboring zones in the current world instead of relying on a startup snapshot.
+
+The Win64 Editor unity build and zone Blueprint compile passed. In `LookAtPOI_Level` PIE, the original click event on Patrol broadcast its existing delegate once, created the target gizmo, and reached the controller's look-at callback. Selecting Loops cleared the previous zone and gizmo. The existing spectator event cleared selection and gizmos from all three zones. Physical mouse hit testing and rendered animation comparison are **Not run**.

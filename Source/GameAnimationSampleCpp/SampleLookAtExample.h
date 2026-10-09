@@ -40,3 +40,26 @@ private:
     TWeakObjectPtr<ASpectatorPawn> PreviousSpectator;
     TWeakObjectPtr<UUserWidget> DemoWidget;
 };
+
+/** Owns selection and target-gizmo lifetime for an authored Look At POI zone. */
+UCLASS(Blueprintable)
+class GAMEANIMATIONSAMPLECPP_API ASampleLookAtZone : public AActor
+{
+    GENERATED_BODY()
+
+public:
+    ASampleLookAtZone();
+
+    /** Selects this zone and hands its pawn and gizmo to the existing animation callback. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Look At")
+    void SelectLookAtZone();
+
+    /** Clears selection, destroys the owned gizmo, and disables the assigned pawn's look-at flag. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Look At")
+    void DeselectLookAtZone();
+
+protected:
+    /** Optional gizmo class used by zones that direct the controller's look-at target. */
+    UPROPERTY(EditDefaultsOnly, Category = "Sample|Look At")
+    TSoftClassPtr<AActor> TargetGizmoClass;
+};
