@@ -2,9 +2,12 @@
 
 #include "Blueprint/UserWidget.h"
 #include "Camera/PlayerCameraManager.h"
+#include "Components/PrimitiveComponent.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/SpectatorPawn.h"
+#include "InputCoreTypes.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "UObject/StructOnScope.h"
 #include "UObject/UnrealType.h"
 
@@ -191,6 +194,87 @@ void ASampleLookAtController::EnterLookAtSpectatorMode()
 ASampleLookAtZone::ASampleLookAtZone()
     : TargetGizmoClass(FSoftObjectPath(TEXT("/Game/IsolatedExamples/LookAtPOI/TestLevelContent/Props/BP_LookAtPOI_TargetGizmo.BP_LookAtPOI_TargetGizmo_C")))
 {
+    PrimaryActorTick.bCanEverTick = true;
+}
+
+void ASampleLookAtZone::BeginPlay()
+{
+    Super::BeginPlay();
+    const auto* Meshes = FindFProperty<FArrayProperty>(GetClass(), TEXT("Meshes For Mouse Over"));
+    const auto* Mesh = Meshes ? CastField<FObjectPropertyBase>(Meshes->Inner) : nullptr;
+    if (!Mesh)
+    {
+        return;
+    }
+    FScriptArrayHelper Components(Meshes, Meshes->ContainerPtrToValuePtr<void>(this));
+    for (int32 Index = 0; Index < Components.Num(); ++Index)
+    {
+        if (auto* Primitive = Cast<UPrimitiveComponent>(Mesh->GetObjectPropertyValue(Components.GetRawPtr(Index))))
+        {
+            Primitive->OnBeginCursorOver.AddUniqueDynamic(this, &ASampleLookAtZone::OnZoneHoverBegin);
+            Primitive->OnEndCursorOver.AddUniqueDynamic(this, &ASampleLookAtZone::OnZoneHoverEnd);
+            Primitive->OnClicked.AddUniqueDynamic(this, &ASampleLookAtZone::OnZoneClicked);
+        }
+    }
+}
+
+void ASampleLookAtZone::Tick(float DeltaSeconds)
+{
+    Super::Tick(DeltaSeconds);
+    CallLookAtCallback(*this, TEXT("Set Parallel To Camera & Show Tooltip"));
+    if (AActor* Gizmo = ReadLookAtActor(*this, TEXT("Gizmo Obj")); IsValid(Gizmo))
+    {
+        Gizmo->SetActorLocation(GetTargetGizmoPosition());
+    }
+}
+
+void ASampleLookAtZone::OnZoneHoverBegin(UPrimitiveComponent* Component)
+{
+    ApplyZoneColor(FLinearColor::White);
+    WriteLookAtFlag(*this, TEXT("Is Mouse Over"), true);
+}
+
+void ASampleLookAtZone::OnZoneHoverEnd(UPrimitiveComponent* Component)
+{
+    WriteLookAtFlag(*this, TEXT("Is Mouse Over"), false);
+    RefreshZoneColor();
+}
+
+void ASampleLookAtZone::OnZoneClicked(UPrimitiveComponent* Component, FKey Button)
+{
+    SelectLookAtZone();
+}
+
+void ASampleLookAtZone::RefreshZoneColor()
+{
+    const FName ColorName = ReadLookAtFlag(*this, TEXT("Is Selected")) ? TEXT("Color Green") : TEXT("Color Gray");
+    const auto* Color = FindFProperty<FStructProperty>(GetClass(), ColorName);
+    if (Color && Color->Struct == TBaseStructure<FLinearColor>::Get())
+    {
+        ApplyZoneColor(*Color->ContainerPtrToValuePtr<FLinearColor>(this));
+    }
+}
+
+void ASampleLookAtZone::ApplyZoneColor(const FLinearColor& Color)
+{
+    for (const FName Name : {FName(TEXT("Border Dynamic Material")), FName(TEXT("Text Dynamic Material"))})
+    {
+        const auto* Field = FindFProperty<FObjectPropertyBase>(GetClass(), Name);
+        auto* Material = Field ? Cast<UMaterialInstanceDynamic>(Field->GetObjectPropertyValue_InContainer(this)) : nullptr;
+        if (Material)
+        {
+            Material->SetVectorParameterValue(TEXT("Diffuse"), Color);
+        }
+    }
+}
+
+FVector ASampleLookAtZone::GetTargetGizmoPosition() const
+{
+    const auto* Offset = FindFProperty<FStructProperty>(GetClass(), TEXT("Gizmo Offset"));
+    const FVector PositionOffset = Offset && Offset->Struct == TBaseStructure<FVector>::Get()
+        ? *Offset->ContainerPtrToValuePtr<FVector>(this) : FVector::ZeroVector;
+    const AActor* Pawn = ReadLookAtActor(*this, TEXT("Assigned Pawn"));
+    return (IsValid(Pawn) ? Pawn->GetActorLocation() : FVector::ZeroVector) + PositionOffset;
 }
 
 void ASampleLookAtZone::SelectLookAtZone()
@@ -214,7 +298,7 @@ void ASampleLookAtZone::SelectLookAtZone()
         return;
     }
     WriteLookAtFlag(*this, TEXT("Is Selected"), true);
-    CallLookAtCallback(*this, TEXT("Set Color"));
+    RefreshZoneColor();
 
     auto* AssignedPawn = Cast<APawn>(ReadLookAtActor(*this, TEXT("Assigned Pawn")));
     auto* Controller = Cast<ASampleLookAtController>(World->GetFirstPlayerController());
@@ -223,11 +307,7 @@ void ASampleLookAtZone::SelectLookAtZone()
     {
         if (UClass* GizmoClass = TargetGizmoClass.LoadSynchronous())
         {
-            const auto* Offset = FindFProperty<FStructProperty>(GetClass(), TEXT("Gizmo Offset"));
-            const FVector LocalOffset = Offset && Offset->Struct == TBaseStructure<FVector>::Get()
-                ? *Offset->ContainerPtrToValuePtr<FVector>(this) : FVector::ZeroVector;
-            const FVector Location = (IsValid(AssignedPawn) ? AssignedPawn->GetActorLocation() : FVector::ZeroVector) + LocalOffset;
-            Gizmo = World->SpawnActor<AActor>(GizmoClass, FTransform(GetActorRotation(), Location));
+            Gizmo = World->SpawnActor<AActor>(GizmoClass, FTransform(GetActorRotation(), GetTargetGizmoPosition()));
             if (IsValid(Gizmo))
             {
                 Gizmo->SetActorScale3D(FVector(4.0));
@@ -254,7 +334,7 @@ void ASampleLookAtZone::SelectLookAtZone()
 void ASampleLookAtZone::DeselectLookAtZone()
 {
     WriteLookAtFlag(*this, TEXT("Is Selected"), false);
-    CallLookAtCallback(*this, TEXT("Set Color"));
+    RefreshZoneColor();
     if (AActor* Gizmo = ReadLookAtActor(*this, TEXT("Gizmo Obj")); IsValid(Gizmo))
     {
         Gizmo->Destroy();

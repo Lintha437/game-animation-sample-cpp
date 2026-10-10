@@ -1,6 +1,7 @@
 #pragma once
 
 #include "GameFramework/PlayerController.h"
+#include "InputCoreTypes.h"
 #include "SampleLookAtExample.generated.h"
 
 class ASpectatorPawn;
@@ -59,7 +60,27 @@ public:
     void DeselectLookAtZone();
 
 protected:
+    /** Binds the meshes and hitbox authored for this zone to native pointer handlers. */
+    virtual void BeginPlay() override;
+
+    /** Follows the assigned pawn with the active gizmo after refreshing the authored tooltip. */
+    virtual void Tick(float DeltaSeconds) override;
+
     /** Optional gizmo class used by zones that direct the controller's look-at target. */
     UPROPERTY(EditDefaultsOnly, Category = "Sample|Look At")
     TSoftClassPtr<AActor> TargetGizmoClass;
+
+private:
+    UFUNCTION()
+    void OnZoneHoverBegin(UPrimitiveComponent* Component);
+
+    UFUNCTION()
+    void OnZoneHoverEnd(UPrimitiveComponent* Component);
+
+    UFUNCTION()
+    void OnZoneClicked(UPrimitiveComponent* Component, FKey Button);
+
+    void RefreshZoneColor();
+    void ApplyZoneColor(const FLinearColor& Color);
+    FVector GetTargetGizmoPosition() const;
 };

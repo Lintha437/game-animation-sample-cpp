@@ -538,3 +538,9 @@ The Win64 Editor unity build and controller Blueprint compile passed. In `LookAt
 Run `Scripts/migrate_look_at_zones.py` to install native selection and gizmo lifetime. The existing click event and deselect event forward to C++. Hover presentation and the animation callbacks remain authored. C++ finds neighboring zones in the current world instead of relying on a startup snapshot.
 
 The Win64 Editor unity build and zone Blueprint compile passed. In `LookAtPOI_Level` PIE, the original click event on Patrol broadcast its existing delegate once, created the target gizmo, and reached the controller's look-at callback. Selecting Loops cleared the previous zone and gizmo. The existing spectator event cleared selection and gizmos from all three zones. Physical mouse hit testing and rendered animation comparison are **Not run**.
+
+### Look At POI pointer bindings
+
+Run `Scripts/migrate_look_at_pointer.py` after the zone selection migration. Native code binds the authored hit components, updates hover and selection colors, and tracks the assigned pawn with the active gizmo. The existing tooltip layout and material assets remain authored.
+
+The Win64 Editor unity build and zone Blueprint compile passed. In `LookAtPOI_Level` PIE, the component delegates were bound. Broadcasting their hover, leave, and click events applied white, gray, and green to both materials respectively. After moving the assigned pawn, the gizmo matched the authored offset. Physical mouse hit testing and rendered comparison are **Not run**.

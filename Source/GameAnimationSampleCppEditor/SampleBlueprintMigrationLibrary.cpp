@@ -21,7 +21,7 @@
 
 namespace
 {
-    bool CollectIsolatedChain(UEdGraphNode* Event, TSet<UEdGraphNode*>& Remove)
+    bool CollectIsolatedChain(UEdGraphNode* Event, TSet<UEdGraphNode*>& Remove, const TSet<UEdGraphNode*>* AllowedEntries = nullptr)
     {
         TArray<UEdGraphNode*> Pending{Event};
         TSet<UEdGraphNode*> Visited;
@@ -47,7 +47,7 @@ namespace
                     Pending.Add(Peer->GetOwningNode());
                 }
             }
-            if (Current != Event && bHasExecOutput && !bHasExecInput)
+            if (Current != Event && bHasExecOutput && !bHasExecInput && (!AllowedEntries || !AllowedEntries->Contains(Current)))
             {
                 return false;
             }
@@ -356,28 +356,42 @@ int64 USampleBlueprintMigrationLibrary::GetCompiledFunctionFlags(const UBlueprin
 
 bool USampleBlueprintMigrationLibrary::RemoveCustomEvent(UBlueprint* Blueprint, UEdGraph* Graph, FName EventName)
 {
-    if (!Blueprint || !Graph || Graph->GetOuter() != Blueprint || EventName.IsNone())
+    return RemoveCustomEvents(Blueprint, Graph, {EventName});
+}
+
+bool USampleBlueprintMigrationLibrary::RemoveCustomEvents(UBlueprint* Blueprint, UEdGraph* Graph, const TArray<FName>& EventNames)
+{
+    if (!Blueprint || !Graph || Graph->GetOuter() != Blueprint || EventNames.IsEmpty() || EventNames.Contains(NAME_None))
     {
         return false;
     }
-    UK2Node_CustomEvent* Match = nullptr;
+    TSet<FName> MatchedNames;
+    TSet<UEdGraphNode*> Entries;
     for (UEdGraphNode* Node : Graph->Nodes)
     {
         UK2Node_CustomEvent* Event = Cast<UK2Node_CustomEvent>(Node);
-        if (Event && Event->CustomFunctionName == EventName)
+        if (Event && EventNames.Contains(Event->CustomFunctionName))
         {
-            if (Match)
+            if (MatchedNames.Contains(Event->CustomFunctionName))
             {
                 return false;
             }
-            Match = Event;
+            MatchedNames.Add(Event->CustomFunctionName);
+            Entries.Add(Event);
         }
     }
 
-    TSet<UEdGraphNode*> Remove;
-    if (!Match || !CollectIsolatedChain(Match, Remove))
+    if (MatchedNames.Num() != EventNames.Num())
     {
         return false;
+    }
+    TSet<UEdGraphNode*> Remove;
+    for (UEdGraphNode* Event : Entries)
+    {
+        if (!Remove.Contains(Event) && !CollectIsolatedChain(Event, Remove, &Entries))
+        {
+            return false;
+        }
     }
     RemoveNodes(*Blueprint, *Graph, Remove);
     return true;

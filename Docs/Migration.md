@@ -142,6 +142,8 @@ If you move the Look At POI example, let the controller own the local interface 
 
 Let one zone own the current selection and its target gizmo. Deselect the previous zone before handing the selected pawn and target to animation. Use the current world actors so zones created after startup can participate. Retain the host interface delegate and keep gizmo appearance on its asset.
 
+Bind pointer events to the zone's authored hit components after they are initialized. Apply hover and selected colors through its dynamic materials and update an active gizmo from the assigned pawn's world position plus the authored offset.
+
 - Establish a reference capture before wiring the new code. Record the test level, movement component, input device, initial transform, and the expected state, montage, and interruption outcome for each replay.
 - Build the Editor and Game targets and cook a representative map.
 - Use the intended controller to compare walking, running, sprint release, crouch clearance, falling, landing, and camera-relative input with your target behavior. Repeat with digital and analog input.
