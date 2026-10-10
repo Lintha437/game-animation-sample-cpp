@@ -57,6 +57,10 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
     static bool RemoveCustomEvent(UBlueprint* Blueprint, UEdGraph* Graph, FName EventName);
 
+    /** Removes named custom events and shared nodes only when no unlisted entry reaches them. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
+    static bool RemoveCustomEvents(UBlueprint* Blueprint, UEdGraph* Graph, const TArray<FName>& EventNames);
+
     /**
      * Removes an isolated override and its isolated graph body after native code takes over.
      * @param Blueprint Owner of the event graph.
