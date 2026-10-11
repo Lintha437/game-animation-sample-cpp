@@ -3,6 +3,7 @@
 #include "Blueprint/UserWidget.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Components/PrimitiveComponent.h"
+#include "DrawDebugLibrary.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/SpectatorPawn.h"
@@ -343,5 +344,104 @@ void ASampleLookAtZone::DeselectLookAtZone()
     if (AActor* Pawn = ReadLookAtActor(*this, TEXT("Assigned Pawn")); IsValid(Pawn))
     {
         WriteLookAtFlag(*Pawn, TEXT("LookAtPOI Enabled"), false);
+    }
+}
+
+ASampleLookAtGizmo::ASampleLookAtGizmo()
+{
+    PrimaryActorTick.bCanEverTick = true;
+    PrimaryActorTick.TickInterval = 0.01f;
+}
+
+void ASampleLookAtGizmo::OnConstruction(const FTransform& Transform)
+{
+    Super::OnConstruction(Transform);
+    const auto* Field = FindFProperty<FObjectPropertyBase>(GetClass(), TEXT("geo"));
+    if (auto* Mesh = Field ? Cast<UPrimitiveComponent>(Field->GetObjectPropertyValue_InContainer(this)) : nullptr)
+    {
+        WriteLookAtObject(*this, TEXT("Border Dynamic Material"), Mesh->CreateDynamicMaterialInstance(0));
+        UpdateGizmoColor(TEXT("Color Gray"));
+    }
+}
+
+void ASampleLookAtGizmo::BeginPlay()
+{
+    Super::BeginPlay();
+    const auto* Drawer = FindFProperty<FStructProperty>(GetClass(), TEXT("Drawer"));
+    if (Drawer && Drawer->Struct == FDebugDrawer::StaticStruct())
+    {
+        *Drawer->ContainerPtrToValuePtr<FDebugDrawer>(this) = UDrawDebugLibrary::MakeDebugDrawer(this);
+    }
+    const auto* Hitbox = FindFProperty<FObjectPropertyBase>(GetClass(), TEXT("hitbox"));
+    if (auto* Component = Hitbox ? Cast<UPrimitiveComponent>(Hitbox->GetObjectPropertyValue_InContainer(this)) : nullptr)
+    {
+        Component->OnBeginCursorOver.AddUniqueDynamic(this, &ASampleLookAtGizmo::OnGizmoHoverBegin);
+        Component->OnEndCursorOver.AddUniqueDynamic(this, &ASampleLookAtGizmo::OnGizmoHoverEnd);
+    }
+}
+
+void ASampleLookAtGizmo::Tick(float DeltaSeconds)
+{
+    Super::Tick(DeltaSeconds);
+    if (const auto* Controller = GetWorld()->GetFirstPlayerController())
+    {
+        float X = 0.0f;
+        float Y = 0.0f;
+        Controller->GetMousePosition(X, Y);
+        UpdateGizmoControls(Controller->GetInputAnalogKeyState(EKeys::LeftShift) == 1.0f, FVector2D(X, Y),
+            Controller->GetInputAnalogKeyState(EKeys::MouseWheelAxis));
+    }
+}
+
+void ASampleLookAtGizmo::OnGizmoHoverBegin(UPrimitiveComponent* Component)
+{
+    WriteLookAtFlag(*this, TEXT("Is Mouse Over"), true);
+}
+
+void ASampleLookAtGizmo::OnGizmoHoverEnd(UPrimitiveComponent* Component)
+{
+    WriteLookAtFlag(*this, TEXT("Is Mouse Over"), false);
+}
+
+void ASampleLookAtGizmo::UpdateGizmoColor(FName ColorName)
+{
+    const auto* Material = FindFProperty<FObjectPropertyBase>(GetClass(), TEXT("Border Dynamic Material"));
+    const auto* Color = FindFProperty<FStructProperty>(GetClass(), ColorName);
+    auto* DynamicMaterial = Material ? Cast<UMaterialInstanceDynamic>(Material->GetObjectPropertyValue_InContainer(this)) : nullptr;
+    if (DynamicMaterial && Color && Color->Struct == TBaseStructure<FLinearColor>::Get())
+    {
+        DynamicMaterial->SetVectorParameterValue(TEXT("Diffuse"), *Color->ContainerPtrToValuePtr<FLinearColor>(this));
+    }
+}
+
+void ASampleLookAtGizmo::UpdateGizmoControls(bool bShiftDown, FVector2D Cursor, float Wheel)
+{
+    const bool bHovered = ReadLookAtFlag(*this, TEXT("Is Mouse Over"));
+    const bool bControlled = bShiftDown && (bHovered || ReadLookAtFlag(*this, TEXT("Is Controlled")));
+    WriteLookAtFlag(*this, TEXT("Is Controlled"), bControlled);
+    CallLookAtCallback(*this, TEXT("Set Parallel To Camera & Show Tooltip"));
+    UpdateGizmoColor(bControlled ? TEXT("Color Green") : (bHovered ? TEXT("Color White") : TEXT("Color Gray")));
+
+    const auto* MousePosition = FindFProperty<FStructProperty>(GetClass(), TEXT("Previous Mouse Pos"));
+    FVector2D* Previous = MousePosition && MousePosition->Struct == TBaseStructure<FVector2D>::Get()
+        ? MousePosition->ContainerPtrToValuePtr<FVector2D>(this) : nullptr;
+    if (bControlled)
+    {
+        const FVector2D Delta = Previous ? Cursor - *Previous : FVector2D::ZeroVector;
+        const FRotator Rotation = GetActorRotation();
+        SetActorRotation(FRotator(0.0, FRotator::ClampAxis(Rotation.Yaw - Delta.X),
+            FRotator::ClampAxis(Rotation.Roll + Delta.Y)));
+        if (!FMath::IsNearlyZero(Wheel))
+        {
+            const auto* Sensitivity = FindFProperty<FNumericProperty>(GetClass(), TEXT("Scale Sensetivity"));
+            const double ScaleRange = Sensitivity && Sensitivity->IsFloatingPoint()
+                ? Sensitivity->GetFloatingPointPropertyValue(Sensitivity->ContainerPtrToValuePtr<void>(this)) : 0.0;
+            const double ScaleDelta = FMath::Clamp(Wheel * 0.1, -1.0, 1.0) * ScaleRange;
+            SetActorScale3D((GetActorScale3D() + FVector(ScaleDelta)).GetClampedToSize(0.3, 20.0));
+        }
+    }
+    if (Previous)
+    {
+        *Previous = Cursor;
     }
 }
