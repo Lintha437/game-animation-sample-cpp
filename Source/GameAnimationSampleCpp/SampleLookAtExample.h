@@ -84,3 +84,36 @@ private:
     void ApplyZoneColor(const FLinearColor& Color);
     FVector GetTargetGizmoPosition() const;
 };
+
+/** Converts cursor movement and wheel input into the Look At POI target transform. */
+UCLASS(Blueprintable)
+class GAMEANIMATIONSAMPLECPP_API ASampleLookAtGizmo : public AActor
+{
+    GENERATED_BODY()
+
+public:
+    ASampleLookAtGizmo();
+
+    /** Applies one pointer sample. Shift can start control only while the hitbox is hovered. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Look At")
+    void UpdateGizmoControls(bool bShiftDown, FVector2D Cursor, float Wheel);
+
+protected:
+    /** Creates the dynamic material and applies the authored idle color. */
+    virtual void OnConstruction(const FTransform& Transform) override;
+
+    /** Binds the authored hitbox and initializes the tooltip drawer. */
+    virtual void BeginPlay() override;
+
+    /** Samples the local player's pointer at the original tick interval. */
+    virtual void Tick(float DeltaSeconds) override;
+
+private:
+    UFUNCTION()
+    void OnGizmoHoverBegin(UPrimitiveComponent* Component);
+
+    UFUNCTION()
+    void OnGizmoHoverEnd(UPrimitiveComponent* Component);
+
+    void UpdateGizmoColor(FName ColorName);
+};
