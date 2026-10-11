@@ -544,3 +544,9 @@ The Win64 Editor unity build and zone Blueprint compile passed. In `LookAtPOI_Le
 Run `Scripts/migrate_look_at_pointer.py` after the zone selection migration. Native code binds the authored hit components, updates hover and selection colors, and tracks the assigned pawn with the active gizmo. The existing tooltip layout and material assets remain authored.
 
 The Win64 Editor unity build and zone Blueprint compile passed. In `LookAtPOI_Level` PIE, the component delegates were bound. Broadcasting their hover, leave, and click events applied white, gray, and green to both materials respectively. After moving the assigned pawn, the gizmo matched the authored offset. Physical mouse hit testing and rendered comparison are **Not run**.
+
+### Look At POI target controls
+
+Run `Scripts/migrate_look_at_gizmo.py` to install native target input and hover handling. The target mesh, hitbox, colors and tooltip remain authored.
+
+The Win64 Editor unity build and gizmo Blueprint compile passed. In `LookAtPOI_Level` PIE, selecting a zone spawned the native target. Scripted pointer samples verified that Shift could start control only on hover, that control persisted after leaving the hitbox until Shift was released, and that a 10 by 7 pixel movement changed yaw by −10° and roll by 7°. The wheel increased scale during control and left it unchanged after release. Physical hardware input and rendered tooltip comparison are **Not run**.

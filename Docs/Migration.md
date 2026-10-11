@@ -144,6 +144,8 @@ Let one zone own the current selection and its target gizmo. Deselect the previo
 
 Bind pointer events to the zone's authored hit components after they are initialized. Apply hover and selected colors through its dynamic materials and update an active gizmo from the assigned pawn's world position plus the authored offset.
 
+For gizmo manipulation, sample the local cursor and wheel. Start Shift control on hover and keep it active until Shift is released. Apply cursor deltas to the target's rotation and clamp wheel scaling to the intended manipulation range. Keep the target's appearance and tooltip settings on the asset.
+
 - Establish a reference capture before wiring the new code. Record the test level, movement component, input device, initial transform, and the expected state, montage, and interruption outcome for each replay.
 - Build the Editor and Game targets and cook a representative map.
 - Use the intended controller to compare walking, running, sprint release, crouch clearance, falling, landing, and camera-relative input with your target behavior. Repeat with digital and analog input.
