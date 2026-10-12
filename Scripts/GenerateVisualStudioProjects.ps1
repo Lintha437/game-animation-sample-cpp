@@ -1,26 +1,28 @@
 [CmdletBinding()]
 param(
-    [string]$EngineRoot = $env:UE_ROOT
+    [string]$EngineRoot = $env:UE_ROOT,
+    [switch]$VerifyOnly
 )
 
 $ErrorActionPreference = 'Stop'
 
-if (-not $EngineRoot) {
-    throw 'Pass -EngineRoot or set UE_ROOT to your Unreal Engine 5.9 installation.'
-}
-
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$project = Join-Path $repositoryRoot 'GameAnimSampleCpp.uproject'
-$engine = Join-Path (Resolve-Path -LiteralPath $EngineRoot).Path 'Engine'
-$version = Get-Content -Raw -LiteralPath (Join-Path $engine 'Build/Build.version') | ConvertFrom-Json
-if ($version.MajorVersion -ne 5 -or $version.MinorVersion -ne 9) {
-    throw 'This project requires Unreal Engine 5.9.'
-}
+if (-not $VerifyOnly) {
+    if (-not $EngineRoot) {
+        throw 'Pass -EngineRoot or set UE_ROOT to your Unreal Engine 5.9 installation.'
+    }
+    $project = Join-Path $repositoryRoot 'GameAnimSampleCpp.uproject'
+    $engine = Join-Path (Resolve-Path -LiteralPath $EngineRoot).Path 'Engine'
+    $version = Get-Content -Raw -LiteralPath (Join-Path $engine 'Build/Build.version') | ConvertFrom-Json
+    if ($version.MajorVersion -ne 5 -or $version.MinorVersion -ne 9) {
+        throw 'This project requires Unreal Engine 5.9.'
+    }
 
-$ubt = Join-Path $engine 'Binaries/DotNET/UnrealBuildTool/UnrealBuildTool.exe'
-& $ubt -ProjectFiles "-Project=$project" -Game -Engine -2026
-if ($LASTEXITCODE -ne 0) {
-    throw "Unreal Build Tool returned exit code $LASTEXITCODE."
+    $ubt = Join-Path $engine 'Binaries/DotNET/UnrealBuildTool/UnrealBuildTool.exe'
+    & $ubt -ProjectFiles "-Project=$project" -Game -Engine -2026
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unreal Build Tool returned exit code $LASTEXITCODE."
+    }
 }
 
 $solutions = @(
@@ -42,8 +44,9 @@ foreach ($name in $solutions) {
             ForEach-Object { $_.Groups[1].Value }
     }
 
-    if (-not $references) {
-        throw "No projects found in $name."
+    $expected = if ($name.StartsWith('Automation_')) { 'AutomationUtils.Automation.csproj' } else { 'GameAnimSampleCpp.vcxproj' }
+    if (-not ($references | Where-Object { [IO.Path]::GetFileName($_) -eq $expected })) {
+        throw "$name does not reference $expected."
     }
 
     foreach ($reference in $references) {
@@ -56,8 +59,15 @@ foreach ($name in $solutions) {
 }
 
 $nativeProject = Join-Path $repositoryRoot 'Intermediate/ProjectFiles/GameAnimSampleCpp.vcxproj'
-foreach ($file in @('SampleLocomotionCharacter.cpp', 'SampleLocomotionAnimInstance.cpp',
-                    'SampleTraversalProbeComponent.cpp')) {
+$projectEntries = @(
+    'GameAnimationSampleCpp.Target.cs',
+    'GameAnimationSampleCppEditor.Target.cs',
+    'SampleMoverCharacter.cpp',
+    'SampleLocomotionCharacter.cpp',
+    'SampleLocomotionAnimInstance.cpp',
+    'SampleTraversalProbeComponent.cpp'
+)
+foreach ($file in $projectEntries) {
     if (-not (Select-String -LiteralPath $nativeProject -SimpleMatch $file -Quiet)) {
         throw "$nativeProject is missing $file."
     }
