@@ -28,14 +28,16 @@ In File Explorer, right-click `GameAnimSampleCpp.uproject` and select **Show mor
 ./Scripts/GenerateVisualStudioProjects.ps1 -EngineRoot 'D:\Program Files\Epic Games\UE_5.9'
 ```
 
+If you generated the files from File Explorer, run `./Scripts/GenerateVisualStudioProjects.ps1 -VerifyOnly` to check the existing solutions, Game and Editor targets, and C++ project references.
+
 | Solution | Use |
 | --- | --- |
 | `GameAnimSampleCpp.sln` and `GameAnimSampleCpp.slnx` | Open either for C++ work. The `GameAnimSampleCpp` project contains the `GameAnimationSampleCpp` game module and the `SampleLocomotion` plugin sources and tests. |
-| `Automation_GameAnimSampleCpp.sln` and `Automation_GameAnimSampleCpp.slnx` | Open either for Unreal AutomationTool and its .NET projects. Native Unreal Automation tests live in the game solution. |
+| `Automation_GameAnimSampleCpp.sln` and `Automation_GameAnimSampleCpp.slnx` | Open either to work on the engine's .NET automation scripts, including AutomationUtils and BuildGraph. Use the game solution for the C++ project and native Unreal Automation tests. |
 
 In the game solution, select **Development Editor** and **Win64**, set **GameAnimSampleCpp** as the startup project, and build it before launching the debugger with **F5**. From the same solution, select **Development** and **Win64** for the standalone Game target. Close Unreal Editor before a full rebuild when the Editor has the destination binaries open.
 
-If Unreal Build Tool selects a broken or unsupported MSVC installation, use the Visual Studio Installer to install a supported toolset. The local Win64 build used toolchain family `14.44.35207` and Windows SDK `10.0.26100.0`. To reproduce that selection in a command-line build, append `'-CompilerVersion=14.44.35207'` after installing that family.
+If Unreal Build Tool selects a broken or unsupported MSVC installation, use the Visual Studio Installer to install a supported toolset. The verified Win64 Editor build used MSVC `14.50.35739` and Windows SDK `10.0.26100.0`.
 
 ## Local reference workspace
 
