@@ -550,3 +550,9 @@ The Win64 Editor unity build and zone Blueprint compile passed. In `LookAtPOI_Le
 Run `Scripts/migrate_look_at_gizmo.py` to install native target input and hover handling. The target mesh, hitbox, colors and tooltip remain authored.
 
 The Win64 Editor unity build and gizmo Blueprint compile passed. In `LookAtPOI_Level` PIE, selecting a zone spawned the native target. Scripted pointer samples verified that Shift could start control only on hover, that control persisted after leaving the hitbox until Shift was released, and that a 10 by 7 pixel movement changed yaw by −10° and roll by 7°. The wheel increased scale during control and left it unchanged after release. Physical hardware input and rendered tooltip comparison are **Not run**.
+
+### Windows C++ handoff
+
+The Explorer-registered Unreal Version Selector command generated project files from `GameAnimSampleCpp.uproject`. The generated C++ project listed the Game and Editor targets and the new runtime sources. `Scripts/GenerateVisualStudioProjects.ps1 -VerifyOnly` checked the references in all four solutions.
+
+Visual Studio 2026 loaded the C++ project from both game solution formats and displayed the AutomationUtils and BuildGraph projects in both automation solution formats. The Win64 Development Game target also built with unity enabled. Packaging and building every .NET automation project from the IDE are **Not run**.
