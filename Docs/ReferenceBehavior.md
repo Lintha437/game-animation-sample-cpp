@@ -551,6 +551,12 @@ Run `Scripts/migrate_look_at_gizmo.py` to install native target input and hover 
 
 The Win64 Editor unity build and gizmo Blueprint compile passed. In `LookAtPOI_Level` PIE, selecting a zone spawned the native target. Scripted pointer samples verified that Shift could start control only on hover, that control persisted after leaving the hitbox until Shift was released, and that a 10 by 7 pixel movement changed yaw by −10° and roll by 7°. The wheel increased scale during control and left it unchanged after release. Physical hardware input and rendered tooltip comparison are **Not run**.
 
+### Mover paired interaction input
+
+Run `Scripts/migrate_mover_interaction_input.py` to bind both actions in the ragdoll pawn and forward existing scripted requests. C++ checks the aim state and eligibility before choosing the demo callback or dispatching the current candidates to the authored paired animation graph.
+
+The Win64 Editor unity build and the ragdoll pawn compile passed. In separate `RagdollLevel` PIE runs, injected `IA_Interact` and `IA_Takedown` actions assigned Attacker and Victim roles to two pawns and selected the corresponding authored shove and takedown assets. Aim-only demo callbacks, montage interruption, and multiplayer are **Not run**.
+
 ### Windows C++ handoff
 
 The Explorer-registered Unreal Version Selector command generated project files from `GameAnimSampleCpp.uproject`. The generated C++ project listed the Game and Editor targets and the new runtime sources. `Scripts/GenerateVisualStudioProjects.ps1 -VerifyOnly` checked the references in all four solutions.

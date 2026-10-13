@@ -50,6 +50,8 @@ Keep targeting registration and facing intent on the owning pawn. The sample's o
 
 For paired interactions, rebuild the candidate list before the animation chooser runs. Filter for eligible pawns within the overlap radius, vertical tolerance, and facing arc. Sweep the host's character collision profile between the two pawns to reject obstructed candidates. Keep the role assignments, pose search, and montage selection in the animation assets. Map the sample's object query and collision profile to named settings in the destination project.
 
+Bind each paired action once in the owning pawn. Pass the requested action name and current candidates to the authored chooser. The sample uses the same keys for demonstration tools while aiming. Port those tool callbacks separately if the destination needs them.
+
 Route jump presses through the movement mode and traversal gate before publishing a jump edge. The sample builds separate ground and air probes for the traversal asset, which still chooses the montage. A rejected probe can request an uncrouch or publish a one-frame jump edge for prediction. Hold input can retry traversal without publishing additional jump edges. Keep ragdoll recovery tied to confirmed floor contact.
 
 The sample falling mode extends stock Mover air movement with command-driven facing at up to 300 degrees per second. Preserve the custom command's rotation offset and verify the turn after a jump. Its slide transitions enter above 380 cm/s while crouched and exit at or below 200 cm/s or when standing. Keep both thresholds aligned with the destination's authored movement speeds.
