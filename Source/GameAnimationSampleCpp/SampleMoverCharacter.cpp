@@ -283,6 +283,18 @@ void ASampleMoverCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInp
     {
         return;
     }
+    const auto Bind = [this, Input](const TSoftObjectPtr<UInputAction>& Action, auto Handler)
+    {
+        if (const UInputAction* Loaded = Action.LoadSynchronous())
+        {
+            Input->BindAction(Loaded, ETriggerEvent::Triggered, this, Handler);
+        }
+    };
+    if (bUseNativeMoverInteractionInput)
+    {
+        Bind(MoverInteractAction, &ASampleMoverCharacter::HandleMoverShove);
+        Bind(MoverTakedownAction, &ASampleMoverCharacter::HandleMoverTakedown);
+    }
     if (bUseNativeMoverJumpInput)
     {
         if (const UInputAction* Jump = MoverJumpAction.LoadSynchronous())
@@ -302,13 +314,6 @@ void ASampleMoverCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInp
             Input->BindActionValue(Action);
         }
     }
-    const auto Bind = [this, Input](const TSoftObjectPtr<UInputAction>& Action, auto Handler)
-    {
-        if (const UInputAction* Loaded = Action.LoadSynchronous())
-        {
-            Input->BindAction(Loaded, ETriggerEvent::Triggered, this, Handler);
-        }
-    };
     Bind(MoverLookAction, &ASampleMoverCharacter::HandleMoverLook);
     Bind(MoverGamepadLookAction, &ASampleMoverCharacter::HandleMoverGamepadLook);
     Bind(MoverCrouchAction, &ASampleMoverCharacter::HandleMoverCrouch);
@@ -1076,6 +1081,58 @@ void ASampleMoverCharacter::UpdateCharacterInteractionCandidates()
                 25, FLinearColor::White, 0.0f, 0.5f, EDrawDebugSceneDepthPriorityGroup::Foreground);
         }
     }
+}
+
+void ASampleMoverCharacter::HandleMoverShove()
+{
+    HandleMoverInteractionInput(TEXT("Shove"), TEXT("Demo_Spawn/RotateCharacter"));
+}
+
+void ASampleMoverCharacter::HandleMoverTakedown()
+{
+    HandleMoverInteractionInput(TEXT("Takedown"), TEXT("Demo_SimpleShoot"));
+}
+
+void ASampleMoverCharacter::HandleMoverInteractionInput(FName InteractionType, FName AimingDemoFunction)
+{
+    if (ReadIntent(FindSnapshot(*this, MoverPlayerInputState), *this, MoverAimIntent))
+    {
+        if (UFunction* Demo = FindFunction(AimingDemoFunction); Demo && Demo->NumParms == 0)
+        {
+            ProcessEvent(Demo, nullptr);
+        }
+    }
+    else if (CanStartRagdollCharacterInteraction())
+    {
+        RequestCharacterInteraction(InteractionType);
+    }
+}
+
+void ASampleMoverCharacter::RequestCharacterInteraction(FName InteractionType)
+{
+    const auto* Candidates = FindFProperty<FArrayProperty>(GetClass(), TEXT("InteractableActors"));
+    if (!Candidates)
+    {
+        return;
+    }
+    const void* CandidateValues = Candidates->ContainerPtrToValuePtr<void>(this);
+    if (FScriptArrayHelper(Candidates, CandidateValues).Num() == 0)
+    {
+        return;
+    }
+
+    UFunction* SelectAnimation = FindFunction(TEXT("Try_MultiCharacterInteraction"));
+    const auto* Type = SelectAnimation ? FindFProperty<FNameProperty>(SelectAnimation, TEXT("InteractionType")) : nullptr;
+    const auto* Actors = SelectAnimation ? FindFProperty<FArrayProperty>(SelectAnimation, TEXT("Other Actors")) : nullptr;
+    if (!Type || !Actors || SelectAnimation->NumParms != 2 || !Actors->SameType(Candidates))
+    {
+        return;
+    }
+    FStructOnScope Args(SelectAnimation);
+    void* Data = Args.GetStructMemory();
+    Type->SetPropertyValue_InContainer(Data, InteractionType);
+    Actors->CopyCompleteValue(Actors->ContainerPtrToValuePtr<void>(Data), CandidateValues);
+    ProcessEvent(SelectAnimation, Data);
 }
 
 void ASampleMoverCharacter::BeginRagdollPhysics()
