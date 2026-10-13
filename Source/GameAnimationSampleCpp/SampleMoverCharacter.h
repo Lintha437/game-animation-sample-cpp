@@ -186,6 +186,10 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Interaction")
     void UpdateCharacterInteractionCandidates();
 
+    /** Passes the current candidate array and request type to authored paired-animation selection. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Interaction")
+    void RequestCharacterInteraction(FName InteractionType);
+
     /** Starts physics immediately, queues the Ragdoll mode, and freezes capsule facing briefly. */
     UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Ragdoll")
     void BeginRagdollPhysics();
@@ -264,6 +268,16 @@ private:
     UPROPERTY(EditDefaultsOnly, Category = "Sample|Mover|Input")
     TSoftObjectPtr<UInputAction> MoverJumpAction{FSoftObjectPath(TEXT("/Game/Input/IA_Jump.IA_Jump"))};
 
+    /** Enable on the ragdoll pawn after removing its authored interaction key events. */
+    UPROPERTY(EditDefaultsOnly, Category = "Sample|Mover|Input")
+    bool bUseNativeMoverInteractionInput = false;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Sample|Mover|Input")
+    TSoftObjectPtr<UInputAction> MoverInteractAction{FSoftObjectPath(TEXT("/Game/Input/IA_Interact.IA_Interact"))};
+
+    UPROPERTY(EditDefaultsOnly, Category = "Sample|Mover|Input")
+    TSoftObjectPtr<UInputAction> MoverTakedownAction{FSoftObjectPath(TEXT("/Game/Input/IA_Takedown.IA_Takedown"))};
+
     void HandleMoverLook(const FInputActionValue& Value);
     void HandleMoverGamepadLook(const FInputActionValue& Value);
     void HandleMoverCrouch();
@@ -278,6 +292,9 @@ private:
 
     /** Retries traversal while the action remains triggered. */
     void HandleMoverJumpTriggered();
+    void HandleMoverShove();
+    void HandleMoverTakedown();
+    void HandleMoverInteractionInput(FName InteractionType, FName AimingDemoFunction);
 
     /** @return True when the authored traversal call accepted the approach and selected a montage. */
     bool TryMoverTraversal(bool bDrawForDuration);
