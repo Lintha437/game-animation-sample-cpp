@@ -1135,6 +1135,89 @@ void ASampleMoverCharacter::RequestCharacterInteraction(FName InteractionType)
     ProcessEvent(SelectAnimation, Data);
 }
 
+void ASampleMoverCharacter::BeginPairedInteractionCollision(UPrimitiveComponent* PartnerCapsule)
+{
+    auto* Partner = PartnerCapsule ? Cast<ASampleMoverCharacter>(PartnerCapsule->GetOwner()) : nullptr;
+    auto* Capsule = GetRagdollCapsule(*this);
+    if (!IsValid(Partner) || Partner == this || !Capsule ||
+        PairedInteractions.ContainsByPredicate([Partner](const TSharedPtr<FPairedInteraction>& Pair)
+        {
+            return Pair->Initiator.Get() == Partner || Pair->Partner.Get() == Partner;
+        }))
+    {
+        return;
+    }
+
+    const auto Pair = MakeShared<FPairedInteraction>();
+    Pair->Initiator = this;
+    Pair->Partner = Partner;
+    Pair->InitiatorCapsule = Capsule;
+    Pair->PartnerCapsule = PartnerCapsule;
+    Pair->bAddedInitiatorIgnore = !Capsule->GetMoveIgnoreComponents().Contains(PartnerCapsule);
+    Pair->bAddedPartnerIgnore = !PartnerCapsule->GetMoveIgnoreComponents().Contains(Capsule);
+    if (Pair->bAddedInitiatorIgnore)
+    {
+        Capsule->IgnoreComponentWhenMoving(PartnerCapsule, true);
+    }
+    if (Pair->bAddedPartnerIgnore)
+    {
+        PartnerCapsule->IgnoreComponentWhenMoving(Capsule, true);
+    }
+
+    auto* Mesh = GetRagdollMesh(*this);
+    auto* PartnerMesh = GetRagdollMesh(*Partner);
+    Pair->InitiatorMesh = Mesh;
+    Pair->PartnerMesh = PartnerMesh;
+    if (Mesh && PartnerMesh &&
+        !Mesh->PrimaryComponentTick.GetPrerequisites().Contains(FTickPrerequisite(PartnerMesh, PartnerMesh->PrimaryComponentTick)))
+    {
+        Mesh->AddTickPrerequisiteComponent(PartnerMesh);
+        Pair->bAddedTickPrerequisite = true;
+    }
+    PairedInteractions.Add(Pair);
+    Partner->PairedInteractions.Add(Pair);
+}
+
+void ASampleMoverCharacter::EndPairedInteractionCollision()
+{
+    const auto EndingPairs = MoveTemp(PairedInteractions);
+    PairedInteractions.Reset();
+    for (const auto& Pair : EndingPairs)
+    {
+        auto* Capsule = Pair->InitiatorCapsule.Get();
+        auto* PartnerCapsule = Pair->PartnerCapsule.Get();
+        if (Capsule && PartnerCapsule)
+        {
+            if (Pair->bAddedInitiatorIgnore)
+            {
+                Capsule->IgnoreComponentWhenMoving(PartnerCapsule, false);
+            }
+            if (Pair->bAddedPartnerIgnore)
+            {
+                PartnerCapsule->IgnoreComponentWhenMoving(Capsule, false);
+            }
+        }
+        if (auto* Mesh = Pair->InitiatorMesh.Get(); Mesh && Pair->bAddedTickPrerequisite)
+        {
+            if (auto* PartnerMesh = Pair->PartnerMesh.Get())
+            {
+                Mesh->RemoveTickPrerequisiteComponent(PartnerMesh);
+            }
+        }
+        ASampleMoverCharacter* Peer = Pair->Initiator.Get() == this ? Pair->Partner.Get() : Pair->Initiator.Get();
+        if (Peer)
+        {
+            Peer->PairedInteractions.RemoveSingleSwap(Pair);
+        }
+    }
+}
+
+void ASampleMoverCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    EndPairedInteractionCollision();
+    Super::EndPlay(EndPlayReason);
+}
+
 void ASampleMoverCharacter::BeginRagdollPhysics()
 {
     auto* Mover = FindComponentByClass<UCharacterMoverComponent>();

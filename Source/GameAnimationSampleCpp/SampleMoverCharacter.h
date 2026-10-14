@@ -5,6 +5,7 @@
 #include "SampleMoverCharacter.generated.h"
 
 class UInputAction;
+class USkeletalMeshComponent;
 struct FInputActionValue;
 
 /** Native state queries and gameplay movement for the reference Mover pawn. */
@@ -190,6 +191,14 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Interaction")
     void RequestCharacterInteraction(FName InteractionType);
 
+    /** Tracks the capsule ignores and mesh tick dependency owned by this paired action. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Interaction")
+    void BeginPairedInteractionCollision(UPrimitiveComponent* PartnerCapsule);
+
+    /** Releases only the overrides installed by pairs involving this pawn. Safe to call repeatedly. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Interaction")
+    void EndPairedInteractionCollision();
+
     /** Starts physics immediately, queues the Ragdoll mode, and freezes capsule facing briefly. */
     UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Ragdoll")
     void BeginRagdollPhysics();
@@ -226,10 +235,26 @@ public:
     void TraceRagdollObstacles();
 
 protected:
+    /** Releases active pairs before the pawn or its components tear down. */
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
     /** Binds sampled direction values and the migrated player events on local possession. */
     virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 
 private:
+    struct FPairedInteraction
+    {
+        TWeakObjectPtr<ASampleMoverCharacter> Initiator;
+        TWeakObjectPtr<ASampleMoverCharacter> Partner;
+        TWeakObjectPtr<UPrimitiveComponent> InitiatorCapsule;
+        TWeakObjectPtr<UPrimitiveComponent> PartnerCapsule;
+        TWeakObjectPtr<USkeletalMeshComponent> InitiatorMesh;
+        TWeakObjectPtr<USkeletalMeshComponent> PartnerMesh;
+        bool bAddedInitiatorIgnore = false;
+        bool bAddedPartnerIgnore = false;
+        bool bAddedTickPrerequisite = false;
+    };
+
+    TArray<TSharedPtr<FPairedInteraction>> PairedInteractions;
     /** Enable after removing the equivalent Blueprint action events from the local asset. */
     UPROPERTY(EditDefaultsOnly, Category = "Sample|Mover|Input")
     bool bUseNativeMoverDeviceInput = false;
