@@ -428,6 +428,43 @@ bool USampleBlueprintMigrationLibrary::RemoveIsolatedEventOverride(UBlueprint* B
     return true;
 }
 
+bool USampleBlueprintMigrationLibrary::ReplacePairedInteractionCollision(UBlueprint* Blueprint, UEdGraph* MatchGraph,
+    UEdGraph* EventGraph)
+{
+    if (!Blueprint || !Blueprint->ParentClass || !MatchGraph || !EventGraph ||
+        MatchGraph->GetOuter() != Blueprint || EventGraph->GetOuter() != Blueprint ||
+        MatchGraph->GetFName() != TEXT("Try_MultiCharacterInteraction") || EventGraph->GetFName() != TEXT("EventGraph"))
+    {
+        return false;
+    }
+
+    const auto* Begin = Blueprint->ParentClass->FindFunctionByName(TEXT("BeginPairedInteractionCollision"));
+    const auto* End = Blueprint->ParentClass->FindFunctionByName(TEXT("EndPairedInteractionCollision"));
+    if (!Begin || !End)
+    {
+        return false;
+    }
+    if (FindUniqueCall(*MatchGraph, Begin->GetFName()) && FindUniqueCall(*EventGraph, End->GetFName()))
+    {
+        return true;
+    }
+
+    auto* Prerequisite = FindUniqueCall(*MatchGraph, TEXT("AddTickPrerequisiteComponent"));
+    auto* IgnorePartner = Prerequisite ? GetNextCall(*Prerequisite, TEXT("IgnoreComponentWhenMoving")) : nullptr;
+    auto* IgnoreInitiator = IgnorePartner ? GetNextCall(*IgnorePartner, TEXT("IgnoreComponentWhenMoving")) : nullptr;
+    auto* Cleanup = FindUniqueCall(*EventGraph, TEXT("ClearMoveIgnoreComponents"));
+    UEdGraphPin* Capsule = IgnorePartner ? IgnorePartner->FindPin(TEXT("Component"), EGPD_Input) : nullptr;
+    if (!IgnoreInitiator || !IgnoreInitiator->GetThenPin()->LinkedTo.IsEmpty() ||
+        !Capsule || Capsule->LinkedTo.Num() != 1 || !Cleanup)
+    {
+        return false;
+    }
+
+    return InstallTraversalCall(*Blueprint, *MatchGraph,
+        {Prerequisite, IgnoreInitiator, Begin, {{TEXT("PartnerCapsule"), Capsule}}, {IgnorePartner}}) &&
+        InstallTraversalCall(*Blueprint, *EventGraph, {Cleanup, Cleanup, End, {}});
+}
+
 bool USampleBlueprintMigrationLibrary::ForwardIsolatedEventOverride(UBlueprint* Blueprint, UEdGraph* Graph,
     FName EventName, FName FunctionName)
 {

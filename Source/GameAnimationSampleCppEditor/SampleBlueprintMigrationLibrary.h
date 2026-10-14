@@ -61,6 +61,10 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
     static bool RemoveCustomEvents(UBlueprint* Blueprint, UEdGraph* Graph, const TArray<FName>& EventNames);
 
+    /** Replaces the paired collision tail and montage cleanup while preserving the authored chooser and proxy. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
+    static bool ReplacePairedInteractionCollision(UBlueprint* Blueprint, UEdGraph* MatchGraph, UEdGraph* EventGraph);
+
     /**
      * Removes an isolated override and its isolated graph body after native code takes over.
      * @param Blueprint Owner of the event graph.

@@ -557,6 +557,12 @@ Run `Scripts/migrate_mover_interaction_input.py` to bind both actions in the rag
 
 The Win64 Editor unity build and the ragdoll pawn compile passed. In separate `RagdollLevel` PIE runs, injected `IA_Interact` and `IA_Takedown` actions assigned Attacker and Victim roles to two pawns and selected the corresponding authored shove and takedown assets. Aim-only demo callbacks, montage interruption, and multiplayer are **Not run**.
 
+### Mover paired interaction collision
+
+Run `Scripts/migrate_mover_paired_collision.py` to install scoped collision overrides and mesh tick ordering. The original montage callbacks release the native pair on blend-out or interruption. Cleanup preserves overrides that predated the interaction.
+
+The Win64 Editor unity build and pawn Blueprint compile passed. In `RagdollLevel` PIE, a shove installed reciprocal capsule ignores. Interrupting the victim montage removed both ignores and retained the initiator's pre-existing ignore for a third actor. Dedicated tick-order instrumentation, natural montage completion, and multiplayer are **Not run** for this batch.
+
 ### Windows C++ handoff
 
 The Explorer-registered Unreal Version Selector command generated project files from `GameAnimSampleCpp.uproject`. The generated C++ project listed the Game and Editor targets and the new runtime sources. `Scripts/GenerateVisualStudioProjects.ps1 -VerifyOnly` checked the references in all four solutions.
