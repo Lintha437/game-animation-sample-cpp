@@ -167,6 +167,18 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Ragdoll")
     void UpdateRagdollGravity();
 
+    /** Updates the ragdoll physics inputs in the original order and schedules eligible NPC recovery. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Ragdoll")
+    void UpdateRagdollBehavior();
+
+    /** Combines move input and slope force, then applies spine torque while physics is active. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Ragdoll")
+    void UpdateRagdollRollForce();
+
+    /** Queues one three-second wait before checking whether the ragdoll has settled. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Ragdoll")
+    void ScheduleRagdollRecoveryCheck();
+
     /** Toggles both movement and ragdoll gravity on pawns with the sample's ragdoll settings. */
     void ApplySandboxZeroGravity(bool bEnabled);
 
@@ -344,4 +356,7 @@ private:
 
     UFUNCTION()
     void RestoreRagdollDefaultProfile();
+
+    UFUNCTION()
+    void CompleteRagdollRecoveryCheck();
 };
