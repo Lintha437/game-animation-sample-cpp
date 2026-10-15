@@ -50,6 +50,8 @@ namespace
     constexpr int32 ConfirmRagdollEntryAction = 0x52414701;
     constexpr int32 ReleaseRagdollFacingAction = 0x52414702;
     constexpr int32 RestoreRagdollProfileAction = 0x52414703;
+    constexpr int32 CheckRagdollRecoveryAction = 0x52414704;
+    constexpr double SettledRagdollSpeed = 10.0;
 
     enum class EAuthoredMovementMode : uint8
     {
@@ -995,6 +997,69 @@ void ASampleMoverCharacter::UpdateRagdollGravity()
         const double Multiplier = ReadVector(*this, TEXT("Ragdoll_COM_Velocity")).Z <= GravityCutoffSpeed
             ? 0.0 : ReadNumber(GetClass(), this, TEXT("Ragdoll_GravityMultiplier"));
         Physics->SetBodyModifierGravityMultiplier(TEXT("All"), static_cast<float>(Multiplier), true, true);
+    }
+}
+
+void ASampleMoverCharacter::UpdateRagdollBehavior()
+{
+    UpdateRagdollVelocities();
+    if (UFunction* Impact = FindFunction(TEXT("Ragdoll_UpdateImpactDirection")); Impact && Impact->NumParms == 0)
+    {
+        ProcessEvent(Impact, nullptr);
+    }
+    UpdateRagdollRollForce();
+    UpdateRagdollGravity();
+    if (!IsPlayerControlled() && FMath::IsNearlyZero(ReadNumber(GetClass(), this, TEXT("Ragdoll_Speed")), SettledRagdollSpeed))
+    {
+        ScheduleRagdollRecoveryCheck();
+    }
+}
+
+void ASampleMoverCharacter::UpdateRagdollRollForce()
+{
+    if (!GetWorld())
+    {
+        return;
+    }
+    const FVector FloorNormal = ReadVector(*this, TEXT("FloorNormal"));
+    const double Cosine = FMath::Clamp(FVector::DotProduct(FloorNormal, FVector::UpVector), -1.0, 1.0);
+    const double Slope = FMath::RadiansToDegrees(FMath::Acos(Cosine));
+    const FVector Target = FloorNormal * FMath::GetMappedRangeValueClamped(
+        FVector2D(20.0, 30.0), FVector2D(0.0, 1.0), Slope);
+    const FVector Current = ReadVector(*this, TEXT("Ragdoll_AutoRollForce"));
+    const float Speed = Target.SizeSquared() < Current.SizeSquared() ? 0.5f : 2.0f;
+    const FVector Automatic = FMath::VInterpConstantTo(Current, Target, GetWorld()->GetDeltaSeconds(), Speed);
+    WriteVector(*this, TEXT("Ragdoll_AutoRollForce"), Automatic);
+    const FVector MoveInput = ReadStructResult(*this, TEXT("Get_MoveInput"), FVector::ZeroVector);
+    const FVector Roll = (MoveInput + Automatic).GetClampedToMaxSize(1.0);
+    WriteVector(*this, TEXT("Ragdoll_RollForce"), Roll);
+    if (auto* Mesh = GetRagdollMesh(*this); Mesh && Mesh->IsAnySimulatingPhysics())
+    {
+        Mesh->AddTorqueInDegrees(FVector::CrossProduct(FVector::UpVector, Roll) * 100000.0, TEXT("Spine_05"), true);
+        const auto* Debug = FindFProperty<FIntProperty>(GetClass(), TEXT("DebugState"));
+        if (Debug && Debug->GetPropertyValue_InContainer(this) > 0)
+        {
+            UDrawDebugLibrary::DrawDebugOrientedArrow(UDrawDebugLibrary::MakeDebugDrawer(this), GetActorLocation(),
+                Roll.Rotation(), Roll.Size() * 100.0, FDrawDebugLineStyle(), false);
+        }
+    }
+}
+
+void ASampleMoverCharacter::ScheduleRagdollRecoveryCheck()
+{
+    if (GetWorld())
+    {
+        UKismetSystemLibrary::Delay(this, 3.0f, FLatentActionInfo(
+            0, CheckRagdollRecoveryAction, GET_FUNCTION_NAME_STRING_CHECKED(ASampleMoverCharacter, CompleteRagdollRecoveryCheck), this));
+    }
+}
+
+void ASampleMoverCharacter::CompleteRagdollRecoveryCheck()
+{
+    if (ResolveMovementModeValue() == static_cast<uint8>(EAuthoredMovementMode::Ragdoll) &&
+        FMath::IsNearlyZero(ReadNumber(GetClass(), this, TEXT("Ragdoll_Speed")), SettledRagdollSpeed))
+    {
+        RequestRagdollRecovery();
     }
 }
 

@@ -563,6 +563,12 @@ Run `Scripts/migrate_mover_paired_collision.py` to install scoped collision over
 
 The Win64 Editor unity build and pawn Blueprint compile passed. In `RagdollLevel` PIE, a shove installed reciprocal capsule ignores. Interrupting the victim montage removed both ignores and retained the initiator's pre-existing ignore for a third actor. Dedicated tick-order instrumentation, natural montage completion, and multiplayer are **Not run** for this batch.
 
+### Mover ragdoll rolling and settled recovery
+
+Run `Scripts/migrate_ragdoll_behavior.py` to install the native ragdoll update, slope-assisted rolling, and delayed NPC recovery. The impact prediction, animation pose handoff, and get-up playback retain their authored paths.
+
+The Win64 Editor unity build and pawn Blueprint compile passed. In `RagdollLevel` PIE, injected forward input produced a unit roll force while the player remained in Ragdoll. An unpossessed pawn returned to Walking about 3 seconds after the first observed Ragdoll frame, with speed below 10 cm/s. Steep-slope comparisons, exact spine torque instrumentation, and multiplayer are **Not run**.
+
 ### Windows C++ handoff
 
 The Explorer-registered Unreal Version Selector command generated project files from `GameAnimSampleCpp.uproject`. The generated C++ project listed the Game and Editor targets and the new runtime sources. `Scripts/GenerateVisualStudioProjects.ps1 -VerifyOnly` checked the references in all four solutions.
