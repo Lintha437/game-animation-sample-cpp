@@ -235,6 +235,15 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Ragdoll")
     void RefreshRagdollDefaultProfile();
 
+    /** Applies the default-profile change only for the authored physics console variable. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Ragdoll")
+    void HandleRagdollProfileVariable(FString CVarName);
+
+    /** Evaluates the contact thresholds and forwards qualifying impacts to the authored Foley event. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Ragdoll")
+    void HandleRagdollContact(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp,
+        FVector NormalImpulse, const FHitResult& Hit);
+
     /**
      * Applies the named Physics Control recipe and the corresponding leg collision policy.
      * @param PhysicsProfile Authored profile name. Ragdoll enables collisions between the leg groups.
@@ -315,6 +324,13 @@ private:
     UPROPERTY(EditDefaultsOnly, Category = "Sample|Mover|Input")
     TSoftObjectPtr<UInputAction> MoverTakedownAction{FSoftObjectPath(TEXT("/Game/Input/IA_Takedown.IA_Takedown"))};
 
+    /** Enable on the ragdoll pawn after the original trigger action has been removed. */
+    UPROPERTY(EditDefaultsOnly, Category = "Sample|Mover|Input")
+    bool bUseNativeMoverRagdollInput = false;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Sample|Mover|Input")
+    TSoftObjectPtr<UInputAction> MoverRagdollAction{FSoftObjectPath(TEXT("/Game/Input/IA_TriggerRagdoll.IA_TriggerRagdoll"))};
+
     void HandleMoverLook(const FInputActionValue& Value);
     void HandleMoverGamepadLook(const FInputActionValue& Value);
     void HandleMoverCrouch();
@@ -331,6 +347,7 @@ private:
     void HandleMoverJumpTriggered();
     void HandleMoverShove();
     void HandleMoverTakedown();
+    void HandleMoverRagdollInput();
     void HandleMoverInteractionInput(FName InteractionType, FName AimingDemoFunction);
 
     /** @return True when the authored traversal call accepted the approach and selected a montage. */
