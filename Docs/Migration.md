@@ -72,6 +72,8 @@ Start skeletal physics before applying an entry impulse. Request the ragdoll mod
 
 For rolling, combine the slope-derived force with the pawn's movement input and clamp the result to unit length. Keep the torque bone and slope thresholds aligned with the host rig and terrain. The reference NPC waits three seconds, then rechecks mode and settling speed before requesting recovery.
 
+Route the manual ragdoll action and the obstacle trigger through the same entry callback. Keep the default physics profile independent of the active ragdoll profile so a tuning change takes effect after recovery. The sample filters Foley contacts by bone speed and normal impulse before passing gain to the authored sound event.
+
 Configure the leg body groups with the host Physics Asset's body names. The sample allows the two groups to collide in ragdoll and switches back to its `Free` joint constraint profile when animation drives the mesh. Reuse the obstacle trace only if the host supplies its object channel and neck and foot socket names. The sample sweeps from the neck to the midpoint between the feet, using a 15 cm radius and its authored Obstacle object type.
 
 ### Connect CMC ragdoll transitions

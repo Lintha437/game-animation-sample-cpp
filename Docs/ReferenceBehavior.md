@@ -569,6 +569,12 @@ Run `Scripts/migrate_ragdoll_behavior.py` to install the native ragdoll update, 
 
 The Win64 Editor unity build and pawn Blueprint compile passed. In `RagdollLevel` PIE, injected forward input produced a unit roll force while the player remained in Ragdoll. An unpossessed pawn returned to Walking about 3 seconds after the first observed Ragdoll frame, with speed below 10 cm/s. Steep-slope comparisons, exact spine torque instrumentation, and multiplayer are **Not run**.
 
+### Mover manual ragdoll and contact dispatch
+
+Run `Scripts/migrate_ragdoll_trigger.py` to bind the manual action and forward default-profile and contact logic. Manual and obstacle entries share the original animation-facing event. C++ evaluates contact bone speed and normal impulse and forwards the resulting gain to the existing Foley event.
+
+The Win64 Editor unity build and pawn Blueprint compile passed. In `RagdollLevel` PIE, the input action entered Ragdoll. Changing the configured default switched the stored profile without replacing the active ragdoll profile. Recovery returned to Walking and applied the new default. Audible contacts and multiplayer are **Not run**.
+
 ### Windows C++ handoff
 
 The Explorer-registered Unreal Version Selector command generated project files from `GameAnimSampleCpp.uproject`. The generated C++ project listed the Game and Editor targets and the new runtime sources. `Scripts/GenerateVisualStudioProjects.ps1 -VerifyOnly` checked the references in all four solutions.
