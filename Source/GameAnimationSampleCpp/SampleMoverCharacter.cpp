@@ -297,6 +297,10 @@ void ASampleMoverCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInp
         Bind(MoverInteractAction, &ASampleMoverCharacter::HandleMoverShove);
         Bind(MoverTakedownAction, &ASampleMoverCharacter::HandleMoverTakedown);
     }
+    if (bUseNativeMoverRagdollInput)
+    {
+        Bind(MoverRagdollAction, &ASampleMoverCharacter::HandleMoverRagdollInput);
+    }
     if (bUseNativeMoverJumpInput)
     {
         if (const UInputAction* Jump = MoverJumpAction.LoadSynchronous())
@@ -1402,12 +1406,15 @@ void ASampleMoverCharacter::TraceRagdollObstacles()
     const auto Draw = Debug && Debug->GetPropertyValue_InContainer(this) == 1
         ? EDrawDebugTrace::ForOneFrame : EDrawDebugTrace::None;
     TArray<FHitResult> Hits;
-    if (!UKismetSystemLibrary::SphereTraceMultiForObjects(this, Neck, Feet, 15.f,
+    if (UKismetSystemLibrary::SphereTraceMultiForObjects(this, Neck, Feet, 15.f,
         {EObjectTypeQuery::ObjectTypeQuery7}, false, {}, Draw, Hits, true))
     {
-        return;
+        HandleMoverRagdollInput();
     }
+}
 
+void ASampleMoverCharacter::HandleMoverRagdollInput()
+{
     UFunction* Trigger = FindFunction(TEXT("TriggerRagdoll"));
     const auto* Stop = Trigger ? FindFProperty<FBoolProperty>(Trigger, TEXT("StopActiveMontages")) : nullptr;
     const auto* Blend = Trigger ? FindFProperty<FStructProperty>(Trigger, TEXT("MontageBlendOut")) : nullptr;
@@ -1419,6 +1426,40 @@ void ASampleMoverCharacter::TraceRagdollObstacles()
         Stop->SetPropertyValue_InContainer(Data, true);
         Blend->CopyCompleteValue(Blend->ContainerPtrToValuePtr<void>(Data), DefaultBlend->ContainerPtrToValuePtr<void>(this));
         ProcessEvent(Trigger, Data);
+    }
+}
+
+void ASampleMoverCharacter::HandleRagdollProfileVariable(FString CVarName)
+{
+    if (CVarName == TEXT("DDCVar.CharacterPhysics.DefaultProfile"))
+    {
+        RefreshRagdollDefaultProfile();
+    }
+}
+
+void ASampleMoverCharacter::HandleRagdollContact(UPrimitiveComponent* HitComponent, AActor* OtherActor,
+    UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
+{
+    const auto* Mesh = GetRagdollMesh(*this);
+    if (OtherActor == this || !Mesh || NormalImpulse.SizeSquared() <= FMath::Square(100.0))
+    {
+        return;
+    }
+    const double BoneSpeed = Mesh->GetPhysicsLinearVelocity(Hit.BoneName).Size();
+    if (BoneSpeed <= 50.0)
+    {
+        return;
+    }
+
+    UFunction* Foley = FindFunction(TEXT("PlayRagdollSound"));
+    const auto* Volume = Foley ? FindFProperty<FNumericProperty>(Foley, TEXT("Volume")) : nullptr;
+    if (Volume && Foley->NumParms == 1 && Volume->IsFloatingPoint())
+    {
+        FStructOnScope Args(Foley);
+        uint8* Data = Args.GetStructMemory();
+        const double Gain = FMath::GetMappedRangeValueClamped(FVector2D(50.0, 500.0), FVector2D(0.3, 1.0), BoneSpeed);
+        Volume->SetFloatingPointPropertyValue(Volume->ContainerPtrToValuePtr<void>(Data), Gain);
+        ProcessEvent(Foley, Data);
     }
 }
 
