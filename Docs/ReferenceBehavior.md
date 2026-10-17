@@ -580,3 +580,7 @@ The Win64 Editor unity build and pawn Blueprint compile passed. In `RagdollLevel
 The Explorer-registered Unreal Version Selector command generated project files from `GameAnimSampleCpp.uproject`. The generated C++ project listed the Game and Editor targets and the new runtime sources. `Scripts/GenerateVisualStudioProjects.ps1 -VerifyOnly` checked the references in all four solutions.
 
 Visual Studio 2026 loaded the C++ project from both game solution formats and displayed the AutomationUtils and BuildGraph projects in both automation solution formats. The Win64 Development Game target also built with unity enabled. Packaging and building every .NET automation project from the IDE are **Not run**.
+
+### Clean reference installation
+
+The Win64 Editor target built in an independent reference workspace. The ordered migration command then applied all 43 stages to a fresh copy of the acquired sample using binaries from that build. It completed in two Editor processes and restarted after the Mover parent recompile dirtied a dependent package. The five map packages and the primary CMC and Mover Animation Blueprints matched the original sample by SHA-256 after migration. Runtime replay in this second reference workspace is **Not run**.

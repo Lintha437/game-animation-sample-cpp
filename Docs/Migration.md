@@ -142,7 +142,7 @@ When using the Epic sample assets, acquire the sample under the applicable terms
 
 Skeleton, IK Rig, retargeter, Pose Search schema, databases and tuning curves form a coordinated set. Verify their bone names, units and curves before rebuilding the search databases. Merge any required gameplay tags, collision channels and project settings explicitly. Refer to [Epic's asset migration guide](https://dev.epicgames.com/documentation/en-us/unreal-engine/migrating-assets-in-unreal-engine).
 
-## Verify in the destination
+## Port isolated examples
 
 If you move the isolated Locomotor example, preserve its walker and animation assets. Install its Enhanced Input mapping context on the owning local player at possession or restart. Keep its normalized controller-relative movement and separate mouse and gamepad look sensitivities if you need the same feel.
 
@@ -153,6 +153,10 @@ Let one zone own the current selection and its target gizmo. Deselect the previo
 Bind pointer events to the zone's authored hit components after they are initialized. Apply hover and selected colors through its dynamic materials and update an active gizmo from the assigned pawn's world position plus the authored offset.
 
 For gizmo manipulation, sample the local cursor and wheel. Start Shift control on hover and keep it active until Shift is released. Apply cursor deltas to the target's rotation and clamp wheel scaling to the intended manipulation range. Keep the target's appearance and tooltip settings on the asset.
+
+## Verify in the destination
+
+Set up a separate migrated reference sandbox from the acquired sample if you need a comparison before integrating features into the host. Use the ordered migration command from the [repository setup instructions](../README.md#local-reference-workspace).
 
 - Establish a reference capture before wiring the new code. Record the test level, movement component, input device, initial transform, and the expected state, montage, and interruption outcome for each replay.
 - Build the Editor and Game targets and cook a representative map.

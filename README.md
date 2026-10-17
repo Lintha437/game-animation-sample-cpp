@@ -47,7 +47,22 @@ Acquire the [Game Animation Sample](https://www.fab.com/listings/880e319a-a59e-4
 python Scripts/prepare_reference_workspace.py 'D:\Projects\GameAnimationSample' --install-here
 ```
 
-Open `GameAnimSampleCpp.uproject`. The imported settings open `DefaultLevel`. Use **Play** there or open `LocomotorLevel`, `LookAtPOI_Level`, `NPCLevel`, and `RagdollLevel` from **Content → Levels**. The importer preserves package paths, copies project settings into local Unreal configuration overrides, and protects the copied files from accidental staging through local Git excludes. If you need an independent workspace, omit `--install-here` and use the descriptor the script prints. Keep the acquired source assets under their applicable license. [Fab license terms](https://www.fab.com/eula)
+Build the Editor target and apply the ordered migration while the destination Editor is closed. Run these commands from the repository root.
+
+```powershell
+$ue = 'D:\Program Files\Epic Games\UE_5.9'
+$project = (Resolve-Path GameAnimSampleCpp.uproject).Path
+& "$ue\Engine\Build\BatchFiles\Build.bat" GameAnimationSampleCppEditor Win64 Development "-Project=$project" -WaitMutex
+if ($LASTEXITCODE -ne 0) { throw 'Editor build failed.' }
+python Scripts/apply_reference_migrations.py $project --engine-root $ue
+if ($LASTEXITCODE -ne 0) { throw 'Reference asset migration failed. Check the log reported by the script.' }
+```
+
+The importer preserves package paths, copies project settings into local Unreal configuration overrides, and protects the copied files from accidental staging through local Git excludes. To try the migration in an independent workspace, omit `--install-here` and use the printed descriptor as `$project` while running the same commands from the checkout. Keep the acquired source assets under their applicable license. [Fab license terms](https://www.fab.com/eula)
+
+The runner writes per-process logs under the destination project's `Saved/Logs/ReferenceMigration-*/`. Each asset stage stores its backup under `Saved/BlueprintMigration/`. On a failed stage, review that stage's log and package before retrying.
+
+After the migration, open the descriptor. Play `DefaultLevel` or open `LocomotorLevel`, `LookAtPOI_Level`, `NPCLevel`, and `RagdollLevel` from **Content → Levels**.
 
 See [reference behavior](Docs/ReferenceBehavior.md) for the current parity criteria and [migration into another UE5 project](Docs/Migration.md) to integrate the plugin in a C++ project. To generate the API reference, run `doxygen Doxyfile` from the repository root and open `Saved/Doxygen/html/index.html`.
 
