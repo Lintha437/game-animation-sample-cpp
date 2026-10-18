@@ -53,6 +53,7 @@ MIGRATIONS = (
     "mover_paired_collision",
     "ragdoll_behavior",
     "ragdoll_trigger",
+    "pawn_setup",
 )
 
 
