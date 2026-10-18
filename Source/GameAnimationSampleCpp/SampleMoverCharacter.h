@@ -15,6 +15,14 @@ class GAMEANIMATIONSAMPLECPP_API ASampleMoverCharacter : public APawn
     GENERATED_BODY()
 
 public:
+    /** Installs the sandbox input context for the current local controller. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Possession")
+    void InstallSandboxInputMapping();
+
+    /** Selects the authored Gameplay Camera or legacy camera during possession. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Possession")
+    void ActivateSandboxCamera();
+
     /**
      * Converts the current Mover mode name using the pawn's authored state map.
      * @return Value in the imported movement-mode enum. A missing entry returns zero.

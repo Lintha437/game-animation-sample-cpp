@@ -584,3 +584,9 @@ Visual Studio 2026 loaded the C++ project from both game solution formats and di
 ### Clean reference installation
 
 The Win64 Editor target built in an independent reference workspace. The ordered migration command then applied all 43 stages to a fresh copy of the acquired sample using binaries from that build. It completed in two Editor processes and restarted after the Mover parent recompile dirtied a dependent package. The five map packages and the primary CMC and Mover Animation Blueprints matched the original sample by SHA-256 after migration. Runtime replay in this second reference workspace is **Not run**.
+
+### Sandbox pawn possession setup
+
+Run `Scripts/migrate_pawn_setup.py` to forward the CMC and Mover setup entry points. The existing possession callbacks still choose when to install the local input mapping and activate the authored camera. C++ also tracks CMC simulated-proxy ground transitions and forwards velocity to the original jump and landing presentation.
+
+The Win64 Editor unity build, both pawn Blueprint compiles, and Visual Studio project generation passed. In `DefaultLevel` PIE, the local Mover had the sandbox mapping and switched between the legacy camera and the Gameplay Camera. Possession of the CMC pawn activated its Gameplay Camera. Calling the existing simulated update across Falling and Walking preserved the supplied landing velocity and set `JustLanded`. The simulated proxy test supplied those states directly. Remote-client playback and a fresh 44-stage installation are **Not run**.

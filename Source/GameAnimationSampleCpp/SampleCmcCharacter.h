@@ -43,6 +43,18 @@ class GAMEANIMATIONSAMPLECPP_API ASampleCmcCharacter : public ACharacter
     GENERATED_BODY()
 
 public:
+    /** Installs the sandbox input context for the current local controller. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Possession")
+    void InstallSandboxInputMapping();
+
+    /** Selects the authored Gameplay Camera or legacy camera during possession. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Possession")
+    void ActivateSandboxCamera();
+
+    /** Turns observed ground transitions on simulated proxies into the existing jump and landing events. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Movement")
+    void UpdateSimulatedGroundTransition(FVector OldVelocity);
+
     ASampleCmcCharacter();
 
     /**

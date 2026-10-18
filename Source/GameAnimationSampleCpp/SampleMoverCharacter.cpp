@@ -1,5 +1,7 @@
 #include "SampleMoverCharacter.h"
 
+#include "SamplePawnSetup.h"
+
 #include "AIController.h"
 #include "Animation/AnimInstance.h"
 #include "Components/CapsuleComponent.h"
@@ -275,6 +277,16 @@ uint8 ASampleMoverCharacter::ResolveMovementModeValue() const
     FScriptMapHelper Entries(Map, Map->ContainerPtrToValuePtr<void>(this));
     const uint8* Value = Entries.FindValueFromHash(&Mode);
     return Value ? static_cast<uint8>(ReadEnum(*Map->ValueProp, Value)) : 0;
+}
+
+void ASampleMoverCharacter::InstallSandboxInputMapping()
+{
+    SamplePawnSetup::InstallInputMapping(*this);
+}
+
+void ASampleMoverCharacter::ActivateSandboxCamera()
+{
+    SamplePawnSetup::ActivateCamera(*this, TEXT("Camera"));
 }
 
 void ASampleMoverCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)

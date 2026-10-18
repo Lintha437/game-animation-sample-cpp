@@ -1,5 +1,7 @@
 #include "SampleCmcCharacter.h"
 
+#include "SamplePawnSetup.h"
+
 #include "Animation/AnimInstance.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -14,6 +16,7 @@
 #include "Net/Core/PushModel/PushModel.h"
 #include "SampleTraversalClearance.h"
 #include "SampleTraversalComponent.h"
+#include "UObject/StructOnScope.h"
 #include "UObject/UnrealType.h"
 
 namespace
@@ -102,6 +105,54 @@ ASampleCmcCharacter::ASampleCmcCharacter()
     , StrafeAction(FSoftObjectPath(TEXT("/Game/Input/IA_Strafe.IA_Strafe")))
     , AimAction(FSoftObjectPath(TEXT("/Game/Input/IA_Aim.IA_Aim")))
 {
+}
+
+void ASampleCmcCharacter::InstallSandboxInputMapping()
+{
+    SamplePawnSetup::InstallInputMapping(*this);
+}
+
+void ASampleCmcCharacter::ActivateSandboxCamera()
+{
+    SamplePawnSetup::ActivateCamera(*this, TEXT("Camera(NotUsedByDefault)"));
+}
+
+void ASampleCmcCharacter::UpdateSimulatedGroundTransition(FVector OldVelocity)
+{
+    const auto* Previous = FindFProperty<FBoolProperty>(GetClass(), TEXT("WasMovingOnGroundLastFrame_Simulated"));
+    if (!Previous)
+    {
+        return;
+    }
+    const bool bOnGround = GetCharacterMovement()->IsMovingOnGround();
+    if (bOnGround != Previous->GetPropertyValue_InContainer(this))
+    {
+        const FName Event = bOnGround ? TEXT("Custom OnLanded Event") : TEXT("Custom OnJumped Event");
+        if (UFunction* Callback = FindFunction(Event); Callback && Callback->NumParms == 1)
+        {
+            FStructOnScope Arguments(Callback);
+            uint8* Data = Arguments.GetStructMemory();
+            if (bOnGround)
+            {
+                const auto* Velocity = FindFProperty<FStructProperty>(Callback, TEXT("LandVelocity"));
+                if (Velocity && Velocity->Struct == TBaseStructure<FVector>::Get())
+                {
+                    *Velocity->ContainerPtrToValuePtr<FVector>(Data) = OldVelocity;
+                    ProcessEvent(Callback, Data);
+                }
+            }
+            else
+            {
+                const auto* Speed = FindFProperty<FNumericProperty>(Callback, TEXT("GroundSpeedBeforeJump"));
+                if (Speed && Speed->IsFloatingPoint())
+                {
+                    Speed->SetFloatingPointPropertyValue(Speed->ContainerPtrToValuePtr<void>(Data), OldVelocity.Size2D());
+                    ProcessEvent(Callback, Data);
+                }
+            }
+        }
+    }
+    Previous->SetPropertyValue_InContainer(this, bOnGround);
 }
 
 void ASampleCmcCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
