@@ -289,6 +289,54 @@ void ASampleMoverCharacter::ActivateSandboxCamera()
     SamplePawnSetup::ActivateCamera(*this, TEXT("Camera"));
 }
 
+void ASampleMoverCharacter::InitializeMoverRuntime()
+{
+    auto* Mover = FindComponentByClass<UCharacterMoverComponent>();
+    if (Mover)
+    {
+        Mover->OnPostFinalize.AddUniqueDynamic(this, &ASampleMoverCharacter::NotifyMoverModeFinalized);
+        Mover->OnPreSimulationTick.AddUniqueDynamic(this, &ASampleMoverCharacter::ApplyMoverCrouchInput);
+        Mover->OnBasedMovementApplied.AddUniqueDynamic(this, &ASampleMoverCharacter::CaptureBasedMovement);
+    }
+    if (auto* Mesh = GetRagdollMesh(*this))
+    {
+        if (Mover)
+        {
+            Mesh->AddTickPrerequisiteComponent(Mover);
+        }
+        Mesh->AddTickPrerequisiteActor(this);
+    }
+    if (const auto* Inputs = FindSnapshot(*this, TEXT("MoverDefaultInputs_PreSim"));
+        Inputs && Inputs->Struct == FCharacterDefaultInputs::StaticStruct())
+    {
+        Inputs->ContainerPtrToValuePtr<FCharacterDefaultInputs>(this)->OrientationIntent = GetActorForwardVector();
+    }
+    if (const auto* Initial = FindSnapshot(*this, TEXT("InitialTransform"));
+        Initial && Initial->Struct == TBaseStructure<FTransform>::Get())
+    {
+        *Initial->ContainerPtrToValuePtr<FTransform>(this) = GetActorTransform();
+    }
+}
+
+void ASampleMoverCharacter::UpdateMoverRuntime()
+{
+    const auto Present = [this](FName Name)
+    {
+        if (UFunction* Callback = FindFunction(Name); Callback && Callback->NumParms == 0)
+        {
+            ProcessEvent(Callback, nullptr);
+        }
+    };
+    UpdateCachedMoverInputs();
+    UpdateMoverFloor();
+    UpdateControlYawRate();
+    Present(TEXT("Update_SlidingAudio"));
+    UpdateMoverTarget();
+    UpdateMoverTwinStick();
+    UpdateMoverAnalogDeflection();
+    Present(TEXT("DebugDraws"));
+}
+
 void ASampleMoverCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
     Super::SetupPlayerInputComponent(PlayerInputComponent);
@@ -1296,6 +1344,12 @@ void ASampleMoverCharacter::EndPairedInteractionCollision()
 void ASampleMoverCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
     EndPairedInteractionCollision();
+    if (auto* Mover = FindComponentByClass<UCharacterMoverComponent>())
+    {
+        Mover->OnPostFinalize.RemoveDynamic(this, &ASampleMoverCharacter::NotifyMoverModeFinalized);
+        Mover->OnPreSimulationTick.RemoveDynamic(this, &ASampleMoverCharacter::ApplyMoverCrouchInput);
+        Mover->OnBasedMovementApplied.RemoveDynamic(this, &ASampleMoverCharacter::CaptureBasedMovement);
+    }
     Super::EndPlay(EndPlayReason);
 }
 
