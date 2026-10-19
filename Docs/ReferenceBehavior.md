@@ -590,3 +590,9 @@ The Win64 Editor target built in an independent reference workspace. The ordered
 Run `Scripts/migrate_pawn_setup.py` to forward the CMC and Mover setup entry points. The existing possession callbacks still choose when to install the local input mapping and activate the authored camera. C++ also tracks CMC simulated-proxy ground transitions and forwards velocity to the original jump and landing presentation.
 
 The Win64 Editor unity build, both pawn Blueprint compiles, and Visual Studio project generation passed. In `DefaultLevel` PIE, the local Mover had the sandbox mapping and switched between the legacy camera and the Gameplay Camera. Possession of the CMC pawn activated its Gameplay Camera. Calling the existing simulated update across Falling and Walking preserved the supplied landing velocity and set `JustLanded`. The simulated proxy test supplied those states directly. Remote-client playback and a fresh 44-stage installation are **Not run**.
+
+### Mover startup and frame update
+
+Run `Scripts/migrate_mover_runtime.py` to connect the primary Mover lifecycle events to native code. Startup registers the pre-simulation, finalization, and based-movement callbacks and captures the spawn transform. The native frame update preserves the original order and calls the sliding audio and debug presentation hooks.
+
+The Win64 Editor unity build and primary pawn Blueprint compile passed. In `RagdollLevel` PIE, the inherited ragdoll pawn had all three callbacks bound and stored the expected spawn and floor snapshots. Injected crouch input reached simulation. The cached mode tracked Ragdoll and the observed Falling exit, and crouch had cleared at that exit. Moving-base rotation and rendered audio or debug presentation are **Not run**.
