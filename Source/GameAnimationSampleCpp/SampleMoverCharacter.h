@@ -23,6 +23,14 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Possession")
     void ActivateSandboxCamera();
 
+    /** Binds authored component lifecycles, seeds facing, and captures the reset transform. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover")
+    void InitializeMoverRuntime();
+
+    /** Updates the gameplay snapshots and invokes presentation in the authored tick order. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover")
+    void UpdateMoverRuntime();
+
     /**
      * Converts the current Mover mode name using the pawn's authored state map.
      * @return Value in the imported movement-mode enum. A missing entry returns zero.

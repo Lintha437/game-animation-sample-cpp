@@ -46,6 +46,8 @@ For a Mover-based pawn, take horizontal speed and the current mode name from `UC
 
 Keep the input producer and the simulated snapshot separate. Assemble one command per Mover input request, and carry crouch in the same prediction data as movement. During the pre-simulation callback, read crouch from the command being executed. Animation and camera consumers should read the latest simulated command. When porting the sample's user-defined input struct, either keep that struct and its network serialization or update every dependent movement mode and consumer together.
 
+Bind the simulation callbacks at startup and remove them during teardown. Seed the first command's facing from the pawn's spawn rotation. Preserve the mesh tick prerequisites and the order in which the gameplay snapshots feed audio and animation presentation.
+
 Bind the host's Enhanced Input actions during local possession. Sample the bound movement value when producing the command. The sample swaps device axes into the pawn's forward and right axes, rotates the result by control yaw, and includes control pitch in Flying mode. AI consumes its navigation request at the same boundary. Keep the aim, strafe and stance intent fields in the snapshot shared with animation.
 
 Keep targeting registration and facing intent on the owning pawn. The sample's overlap actors use a stable interface to register candidates. The native pawn updates the nearest valid target and exposes it to the same camera and animation readers. When porting twin-stick input, retain the stick axis convention, dead zone, and control-rotation reset. Preserve the analog deflection's faster rise and slower decay when feeding gait.
