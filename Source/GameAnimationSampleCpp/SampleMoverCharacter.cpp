@@ -8,8 +8,10 @@
 #include "DefaultMovementSet/CharacterMoverComponent.h"
 #include "DefaultMovementSet/NavMoverComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "DataDrivenCVars/DataDrivenCVars.h"
 #include "DrawDebugLibrary.h"
 #include "EnhancedInputComponent.h"
+#include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "GameplayTagContainer.h"
 #include "InputAction.h"
@@ -19,6 +21,7 @@
 #include "MoverDataModelTypes.h"
 #include "PhysicsControlBPLibrary.h"
 #include "PhysicsControlComponent.h"
+#include "SampleAnimationTickComponent.h"
 #include "SampleTraversalClearance.h"
 #include "SampleTraversalComponent.h"
 #include "StructUtils/UserDefinedStruct.h"
@@ -335,6 +338,60 @@ void ASampleMoverCharacter::UpdateMoverRuntime()
     UpdateMoverTwinStick();
     UpdateMoverAnalogDeflection();
     Present(TEXT("DebugDraws"));
+}
+
+void ASampleMoverCharacter::InitializeRagdollRuntime()
+{
+    InitializeMoverRuntime();
+    if (auto* Variables = GEngine ? GEngine->GetEngineSubsystem<UDataDrivenCVarEngineSubsystem>() : nullptr)
+    {
+        Variables->OnDataDrivenCVarDelegate.AddUniqueDynamic(this, &ASampleMoverCharacter::HandleRagdollProfileVariable);
+    }
+
+    auto* Mesh = GetRagdollMesh(*this);
+    auto* Physics = FindComponentByClass<UPhysicsControlComponent>();
+    if (const auto* Field = FindFProperty<FObjectPropertyBase>(GetClass(), TEXT("AC_PostABPTick")))
+    {
+        if (auto* PostAnimation = Cast<USampleAnimationTickComponent>(Field->GetObjectPropertyValue_InContainer(this)))
+        {
+            if (Mesh)
+            {
+                PostAnimation->AddTickPrerequisiteComponent(Mesh);
+            }
+            const auto* Tick = FindFProperty<FMulticastInlineDelegateProperty>(PostAnimation->GetClass(), TEXT("Tick"));
+            if (Tick && Tick->SignatureFunction && Tick->SignatureFunction->NumParms == 0)
+            {
+                FScriptDelegate Callback;
+                Callback.BindUFunction(this, TEXT("PostABPTick"));
+                Tick->ContainerPtrToValuePtr<FMulticastScriptDelegate>(PostAnimation)->AddUnique(Callback);
+            }
+            if (Physics)
+            {
+                Physics->AddTickPrerequisiteComponent(PostAnimation);
+            }
+        }
+    }
+    if (Mesh && Physics)
+    {
+        Physics->CreateControlsAndBodyModifiersFromPhysicsControlAsset(Mesh, nullptr, NAME_None);
+    }
+    RefreshRagdollDefaultProfile();
+}
+
+void ASampleMoverCharacter::UpdateRagdollRuntime()
+{
+    UpdateMoverRuntime();
+    if (const auto* Debug = FindFProperty<FIntProperty>(GetClass(), TEXT("DebugState")))
+    {
+        Debug->SetPropertyValue_InContainer(this,
+            UKismetSystemLibrary::GetConsoleVariableIntValue(TEXT("DDCVar.CharacterPhysics.DrawDebug")));
+    }
+    if (ResolveMovementModeValue() == static_cast<uint8>(EAuthoredMovementMode::Ragdoll))
+    {
+        UpdateRagdollBehavior();
+    }
+    TraceRagdollObstacles();
+    UpdateCharacterInteractionCandidates();
 }
 
 void ASampleMoverCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -1344,6 +1401,10 @@ void ASampleMoverCharacter::EndPairedInteractionCollision()
 void ASampleMoverCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
     EndPairedInteractionCollision();
+    if (auto* Variables = GEngine ? GEngine->GetEngineSubsystem<UDataDrivenCVarEngineSubsystem>() : nullptr)
+    {
+        Variables->OnDataDrivenCVarDelegate.RemoveDynamic(this, &ASampleMoverCharacter::HandleRagdollProfileVariable);
+    }
     if (auto* Mover = FindComponentByClass<UCharacterMoverComponent>())
     {
         Mover->OnPostFinalize.RemoveDynamic(this, &ASampleMoverCharacter::NotifyMoverModeFinalized);

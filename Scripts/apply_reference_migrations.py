@@ -55,6 +55,7 @@ MIGRATIONS = (
     "ragdoll_trigger",
     "pawn_setup",
     "mover_runtime",
+    "ragdoll_runtime",
 )
 
 
