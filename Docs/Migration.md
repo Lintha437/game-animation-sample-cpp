@@ -78,6 +78,8 @@ For rolling, combine the slope-derived force with the pawn's movement input and 
 
 Route the manual ragdoll action and the obstacle trigger through the same entry callback. Keep the default physics profile independent of the active ragdoll profile so a tuning change takes effect after recovery. The sample filters Foley contacts by bone speed and normal impulse before passing gain to the authored sound event.
 
+For Physics Control, create the controls and body modifiers from the host's authored asset during pawn initialization. Preserve the tick dependency from skeletal animation to the post-animation callback and then to Physics Control so curve-driven strengths reach the same frame.
+
 Configure the leg body groups with the host Physics Asset's body names. The sample allows the two groups to collide in ragdoll and switches back to its `Free` joint constraint profile when animation drives the mesh. Reuse the obstacle trace only if the host supplies its object channel and neck and foot socket names. The sample sweeps from the neck to the midpoint between the feet, using a 15 cm radius and its authored Obstacle object type.
 
 ### Connect CMC ragdoll transitions

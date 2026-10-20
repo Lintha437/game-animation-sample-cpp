@@ -596,3 +596,9 @@ The Win64 Editor unity build, both pawn Blueprint compiles, and Visual Studio pr
 Run `Scripts/migrate_mover_runtime.py` to connect the primary Mover lifecycle events to native code. Startup registers the pre-simulation, finalization, and based-movement callbacks and captures the spawn transform. The native frame update preserves the original order and calls the sliding audio and debug presentation hooks.
 
 The Win64 Editor unity build and primary pawn Blueprint compile passed. In `RagdollLevel` PIE, the inherited ragdoll pawn had all three callbacks bound and stored the expected spawn and floor snapshots. Injected crouch input reached simulation. The cached mode tracked Ragdoll and the observed Falling exit, and crouch had cleared at that exit. Moving-base rotation and rendered audio or debug presentation are **Not run**.
+
+### Ragdoll pawn startup and frame update
+
+Run `Scripts/migrate_ragdoll_runtime.py` after the primary Mover runtime migration. The native setup creates the authored Physics Control modifiers, binds the post-animation callback, and establishes its dependencies. The native tick inherits the Mover update, then refreshes the debug state and runs ragdoll and interaction checks. Curve-driven strengths and presentation still use the authored post-animation graph.
+
+The Win64 Editor unity build and ragdoll pawn Blueprint compile passed. In `RagdollLevel` PIE, setup created 23 body modifiers and bound the post-animation event. The debug CVar reached the runtime snapshot, the cached mode matched Ragdoll, and candidate selection cleared during ragdoll. Recovery restored Walking and PhysicalAnimation. Frame-level tick instrumentation and multiplayer are **Not run**.
