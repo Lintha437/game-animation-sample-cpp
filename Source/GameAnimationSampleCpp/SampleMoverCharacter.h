@@ -31,6 +31,14 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Mover")
     void UpdateMoverRuntime();
 
+    /** Initializes Mover first, then installs the post-animation and Physics Control prerequisites. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Ragdoll")
+    void InitializeRagdollRuntime();
+
+    /** Updates inherited Mover state, then ragdoll physics, obstacle checks, and interaction candidates. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Ragdoll")
+    void UpdateRagdollRuntime();
+
     /**
      * Converts the current Mover mode name using the pawn's authored state map.
      * @return Value in the imported movement-mode enum. A missing entry returns zero.
