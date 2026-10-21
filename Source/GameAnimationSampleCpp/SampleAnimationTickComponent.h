@@ -19,6 +19,9 @@ public:
     /** Enables participation in Unreal's component tick scheduler. */
     USampleAnimationTickComponent();
 
+    /** Adds a reflected zero-argument callback to the existing asset delegate at most once. */
+    void BindTick(UObject& Receiver, FName Callback);
+
     /**
      * Broadcasts the component's retained Tick delegate once per scheduled tick.
      * @param DeltaTime Seconds since this component last ticked.
@@ -28,4 +31,7 @@ public:
      */
     virtual void TickComponent(float DeltaTime, ELevelTick TickType,
         FActorComponentTickFunction* ThisTickFunction) override;
+
+private:
+    FMulticastScriptDelegate* FindAuthoredTick();
 };

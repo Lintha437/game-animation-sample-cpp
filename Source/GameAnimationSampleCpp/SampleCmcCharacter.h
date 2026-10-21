@@ -51,6 +51,14 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Possession")
     void ActivateSandboxCamera();
 
+    /** Establishes movement and mesh tick order and connects the simulated-proxy observer. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Movement")
+    void InitializeCmcRuntime();
+
+    /** Updates rotation before gait and braking immediately before Character Movement. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Movement")
+    void UpdateBeforeCmcTick();
+
     /** Turns observed ground transitions on simulated proxies into the existing jump and landing events. */
     UFUNCTION(BlueprintCallable, Category = "Sample|Movement")
     void UpdateSimulatedGroundTransition(FVector OldVelocity);
@@ -134,6 +142,8 @@ public:
     void ApplyNpcWalkIntent(bool bWalk);
 
 protected:
+    /** Unbinds the simulated-proxy observer before movement teardown. */
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
     /** Binds raw action values and the installed native handlers on local possession. */
     virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 
@@ -142,6 +152,9 @@ protected:
         const FVector& PreviousFloorContactNormal, const FVector& PreviousLocation, float TimeDelta) override;
 
 private:
+    UFUNCTION()
+    void HandleCmcMovementUpdated(float DeltaSeconds, FVector OldLocation, FVector OldVelocity);
+
     /**
      * Enables native event bindings after the corresponding Blueprint events are removed.
      * The migration sets this on the reference pawn's class defaults.

@@ -358,13 +358,7 @@ void ASampleMoverCharacter::InitializeRagdollRuntime()
             {
                 PostAnimation->AddTickPrerequisiteComponent(Mesh);
             }
-            const auto* Tick = FindFProperty<FMulticastInlineDelegateProperty>(PostAnimation->GetClass(), TEXT("Tick"));
-            if (Tick && Tick->SignatureFunction && Tick->SignatureFunction->NumParms == 0)
-            {
-                FScriptDelegate Callback;
-                Callback.BindUFunction(this, TEXT("PostABPTick"));
-                Tick->ContainerPtrToValuePtr<FMulticastScriptDelegate>(PostAnimation)->AddUnique(Callback);
-            }
+            PostAnimation->BindTick(*this, TEXT("PostABPTick"));
             if (Physics)
             {
                 Physics->AddTickPrerequisiteComponent(PostAnimation);
