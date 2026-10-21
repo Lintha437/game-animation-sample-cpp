@@ -602,3 +602,9 @@ The Win64 Editor unity build and primary pawn Blueprint compile passed. In `Ragd
 Run `Scripts/migrate_ragdoll_runtime.py` after the primary Mover runtime migration. The native setup creates the authored Physics Control modifiers, binds the post-animation callback, and establishes its dependencies. The native tick inherits the Mover update, then refreshes the debug state and runs ragdoll and interaction checks. Curve-driven strengths and presentation still use the authored post-animation graph.
 
 The Win64 Editor unity build and ragdoll pawn Blueprint compile passed. In `RagdollLevel` PIE, setup created 23 body modifiers and bound the post-animation event. The debug CVar reached the runtime snapshot, the cached mode matched Ragdoll, and candidate selection cleared during ragdoll. Recovery restored Walking and PhysicalAnimation. Frame-level tick instrumentation and multiplayer are **Not run**.
+
+### CMC startup and pre-movement tick
+
+Run `Scripts/migrate_cmc_runtime.py` to connect native startup and pre-movement processing. The startup preserves the mesh and movement tick prerequisites and subscribes to movement updates only for simulated proxies. The original Blueprint entry points remain callable.
+
+The Win64 Editor unity build and pawn Blueprint compile passed. In `DefaultLevel` PIE, the local CMC pawn bound the pre-movement tick and left the simulated-proxy observer unbound. Injected movement and sprint input raised the configured speed cap from 500 to 700 cm/s. Actual remote-proxy binding and frame-level tick timing are **Not run**.

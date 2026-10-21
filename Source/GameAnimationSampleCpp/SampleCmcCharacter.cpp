@@ -14,6 +14,7 @@
 #include "KismetAnimationLibrary.h"
 #include "Math/RotationMatrix.h"
 #include "Net/Core/PushModel/PushModel.h"
+#include "SampleAnimationTickComponent.h"
 #include "SampleTraversalClearance.h"
 #include "SampleTraversalComponent.h"
 #include "UObject/StructOnScope.h"
@@ -115,6 +116,43 @@ void ASampleCmcCharacter::InstallSandboxInputMapping()
 void ASampleCmcCharacter::ActivateSandboxCamera()
 {
     SamplePawnSetup::ActivateCamera(*this, TEXT("Camera(NotUsedByDefault)"));
+}
+
+void ASampleCmcCharacter::InitializeCmcRuntime()
+{
+    if (const auto* Field = FindFProperty<FObjectPropertyBase>(GetClass(), TEXT("AC_PreCMCTick")))
+    {
+        if (auto* PreMovement = Cast<USampleAnimationTickComponent>(Field->GetObjectPropertyValue_InContainer(this)))
+        {
+            GetCharacterMovement()->AddTickPrerequisiteComponent(PreMovement);
+            PreMovement->BindTick(*this, GET_FUNCTION_NAME_CHECKED(ASampleCmcCharacter, UpdateBeforeCmcTick));
+        }
+    }
+    if (auto* CharacterMesh = GetMesh())
+    {
+        CharacterMesh->AddTickPrerequisiteActor(this);
+    }
+    if (GetLocalRole() == ROLE_SimulatedProxy)
+    {
+        OnCharacterMovementUpdated.AddUniqueDynamic(this, &ASampleCmcCharacter::HandleCmcMovementUpdated);
+    }
+}
+
+void ASampleCmcCharacter::UpdateBeforeCmcTick()
+{
+    UpdateRotation_PreCMC();
+    UpdateMovementBeforeSimulation();
+}
+
+void ASampleCmcCharacter::HandleCmcMovementUpdated(float DeltaSeconds, FVector OldLocation, FVector OldVelocity)
+{
+    UpdateSimulatedGroundTransition(OldVelocity);
+}
+
+void ASampleCmcCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    OnCharacterMovementUpdated.RemoveDynamic(this, &ASampleCmcCharacter::HandleCmcMovementUpdated);
+    Super::EndPlay(EndPlayReason);
 }
 
 void ASampleCmcCharacter::UpdateSimulatedGroundTransition(FVector OldVelocity)
