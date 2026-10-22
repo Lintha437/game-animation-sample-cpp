@@ -286,6 +286,10 @@ protected:
     virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 
 private:
+    /** Enable after the authored camera-style key group is removed. */
+    UPROPERTY(EditDefaultsOnly, Category = "Sample|Possession")
+    bool bUseNativeCameraStyleKeys = false;
+
     struct FPairedInteraction
     {
         TWeakObjectPtr<ASampleMoverCharacter> Initiator;

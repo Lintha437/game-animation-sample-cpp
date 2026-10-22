@@ -196,6 +196,10 @@ void ASampleCmcCharacter::UpdateSimulatedGroundTransition(FVector OldVelocity)
 void ASampleCmcCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
     Super::SetupPlayerInputComponent(PlayerInputComponent);
+    if (bUseNativeCameraStyleKeys && PlayerInputComponent)
+    {
+        SamplePawnSetup::BindCameraStyleKeys(*this, *PlayerInputComponent);
+    }
     UEnhancedInputComponent* Input = Cast<UEnhancedInputComponent>(PlayerInputComponent);
     if (!Input)
     {

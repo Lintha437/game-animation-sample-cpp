@@ -391,6 +391,10 @@ void ASampleMoverCharacter::UpdateRagdollRuntime()
 void ASampleMoverCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
     Super::SetupPlayerInputComponent(PlayerInputComponent);
+    if (bUseNativeCameraStyleKeys && PlayerInputComponent)
+    {
+        SamplePawnSetup::BindCameraStyleKeys(*this, *PlayerInputComponent);
+    }
     auto* Input = Cast<UEnhancedInputComponent>(PlayerInputComponent);
     if (!Input)
     {
