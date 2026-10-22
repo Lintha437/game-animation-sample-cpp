@@ -6,7 +6,7 @@ public class GameAnimationSampleCppEditor : ModuleRules
     {
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
         PrivateDependencyModuleNames.AddRange(new[] {
-            "Core", "CoreUObject", "Engine", "BlueprintGraph", "EnhancedInput", "InputBlueprintNodes", "UnrealEd",
+            "Core", "CoreUObject", "Engine", "BlueprintGraph", "EnhancedInput", "InputBlueprintNodes", "InputCore", "UnrealEd",
         });
     }
 }
