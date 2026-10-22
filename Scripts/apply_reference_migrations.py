@@ -57,6 +57,7 @@ MIGRATIONS = (
     "mover_runtime",
     "ragdoll_runtime",
     "cmc_runtime",
+    "camera_style_keys",
 )
 
 

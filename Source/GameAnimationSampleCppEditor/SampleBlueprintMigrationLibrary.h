@@ -41,6 +41,10 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
     static bool RemoveEnhancedInputActions(UBlueprint* Blueprint, UEdGraph* Graph, const TArray<FString>& ActionPaths);
 
+    /** Removes the shared mouse-wheel and D-pad camera style input graph after validating its call paths. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
+    static bool RemoveSandboxCameraKeys(UBlueprint* Blueprint, UEdGraph* Graph);
+
     /**
      * Reads compiled function flags before an authored function or event is replaced.
      * @param Blueprint Blueprint whose generated class owns the function.

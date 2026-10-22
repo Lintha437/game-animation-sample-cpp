@@ -28,6 +28,8 @@ Use Unreal Engine 5.9 and a C++ project built with the associated toolchain. Sta
 
 On possession, let the local player own the input context and the player controller own the selected camera. Keep any existing possession and camera asset entry points intact when changing their implementation. If the destination sends jump and landing feedback for CMC simulated proxies, compare successive observed movement states and forward the original velocity sample to the presentation callbacks.
 
+Keep the sandbox camera-style shortcut with the owning input component if the destination needs it. Wheel and D-pad changes share the same bounded style index and leave camera rigs and blending in the authored assets.
+
 Bind the CMC settings update before the movement component ticks. Update rotation before choosing gait and braking. Keep the mesh dependency on the actor and attach the simulated-movement observer only to proxies so local jump and landing events still come from Character Movement.
 
 ### Preserve analog gait thresholds

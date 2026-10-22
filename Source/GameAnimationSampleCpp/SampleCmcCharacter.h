@@ -152,6 +152,10 @@ protected:
         const FVector& PreviousFloorContactNormal, const FVector& PreviousLocation, float TimeDelta) override;
 
 private:
+    /** Enable after the authored camera-style key group is removed. */
+    UPROPERTY(EditDefaultsOnly, Category = "Sample|Possession")
+    bool bUseNativeCameraStyleKeys = false;
+
     UFUNCTION()
     void HandleCmcMovementUpdated(float DeltaSeconds, FVector OldLocation, FVector OldVelocity);
 

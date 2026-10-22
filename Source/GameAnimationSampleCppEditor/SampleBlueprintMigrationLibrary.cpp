@@ -14,6 +14,7 @@
 #include "K2Node_FunctionEntry.h"
 #include "K2Node_FunctionResult.h"
 #include "K2Node_IfThenElse.h"
+#include "K2Node_InputKey.h"
 #include "K2Node_Knot.h"
 #include "K2Node_VariableGet.h"
 #include "K2Node_VariableSet.h"
@@ -463,6 +464,70 @@ bool USampleBlueprintMigrationLibrary::ReplacePairedInteractionCollision(UBluepr
     return InstallTraversalCall(*Blueprint, *MatchGraph,
         {Prerequisite, IgnoreInitiator, Begin, {{TEXT("PartnerCapsule"), Capsule}}, {IgnorePartner}}) &&
         InstallTraversalCall(*Blueprint, *EventGraph, {Cleanup, Cleanup, End, {}});
+}
+
+bool USampleBlueprintMigrationLibrary::RemoveSandboxCameraKeys(UBlueprint* Blueprint, UEdGraph* Graph)
+{
+    if (!Blueprint || !Graph || Graph->GetOuter() != Blueprint)
+    {
+        return false;
+    }
+    const TSet<FName> Keys{TEXT("MouseScrollDown"), TEXT("MouseScrollUp"), TEXT("Gamepad_DPad_Down"), TEXT("Gamepad_DPad_Up")};
+    const TSet<FName> ExpectedCalls{TEXT("GetConsoleVariableIntValue"), TEXT("ExecuteConsoleCommand"),
+        TEXT("PrintString"), TEXT("PlaySound2D")};
+    TSet<FName> Matched;
+    TSet<FName> Calls;
+    TSet<UEdGraphNode*> Remove;
+    for (UEdGraphNode* Node : Graph->Nodes)
+    {
+        auto* Input = Cast<UK2Node_InputKey>(Node);
+        if (!Input || !Keys.Contains(Input->InputKey.GetFName()))
+        {
+            continue;
+        }
+        if (Matched.Contains(Input->InputKey.GetFName()) || !Input->bConsumeInput || Input->bExecuteWhenPaused ||
+            !Input->GetReleasedPin()->LinkedTo.IsEmpty())
+        {
+            return false;
+        }
+        const TSet<UEdGraphNode*> Chain = CollectExecutionNodes(*Input->GetPressedPin());
+        for (const UEdGraphNode* Step : Chain)
+        {
+            if (const auto* Call = Cast<UK2Node_CallFunction>(Step))
+            {
+                Calls.Add(Call->FunctionReference.GetMemberName());
+            }
+        }
+        Matched.Add(Input->InputKey.GetFName());
+        Remove.Add(Input);
+        Remove.Append(Chain);
+    }
+    if (Matched.Num() != Keys.Num() || Calls.Num() != ExpectedCalls.Num() || !Calls.Includes(ExpectedCalls))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Unexpected camera input graph on %s: %s"), *Blueprint->GetName(),
+            *FString::JoinBy(Calls.Array(), TEXT(", "), [](FName Name) { return Name.ToString(); }));
+        return false;
+    }
+    CollectUnusedInputs(Remove, nullptr);
+    for (const UEdGraphNode* Node : Remove)
+    {
+        for (const UEdGraphPin* Pin : Node->Pins)
+        {
+            if (Pin->Direction == EGPD_Input && Pin->PinType.PinCategory != UEdGraphSchema_K2::PC_Exec)
+            {
+                continue;
+            }
+            for (const UEdGraphPin* Peer : Pin->LinkedTo)
+            {
+                if (!Remove.Contains(Peer->GetOwningNode()))
+                {
+                    return false;
+                }
+            }
+        }
+    }
+    RemoveNodes(*Blueprint, *Graph, Remove);
+    return true;
 }
 
 bool USampleBlueprintMigrationLibrary::ForwardIsolatedEventOverride(UBlueprint* Blueprint, UEdGraph* Graph,

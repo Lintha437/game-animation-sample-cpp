@@ -608,3 +608,9 @@ The Win64 Editor unity build and ragdoll pawn Blueprint compile passed. In `Ragd
 Run `Scripts/migrate_cmc_runtime.py` to connect native startup and pre-movement processing. The startup preserves the mesh and movement tick prerequisites and subscribes to movement updates only for simulated proxies. The original Blueprint entry points remain callable.
 
 The Win64 Editor unity build and pawn Blueprint compile passed. In `DefaultLevel` PIE, the local CMC pawn bound the pre-movement tick and left the simulated-proxy observer unbound. Injected movement and sprint input raised the configured speed cap from 500 to 700 cm/s. Actual remote-proxy binding and frame-level tick timing are **Not run**.
+
+### Sandbox camera style input
+
+Run `Scripts/migrate_camera_style_keys.py` to install native scroll and D-pad bindings on both sandbox pawn classes. The original style range, feedback text, sound reference, and camera assets remain in use.
+
+The Win64 Editor build and both pawn Blueprint compiles passed. In `DefaultLevel` PIE, injected mouse-wheel and D-pad keys changed the Mover style in both directions and stopped at the range limits. The CMC pawn reached the upper limit from zero using the D-pad. Physical input devices, audible feedback, and rendered camera comparisons are **Not run**.
