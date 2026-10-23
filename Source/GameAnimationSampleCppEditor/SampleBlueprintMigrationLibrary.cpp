@@ -530,6 +530,67 @@ bool USampleBlueprintMigrationLibrary::RemoveSandboxCameraKeys(UBlueprint* Bluep
     return true;
 }
 
+bool USampleBlueprintMigrationLibrary::RemoveMoverFlightKeys(UBlueprint* Blueprint, UEdGraph* Graph)
+{
+    if (!Blueprint || !Graph || Graph->GetOuter() != Blueprint)
+    {
+        return false;
+    }
+    UEdGraphPin* StickPressed = nullptr;
+    UEdGraphPin* DebugPressed = nullptr;
+    for (UEdGraphNode* Node : Graph->Nodes)
+    {
+        if (auto* Key = Cast<UK2Node_InputKey>(Node); Key && Key->InputKey == EKeys::Gamepad_LeftThumbstick)
+        {
+            if (StickPressed || !Key->bConsumeInput || Key->bExecuteWhenPaused || !Key->GetReleasedPin()->LinkedTo.IsEmpty())
+            {
+                return false;
+            }
+            StickPressed = Key->GetPressedPin();
+        }
+        else if (Node->GetClass()->GetFName() == TEXT("K2Node_InputDebugKey"))
+        {
+            const auto* KeyField = FindFProperty<FStructProperty>(Node->GetClass(), TEXT("InputKey"));
+            if (KeyField && KeyField->Struct == TBaseStructure<FKey>::Get() &&
+                *KeyField->ContainerPtrToValuePtr<FKey>(Node) == EKeys::Z)
+            {
+                const auto* Paused = FindFProperty<FBoolProperty>(Node->GetClass(), TEXT("bExecuteWhenPaused"));
+                auto* Released = Node->FindPin(TEXT("Released"), EGPD_Output);
+                if (DebugPressed || !Released || !Released->LinkedTo.IsEmpty() || !Paused || Paused->GetPropertyValue_InContainer(Node))
+                {
+                    return false;
+                }
+                DebugPressed = Node->FindPin(TEXT("Pressed"), EGPD_Output);
+            }
+        }
+    }
+    auto* Gate = Cast<UK2Node_IfThenElse>(GetOnlyPeer(StickPressed));
+    if (!Gate || GetOnlyPeer(DebugPressed) != Gate)
+    {
+        return false;
+    }
+    const auto MatchesMode = [](UEdGraphPin* Branch, const TCHAR* Expected)
+    {
+        const auto* Print = Cast<UK2Node_CallFunction>(GetOnlyPeer(Branch));
+        const auto* Queue = Print && Print->FunctionReference.GetMemberName() == TEXT("PrintString")
+            ? GetNextCall(*Print, TEXT("QueueNextMode")) : nullptr;
+        const auto* Mode = Queue ? Queue->FindPin(TEXT("DesiredModeName"), EGPD_Input) : nullptr;
+        return Mode && Mode->LinkedTo.IsEmpty() && Mode->DefaultValue == Expected && Queue->GetThenPin()->LinkedTo.IsEmpty();
+    };
+    if (!MatchesMode(Gate->GetThenPin(), TEXT("Flying")) || !MatchesMode(Gate->GetElsePin(), TEXT("Falling")))
+    {
+        return false;
+    }
+    const TSet<UEdGraphNode*> Entries{StickPressed->GetOwningNode(), DebugPressed->GetOwningNode()};
+    TSet<UEdGraphNode*> Remove;
+    if (!CollectIsolatedChain(StickPressed->GetOwningNode(), Remove, &Entries))
+    {
+        return false;
+    }
+    RemoveNodes(*Blueprint, *Graph, Remove);
+    return true;
+}
+
 bool USampleBlueprintMigrationLibrary::ForwardIsolatedEventOverride(UBlueprint* Blueprint, UEdGraph* Graph,
     FName EventName, FName FunctionName)
 {

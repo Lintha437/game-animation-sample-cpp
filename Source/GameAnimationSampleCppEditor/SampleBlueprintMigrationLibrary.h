@@ -45,6 +45,10 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
     static bool RemoveSandboxCameraKeys(UBlueprint* Blueprint, UEdGraph* Graph);
 
+    /** Removes the two authored flight keys and their shared Flying/Falling branch. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
+    static bool RemoveMoverFlightKeys(UBlueprint* Blueprint, UEdGraph* Graph);
+
     /**
      * Reads compiled function flags before an authored function or event is replaced.
      * @param Blueprint Blueprint whose generated class owns the function.
