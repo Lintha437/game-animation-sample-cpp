@@ -6,6 +6,7 @@
 
 class UInputAction;
 class USkeletalMeshComponent;
+struct FKey;
 struct FInputActionValue;
 
 /** Native state queries and gameplay movement for the reference Mover pawn. */
@@ -289,6 +290,14 @@ private:
     /** Enable after the authored camera-style key group is removed. */
     UPROPERTY(EditDefaultsOnly, Category = "Sample|Possession")
     bool bUseNativeCameraStyleKeys = false;
+
+    /** Enable after removing the authored flight toggle bindings. */
+    UPROPERTY(EditDefaultsOnly, Category = "Sample|Mover|Input")
+    bool bUseNativeFlightToggle = false;
+
+    /** Queues the opposite flight state through the Mover simulation. */
+    void ToggleMoverFlight();
+    void HandleMoverFlightDebugKey(FKey Key, FInputActionValue Value);
 
     struct FPairedInteraction
     {
