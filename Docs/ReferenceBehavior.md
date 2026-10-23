@@ -614,3 +614,9 @@ The Win64 Editor unity build and pawn Blueprint compile passed. In `DefaultLevel
 Run `Scripts/migrate_camera_style_keys.py` to install native scroll and D-pad bindings on both sandbox pawn classes. The original style range, feedback text, sound reference, and camera assets remain in use.
 
 The Win64 Editor build and both pawn Blueprint compiles passed. In `DefaultLevel` PIE, injected mouse-wheel and D-pad keys changed the Mover style in both directions and stopped at the range limits. The CMC pawn reached the upper limit from zero using the D-pad. Physical input devices, audible feedback, and rendered camera comparisons are **Not run**.
+
+### Mover flight shortcuts
+
+Run `Scripts/migrate_mover_flight_keys.py` to replace the original shared flight shortcut graph on the Mover pawn. The native handler keeps the debug Z binding in non-Shipping builds and binds the left stick click through the pawn input component. Both shortcuts request Flying or Falling through the existing Mover queue and preserve the original feedback.
+
+The Win64 Editor build and the Mover pawn Blueprint compile passed. In `DefaultLevel` PIE, injected Z input changed Walking to Flying, and injected left stick input produced the flight toggle feedback. A frame-level observation of Falling, physical gamepad input, and a Shipping build are **Not run**.

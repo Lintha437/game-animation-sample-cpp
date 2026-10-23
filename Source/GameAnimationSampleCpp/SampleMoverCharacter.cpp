@@ -400,6 +400,13 @@ void ASampleMoverCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInp
     {
         return;
     }
+    if (bUseNativeFlightToggle)
+    {
+        PlayerInputComponent->BindKey(EKeys::Gamepad_LeftThumbstick, IE_Pressed, this, &ASampleMoverCharacter::ToggleMoverFlight);
+#if !UE_BUILD_SHIPPING
+        Input->BindDebugKey(FInputChord(EKeys::Z), IE_Pressed, this, &ASampleMoverCharacter::HandleMoverFlightDebugKey, false);
+#endif
+    }
     const auto Bind = [this, Input](const TSoftObjectPtr<UInputAction>& Action, auto Handler)
     {
         if (const UInputAction* Loaded = Action.LoadSynchronous())
@@ -449,6 +456,21 @@ FVector2D ASampleMoverCharacter::ReadMoverAction(const TSoftObjectPtr<UInputActi
     const auto* Input = Cast<UEnhancedInputComponent>(InputComponent);
     const UInputAction* Loaded = Action.Get();
     return Input && Loaded ? Input->GetBoundActionValue(Loaded).Get<FVector2D>() : FVector2D::ZeroVector;
+}
+
+void ASampleMoverCharacter::ToggleMoverFlight()
+{
+    if (auto* Mover = FindComponentByClass<UCharacterMoverComponent>())
+    {
+        const bool bFlying = ResolveMovementModeValue() == static_cast<uint8>(EAuthoredMovementMode::Flying);
+        UKismetSystemLibrary::PrintString(this, bFlying ? TEXT("Flying mode OFF") : TEXT("Flying mode ON"));
+        Mover->QueueNextMode(bFlying ? TEXT("Falling") : TEXT("Flying"));
+    }
+}
+
+void ASampleMoverCharacter::HandleMoverFlightDebugKey(FKey Key, FInputActionValue Value)
+{
+    ToggleMoverFlight();
 }
 
 FVector ASampleMoverCharacter::ResolveMoverDirection()

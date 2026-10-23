@@ -66,6 +66,8 @@ Route jump presses through the movement mode and traversal gate before publishin
 
 The sample falling mode extends stock Mover air movement with command-driven facing at up to 300 degrees per second. Preserve the custom command's rotation offset and verify the turn after a jump. Its slide transitions enter above 380 cm/s while crouched and exit at or below 200 cm/s or when standing. Keep both thresholds aligned with the destination's authored movement speeds.
 
+For the sample's flight shortcut, queue a mode transition through Mover. An active flight returns to Falling. The desktop `Z` binding is for development builds, and the gamepad stick click uses the standard input binding.
+
 The sample ground modes use the original smooth walking solver. Carry over the walk, run, sprint, and crouch speeds, along with their braking and facing settings. The walking mode preserves the short landing brake window and can align input velocity with the floor. The sliding mode uses a timed entry boost and slope-dependent speed and braking. Keep the mode instance settings with the pawn so changed tuning follows the same simulation path.
 
 For Flying, keep Mover's stock flight solver and apply the sample's linear and facing damping to its movement proposal. Configure the speed on the mode asset or with the destination's shared movement settings. For Ragdoll, feed the capsule solver a pelvis transform per simulated command. Match the downward sphere trace to the destination's ground collision channel, probe radius, and standing capsule height. Publish the resulting capsule transform without a movement base. A missing snapshot holds the capsule until the next command.
