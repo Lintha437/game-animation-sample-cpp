@@ -620,3 +620,9 @@ The Win64 Editor build and both pawn Blueprint compiles passed. In `DefaultLevel
 Run `Scripts/migrate_mover_flight_keys.py` to replace the original shared flight shortcut graph on the Mover pawn. The native handler keeps the debug Z binding in non-Shipping builds and binds the left stick click through the pawn input component. Both shortcuts request Flying or Falling through the existing Mover queue and preserve the original feedback.
 
 The Win64 Editor build and the Mover pawn Blueprint compile passed. In `DefaultLevel` PIE, injected Z input changed Walking to Flying, and injected left stick input produced the flight toggle feedback. A frame-level observation of Falling, physical gamepad input, and a Shipping build are **Not run**.
+
+### Mover crouch cleanup after mode transitions
+
+Run `Scripts/migrate_mover_transition_crouch.py` to move the airborne and slide exit crouch branches into the native pawn. The authored finalize callback keeps its foley playback and audio fade. The native branches run at the same points in that callback.
+
+The Win64 Editor build and the primary Mover pawn Blueprint compile passed. In `DefaultLevel` PIE, injected crouch input entered crouched Walking. A test elevation and queued Falling transition produced crouched Falling, then uncrouched Falling, and returned to uncrouched Walking. The sprint-specific slide exit and an audible comparison are **Not run**.

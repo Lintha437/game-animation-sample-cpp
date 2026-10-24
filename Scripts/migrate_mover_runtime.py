@@ -11,7 +11,7 @@ EVENTS = {"ReceiveBeginPlay": "InitializeMoverRuntime", "ReceiveTick": "UpdateMo
 
 
 def migrate(path=ASSET, parent_path="/Script/GameAnimationSampleCpp.SampleMoverCharacter",
-            events=EVENTS, backup_group="MoverRuntime"):
+            events=EVENTS, backup_group="MoverRuntime", function_migration=None):
     descriptor = Path(unreal.Paths.get_project_file_path()).resolve()
     if descriptor.name != "GameAnimSampleCpp.uproject":
         raise RuntimeError("Run the migration in the native project.")
@@ -30,6 +30,11 @@ def migrate(path=ASSET, parent_path="/Script/GameAnimationSampleCpp.SampleMoverC
     for event, function in events.items():
         if not migration.forward_isolated_event_override(asset, graph, event, function):
             raise RuntimeError(f"Cannot forward {event}. Discard unsaved changes.")
+    if function_migration:
+        graph_name, operation = function_migration
+        function_graph = next((g for g in editor.list_graphs(asset) if g.get_name() == graph_name), None)
+        if not function_graph or not getattr(migration, operation)(asset, function_graph):
+            raise RuntimeError(f"Cannot migrate {graph_name}. Discard unsaved changes.")
     if not is_dirty():
         unreal.log(f"Pawn runtime already migrated: {path}")
         return

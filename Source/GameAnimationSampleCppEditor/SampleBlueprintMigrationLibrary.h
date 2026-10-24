@@ -49,6 +49,10 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
     static bool RemoveMoverFlightKeys(UBlueprint* Blueprint, UEdGraph* Graph);
 
+    /** Replaces the two crouch tails in the finalized Mover mode callback, preserving presentation and ordering. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
+    static bool ForwardMoverTransitionCrouch(UBlueprint* Blueprint, UEdGraph* Graph);
+
     /**
      * Reads compiled function flags before an authored function or event is replaced.
      * @param Blueprint Blueprint whose generated class owns the function.

@@ -221,15 +221,15 @@ namespace
         return Match;
     }
 
-    bool InstallRagdollTail(UBlueprint& Blueprint, UEdGraph& Graph, UK2Node_CallFunction& First,
+    bool InstallExecutionTail(UBlueprint& Blueprint, UEdGraph& Graph, UEdGraphPin* Exec,
         const UFunction& Function)
     {
-        UEdGraphPin* Exec = First.GetExecPin();
         UEdGraphPin* Previous = Exec && Exec->LinkedTo.Num() == 1 ? Exec->LinkedTo[0] : nullptr;
-        if (GetOnlyPeer(Previous) != &First)
+        if (!Previous || Previous->LinkedTo.Num() != 1 || Previous->LinkedTo[0] != Exec)
         {
             return false;
         }
+        const UEdGraphNode* First = Exec->GetOwningNode();
 
         TSet<UEdGraphNode*> Remove = CollectExecutionNodes(*Previous);
         for (const UEdGraphNode* Node : Remove)
@@ -254,8 +254,8 @@ namespace
         FGraphNodeCreator<UK2Node_CallFunction> Creator(Graph);
         UK2Node_CallFunction* Call = Creator.CreateNode();
         Call->SetFromFunction(&Function);
-        Call->NodePosX = First.NodePosX;
-        Call->NodePosY = First.NodePosY;
+        Call->NodePosX = First->NodePosX;
+        Call->NodePosY = First->NodePosY;
         Creator.Finalize();
         if (!Graph.GetSchema()->MovePinLinks(*Exec, *Call->GetExecPin()).CanSafeConnect())
         {
@@ -589,6 +589,36 @@ bool USampleBlueprintMigrationLibrary::RemoveMoverFlightKeys(UBlueprint* Bluepri
     }
     RemoveNodes(*Blueprint, *Graph, Remove);
     return true;
+}
+
+bool USampleBlueprintMigrationLibrary::ForwardMoverTransitionCrouch(UBlueprint* Blueprint, UEdGraph* Graph)
+{
+    if (!Blueprint || !Blueprint->ParentClass || !Graph || Graph->GetOuter() != Blueprint ||
+        Graph->GetFName() != TEXT("On_MovementModeChanged_PostFinalize"))
+    {
+        return false;
+    }
+    const FName SlideName(TEXT("ClearSlideCrouchForSprint"));
+    const FName AirName(TEXT("ClearAirborneCrouch"));
+    if (FindUniqueCall(*Graph, SlideName) && FindUniqueCall(*Graph, AirName))
+    {
+        return true;
+    }
+    const auto* Slide = Blueprint->ParentClass->FindFunctionByName(SlideName);
+    const auto* Air = Blueprint->ParentClass->FindFunctionByName(AirName);
+    auto* Fade = FindUniqueCall(*Graph, TEXT("FadeOut"));
+    auto* SlideBranch = Cast<UK2Node_IfThenElse>(GetOnlyPeer(Fade ? Fade->GetThenPin() : nullptr));
+    auto* IsCrouching = FindUniqueCall(*Graph, TEXT("IsCrouching"));
+    auto* AirBranch = Cast<UK2Node_IfThenElse>(GetOnlyPeer(IsCrouching ? IsCrouching->GetReturnValuePin() : nullptr));
+    const auto* Sprint = Cast<UK2Node_VariableGet>(GetOnlyPeer(SlideBranch ? SlideBranch->GetConditionPin() : nullptr));
+    if (!Slide || !Air || !SlideBranch || !AirBranch || !Sprint || Sprint->GetVarName() != TEXT("PlayerInputState") ||
+        !Cast<UK2Node_ExecutionSequence>(GetOnlyPeer(AirBranch->GetExecPin())) ||
+        !FindUniqueCall(*Graph, TEXT("UnCrouch")))
+    {
+        return false;
+    }
+    return InstallExecutionTail(*Blueprint, *Graph, SlideBranch->GetExecPin(), *Slide) &&
+        InstallExecutionTail(*Blueprint, *Graph, AirBranch->GetExecPin(), *Air);
 }
 
 bool USampleBlueprintMigrationLibrary::ForwardIsolatedEventOverride(UBlueprint* Blueprint, UEdGraph* Graph,
@@ -1241,7 +1271,7 @@ bool USampleBlueprintMigrationLibrary::ReplaceRagdollLifecycle(
             return true;
         }
         const UFunction* Function = Blueprint->ParentClass->FindFunctionByName(Native);
-        return First && Function && InstallRagdollTail(*Blueprint, *EventGraph, *First, *Function);
+        return First && Function && InstallExecutionTail(*Blueprint, *EventGraph, First->GetExecPin(), *Function);
     };
     TArray<UK2Node_CustomEvent*> Events;
     EventGraph->GetNodesOfClass(Events);
