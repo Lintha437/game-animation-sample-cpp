@@ -59,6 +59,7 @@ MIGRATIONS = (
     "cmc_runtime",
     "camera_style_keys",
     "mover_flight_keys",
+    "mover_transition_crouch",
 )
 
 
