@@ -1050,6 +1050,23 @@ void ASampleMoverCharacter::NotifyMoverModeFinalized(const FMoverSyncState& Sync
     Cached->SetPropertyValue_InContainer(this, Next);
 }
 
+void ASampleMoverCharacter::ClearSlideCrouchForSprint()
+{
+    if (ReadIntent(FindSnapshot(*this, MoverPlayerInputState), *this, MoverSprintIntent))
+    {
+        WriteMoverIntent(*this, MoverCrouchIntent, false);
+    }
+}
+
+void ASampleMoverCharacter::ClearAirborneCrouch()
+{
+    if (auto* Mover = FindComponentByClass<UCharacterMoverComponent>(); Mover && Mover->IsCrouching())
+    {
+        WriteMoverIntent(*this, MoverCrouchIntent, false);
+        Mover->UnCrouch();
+    }
+}
+
 FMoverInputCmdContext ASampleMoverCharacter::BuildRagdollInputCommand(int32 SimTimeMs)
 {
     FMoverInputCmdContext Command = BuildMoverInputCommand(SimTimeMs);

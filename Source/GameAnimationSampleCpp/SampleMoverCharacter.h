@@ -32,6 +32,14 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Mover")
     void UpdateMoverRuntime();
 
+    /** Clears crouch intent after the slide audio fades if sprint is requested. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover")
+    void ClearSlideCrouchForSprint();
+
+    /** Clears the stored crouch request and uncrouches if the finalized airborne transition began crouched. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover")
+    void ClearAirborneCrouch();
+
     /** Initializes Mover first, then installs the post-animation and Physics Control prerequisites. */
     UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Ragdoll")
     void InitializeRagdollRuntime();
