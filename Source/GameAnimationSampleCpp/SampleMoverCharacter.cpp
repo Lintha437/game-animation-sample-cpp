@@ -13,8 +13,10 @@
 #include "EnhancedInputComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
+#include "GameFramework/PlayerController.h"
 #include "GameplayTagContainer.h"
 #include "InputAction.h"
+#include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "MoveLibrary/FloorQueryUtils.h"
@@ -1314,6 +1316,51 @@ void ASampleMoverCharacter::HandleMoverShove()
 void ASampleMoverCharacter::HandleMoverTakedown()
 {
     HandleMoverInteractionInput(TEXT("Takedown"), TEXT("Demo_SimpleShoot"));
+}
+
+void ASampleMoverCharacter::SpawnOrRotateRagdollDemoCharacter(TSubclassOf<ASampleMoverCharacter> DemoCharacterClass)
+{
+    UWorld* World = GetWorld();
+    const APlayerController* ViewController = UGameplayStatics::GetPlayerController(this, 0);
+    if (!World || !ViewController || !DemoCharacterClass)
+    {
+        return;
+    }
+
+    FVector ViewLocation;
+    FRotator ViewRotation;
+    ViewController->GetPlayerViewPoint(ViewLocation, ViewRotation);
+    constexpr double TraceDistance = 1000.0;
+    const FVector TraceEnd = ViewLocation + ViewRotation.Vector() * TraceDistance;
+    FHitResult Hit;
+    UKismetSystemLibrary::LineTraceSingleForObjects(this, ViewLocation, TraceEnd, {ObjectTypeQuery1}, false, {},
+        EDrawDebugTrace::None, Hit, true);
+
+    if (APawn* TargetPawn = Cast<APawn>(Hit.GetActor()))
+    {
+        if (auto* Target = Cast<ASampleMoverCharacter>(TargetPawn))
+        {
+            Target->CustomTeleport(FTransform(FRotator(0.0, 90.0, 0.0)), true, true);
+        }
+        return;
+    }
+
+    constexpr double SpawnHeight = 90.0;
+    const FVector Location = (Hit.bBlockingHit ? Hit.ImpactPoint : TraceEnd) + FVector(0.0, 0.0, SpawnHeight);
+    const FTransform SpawnTransform(FRotator(0.0, ViewRotation.Yaw + 180.0, 0.0), Location);
+    FActorSpawnParameters Parameters;
+    Parameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButDontSpawnIfColliding;
+    Parameters.TransformScaleMethod = ESpawnActorScaleMethod::MultiplyWithRoot;
+    RagdollDemoCharacters.Add(World->SpawnActor<ASampleMoverCharacter>(DemoCharacterClass, SpawnTransform, Parameters));
+    constexpr int32 MaxTargets = 3;
+    if (RagdollDemoCharacters.Num() > MaxTargets)
+    {
+        if (ASampleMoverCharacter* Oldest = RagdollDemoCharacters[0].Get())
+        {
+            Oldest->Destroy();
+        }
+        RagdollDemoCharacters.RemoveAt(0);
+    }
 }
 
 void ASampleMoverCharacter::HandleMoverInteractionInput(FName InteractionType, FName AimingDemoFunction)

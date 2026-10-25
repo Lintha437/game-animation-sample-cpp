@@ -236,6 +236,14 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Interaction")
     void RequestCharacterInteraction(FName InteractionType);
 
+    /**
+     * Rotates a Mover pawn under the first player's view, or spawns a target if the trace hit no pawn.
+     * The sandbox retains three spawn attempts and retires the oldest target when a fourth is recorded.
+     * @param DemoCharacterClass Authored target class configured on the ragdoll demo asset.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Interaction")
+    void SpawnOrRotateRagdollDemoCharacter(TSubclassOf<ASampleMoverCharacter> DemoCharacterClass);
+
     /** Tracks the capsule ignores and mesh tick dependency owned by this paired action. */
     UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Interaction")
     void BeginPairedInteractionCollision(UPrimitiveComponent* PartnerCapsule);
@@ -321,6 +329,9 @@ private:
     };
 
     TArray<TSharedPtr<FPairedInteraction>> PairedInteractions;
+
+    /** Local sandbox targets in spawn order. Their world owns the actors. */
+    TArray<TWeakObjectPtr<ASampleMoverCharacter>> RagdollDemoCharacters;
     /** Enable after removing the equivalent Blueprint action events from the local asset. */
     UPROPERTY(EditDefaultsOnly, Category = "Sample|Mover|Input")
     bool bUseNativeMoverDeviceInput = false;
