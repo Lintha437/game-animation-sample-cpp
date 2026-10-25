@@ -16,6 +16,7 @@
 #include "K2Node_IfThenElse.h"
 #include "K2Node_InputKey.h"
 #include "K2Node_Knot.h"
+#include "K2Node_SpawnActorFromClass.h"
 #include "K2Node_VariableGet.h"
 #include "K2Node_VariableSet.h"
 #include "Kismet2/BlueprintEditorUtils.h"
@@ -619,6 +620,43 @@ bool USampleBlueprintMigrationLibrary::ForwardMoverTransitionCrouch(UBlueprint* 
     }
     return InstallExecutionTail(*Blueprint, *Graph, SlideBranch->GetExecPin(), *Slide) &&
         InstallExecutionTail(*Blueprint, *Graph, AirBranch->GetExecPin(), *Air);
+}
+
+bool USampleBlueprintMigrationLibrary::ForwardRagdollDemoSpawn(UBlueprint* Blueprint, UEdGraph* Graph)
+{
+    if (!Blueprint || !Graph || Graph->GetOuter() != Blueprint ||
+        Graph->GetFName() != TEXT("Demo_Spawn/RotateCharacter"))
+    {
+        return false;
+    }
+
+    const FName Function(TEXT("SpawnOrRotateRagdollDemoCharacter"));
+    const FName ClassName(TEXT("DemoCharacterClass"));
+    if (const auto* Existing = FindUniqueCall(*Graph, Function))
+    {
+        const auto* ClassPin = Existing->FindPin(ClassName, EGPD_Input);
+        return ClassPin && ClassPin->DefaultObject == Blueprint->GeneratedClass;
+    }
+
+    TArray<UK2Node_SpawnActorFromClass*> Spawns;
+    Graph->GetNodesOfClass(Spawns);
+    const auto* ClassPin = Spawns.Num() == 1 ? Spawns[0]->FindPin(TEXT("Class"), EGPD_Input) : nullptr;
+    auto* SpawnClass = ClassPin && ClassPin->LinkedTo.IsEmpty() ? Cast<UClass>(ClassPin->DefaultObject) : nullptr;
+    if (!SpawnClass || SpawnClass != Blueprint->GeneratedClass ||
+        !FindUniqueCall(*Graph, TEXT("LineTraceSingleForObjects")) || !FindUniqueCall(*Graph, TEXT("CustomTeleport")) ||
+        !ReplaceMoverInputFunction(Blueprint, Graph, Function, NAME_None))
+    {
+        return false;
+    }
+
+    auto* Call = FindUniqueCall(*Graph, Function);
+    auto* NativeClass = Call ? Call->FindPin(ClassName, EGPD_Input) : nullptr;
+    if (!NativeClass)
+    {
+        return false;
+    }
+    Graph->GetSchema()->TrySetDefaultObject(*NativeClass, SpawnClass);
+    return NativeClass->DefaultObject == SpawnClass;
 }
 
 bool USampleBlueprintMigrationLibrary::ForwardIsolatedEventOverride(UBlueprint* Blueprint, UEdGraph* Graph,

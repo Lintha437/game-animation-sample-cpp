@@ -626,3 +626,9 @@ The Win64 Editor build and the Mover pawn Blueprint compile passed. In `DefaultL
 Run `Scripts/migrate_mover_transition_crouch.py` to move the airborne and slide exit crouch branches into the native pawn. The authored finalize callback keeps its foley playback and audio fade. The native branches run at the same points in that callback.
 
 The Win64 Editor build and the primary Mover pawn Blueprint compile passed. In `DefaultLevel` PIE, injected crouch input entered crouched Walking. A test elevation and queued Falling transition produced crouched Falling, then uncrouched Falling, and returned to uncrouched Walking. The sprint-specific slide exit and an audible comparison are **Not run**.
+
+### Ragdoll demo target placement
+
+Run `Scripts/migrate_ragdoll_demo_spawn.py` to route the aimed interact action's target placement and rotation to the native pawn. The ragdoll asset still supplies the target class. The trace uses the original object filter, and the spawn keeps its facing, collision policy and three-slot eviction rule.
+
+The Win64 Editor build and ragdoll pawn Blueprint compile passed. In `RagdollLevel` PIE, four calls through the original entry point produced target counts of 1, 2, 3 and 3. The fourth call removed the first target. A scripted camera and a target capsule temporarily assigned to the trace's object channel exercised the rotation branch. It turned the target 90 degrees without increasing the target count. Unassisted controller input, a blocked spawn and multiplayer are **Not run** for this batch.
