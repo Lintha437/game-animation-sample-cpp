@@ -60,6 +60,7 @@ MIGRATIONS = (
     "camera_style_keys",
     "mover_flight_keys",
     "mover_transition_crouch",
+    "ragdoll_demo_spawn",
 )
 
 

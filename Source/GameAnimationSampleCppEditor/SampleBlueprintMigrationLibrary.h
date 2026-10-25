@@ -53,6 +53,10 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
     static bool ForwardMoverTransitionCrouch(UBlueprint* Blueprint, UEdGraph* Graph);
 
+    /** Forwards ragdoll demo spawning and transfers the authored target class to the native call. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
+    static bool ForwardRagdollDemoSpawn(UBlueprint* Blueprint, UEdGraph* Graph);
+
     /**
      * Reads compiled function flags before an authored function or event is replaced.
      * @param Blueprint Blueprint whose generated class owns the function.
