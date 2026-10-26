@@ -61,6 +61,7 @@ MIGRATIONS = (
     "mover_flight_keys",
     "mover_transition_crouch",
     "ragdoll_demo_spawn",
+    "ragdoll_demo_aim",
 )
 
 

@@ -1285,6 +1285,20 @@ bool USampleBlueprintMigrationLibrary::ReplaceMoverInputFunction(
     {
         return false;
     }
+    if (Result && OutputName.IsNone())
+    {
+        for (UEdGraphPin* Pin : Result->Pins)
+        {
+            if (Pin->Direction == EGPD_Input && Pin->PinType.PinCategory != UEdGraphSchema_K2::PC_Exec)
+            {
+                UEdGraphPin* Source = Call->FindPin(Pin->PinName, EGPD_Output);
+                if (!Source || !Schema->TryCreateConnection(Source, Pin))
+                {
+                    return false;
+                }
+            }
+        }
+    }
     if (Call->IsNodePure())
     {
         return !Then || !Exec || Schema->TryCreateConnection(Then, Exec);
