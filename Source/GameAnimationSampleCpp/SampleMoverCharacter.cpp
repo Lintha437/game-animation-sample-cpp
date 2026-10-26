@@ -230,7 +230,7 @@ namespace
             Source->ContainerPtrToValuePtr<void>(SourceContainer));
     }
 
-    void SetEnumByte(const UScriptStruct* Type, void* Data, FName Name, uint8 Value)
+    void SetEnumByte(const UStruct* Type, void* Data, FName Name, uint8 Value)
     {
         if (const auto* Byte = FindFProperty<FByteProperty>(Type, Name))
         {
@@ -1360,6 +1360,71 @@ void ASampleMoverCharacter::SpawnOrRotateRagdollDemoCharacter(TSubclassOf<ASampl
             Oldest->Destroy();
         }
         RagdollDemoCharacters.RemoveAt(0);
+    }
+}
+
+void ASampleMoverCharacter::ResolveRagdollDemoAim(FVector& Origin, FVector& Direction) const
+{
+    const auto* Field = FindFProperty<FObjectPropertyBase>(GetClass(), TEXT("GameplayCamera"));
+    const auto* Camera = Field ? Cast<USceneComponent>(Field->GetObjectPropertyValue_InContainer(this)) : nullptr;
+    const USceneComponent* View = Camera ? Camera->GetChildComponent(0) : nullptr;
+    Origin = View ? View->GetComponentLocation() : FVector::ZeroVector;
+    Direction = View ? View->GetForwardVector() : FVector::ZeroVector;
+}
+
+void ASampleMoverCharacter::DrawRagdollDemoCrosshair() const
+{
+    if (!ReadIntent(FindSnapshot(*this, MoverPlayerInputState), *this, MoverAimIntent))
+    {
+        return;
+    }
+
+    FVector Origin;
+    FVector Direction;
+    ResolveRagdollDemoAim(Origin, Direction);
+    UKismetSystemLibrary::DrawDebugSphere(this, Origin + Direction * 1000.0, 3.0f,
+        50, FLinearColor::White, 0.0f, 1.0f, EDrawDebugSceneDepthPriorityGroup::Foreground);
+}
+
+void ASampleMoverCharacter::ApplyRagdollDemoHit()
+{
+    FVector Origin;
+    FVector Direction;
+    ResolveRagdollDemoAim(Origin, Direction);
+    if (Direction.IsZero())
+    {
+        return;
+    }
+    constexpr double TraceDistance = 100000.0;
+    FHitResult Hit;
+    if (!UKismetSystemLibrary::LineTraceSingleForObjects(this, Origin, Origin + Direction * TraceDistance,
+        {ObjectTypeQuery4}, false, {}, EDrawDebugTrace::None, Hit, true))
+    {
+        return;
+    }
+
+    auto* Target = Cast<ASampleMoverCharacter>(Hit.GetActor());
+    UFunction* Trigger = Target ? Target->FindFunction(TEXT("TriggerRagdoll")) : nullptr;
+    const auto* Stop = Trigger ? FindFProperty<FBoolProperty>(Trigger, TEXT("StopActiveMontages")) : nullptr;
+    const FName InjuryName(TEXT("Ragdoll_InjuryState"));
+    const auto* InjuryByte = Trigger ? FindFProperty<FByteProperty>(Trigger, InjuryName) : nullptr;
+    const auto* InjuryEnum = Trigger ? FindFProperty<FEnumProperty>(Trigger, InjuryName) : nullptr;
+    const UEnum* InjuryType = InjuryByte ? InjuryByte->Enum.Get() : (InjuryEnum ? InjuryEnum->GetEnum() : nullptr);
+    const int64 InjuryValue = InjuryType ? InjuryType->GetValueByNameString(TEXT("NewEnumerator5")) : INDEX_NONE;
+    if (!Stop || InjuryValue == INDEX_NONE)
+    {
+        return;
+    }
+
+    FStructOnScope Args(Trigger);
+    void* Data = Args.GetStructMemory();
+    Stop->SetPropertyValue_InContainer(Data, true);
+    SetEnumByte(Trigger, Data, InjuryName, static_cast<uint8>(InjuryValue));
+    Target->ProcessEvent(Trigger, Data);
+    if (auto* Mesh = GetRagdollMesh(*Target))
+    {
+        constexpr double ImpulseSpeed = 2500.0;
+        Mesh->AddImpulse(Direction * ImpulseSpeed, Hit.BoneName, true);
     }
 }
 

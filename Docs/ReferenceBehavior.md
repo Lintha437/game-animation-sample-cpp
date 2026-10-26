@@ -632,3 +632,9 @@ The Win64 Editor build and the primary Mover pawn Blueprint compile passed. In `
 Run `Scripts/migrate_ragdoll_demo_spawn.py` to route the aimed interact action's target placement and rotation to the native pawn. The ragdoll asset still supplies the target class. The trace uses the original object filter, and the spawn keeps its facing, collision policy and three-slot eviction rule.
 
 The Win64 Editor build and ragdoll pawn Blueprint compile passed. In `RagdollLevel` PIE, four calls through the original entry point produced target counts of 1, 2, 3 and 3. The fourth call removed the first target. A scripted camera and a target capsule temporarily assigned to the trace's object channel exercised the rotation branch. It turned the target 90 degrees without increasing the target count. Unassisted controller input, a blocked spawn and multiplayer are **Not run** for this batch.
+
+### Ragdoll demo aim and hit response
+
+Run `Scripts/migrate_ragdoll_demo_aim.py` to connect the reference camera query, aim reticle and demo hit response to C++. The wrappers preserve existing callers. The demo trace keeps its object filter and applies the authored injury preset before the hit bone receives an impulse.
+
+The Win64 Editor build and ragdoll pawn Blueprint compile passed. In `RagdollLevel` PIE, the existing aim function returned the evaluated camera child's origin and forward direction. A scripted camera lined up a trace on the pelvis of a standing NPC. The existing hit action put that pawn into Ragdoll with the Limp injury state and enabled skeletal physics. Rendered reticle comparison, impulse measurement, physical input and multiplayer are **Not run** for this batch.

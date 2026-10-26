@@ -244,6 +244,22 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Interaction")
     void SpawnOrRotateRagdollDemoCharacter(TSubclassOf<ASampleMoverCharacter> DemoCharacterClass);
 
+    /**
+     * Queries the evaluated demo camera child on the game thread.
+     * @param Origin World-space camera position, or zero if the child is absent.
+     * @param Direction Camera forward unit vector, or zero if the child is absent.
+     */
+    UFUNCTION(BlueprintPure, Category = "Sample|Mover|Interaction")
+    void ResolveRagdollDemoAim(FVector& Origin, FVector& Direction) const;
+
+    /** Draws the one-frame debug reticle while the authored aim intent is active. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Interaction")
+    void DrawRagdollDemoCrosshair() const;
+
+    /** Traces the demo camera ray, requests the authored injury state, then applies impulse at the hit bone. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Interaction")
+    void ApplyRagdollDemoHit();
+
     /** Tracks the capsule ignores and mesh tick dependency owned by this paired action. */
     UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Interaction")
     void BeginPairedInteractionCollision(UPrimitiveComponent* PartnerCapsule);
