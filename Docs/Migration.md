@@ -70,6 +70,8 @@ For the sample's flight shortcut, queue a mode transition through Mover. An acti
 
 Apply crouch cleanup after Mover finalizes a transition. On airborne entry, clear the stored crouch request and uncrouch when the character is crouched. On slide exit, clear the stored crouch request when sprint is held. Keep the slide exit cleanup after the original audio fade when importing the sample's presentation.
 
+For CMC landing, publish the incoming world-space velocity before calling foley. Start the 0.3-second flag after foley dispatch. Restart the same latent action on a second landing so the earlier expiration cannot clear the new state. Keep the flag available to the animation graph through its existing character state interface.
+
 The ragdoll test level's aimed interact action uses the first player's camera to place or rotate test targets. Supply a target pawn class and match the sample's first object-query slot to the destination's collision profile if copying the tool. The tool traces 1,000 cm, rotates a hit Mover pawn 90 degrees around yaw, or places the target 90 cm above the impact or trace end. Give each tool owner its own three-slot queue. The oldest target is retired when a fourth attempt is recorded.
 
 The demo reticle and ragdoll hit use the evaluated Gameplay Camera child. If you port those controls, point both at the same evaluated view transform and pair the trace's fourth object-query slot with the target mesh's collision channel. Apply the authored injury preset before adding the velocity-change impulse to the hit bone. The sample keeps montage blend-out and impact presentation in the authored ragdoll flow.

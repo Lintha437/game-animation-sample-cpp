@@ -638,3 +638,9 @@ The Win64 Editor build and ragdoll pawn Blueprint compile passed. In `RagdollLev
 Run `Scripts/migrate_ragdoll_demo_aim.py` to connect the reference camera query, aim reticle and demo hit response to C++. The wrappers preserve existing callers. The demo trace keeps its object filter and applies the authored injury preset before the hit bone receives an impulse.
 
 The Win64 Editor build and ragdoll pawn Blueprint compile passed. In `RagdollLevel` PIE, the existing aim function returned the evaluated camera child's origin and forward direction. A scripted camera lined up a trace on the pelvis of a standing NPC. The existing hit action put that pawn into Ragdoll with the Limp injury state and enabled skeletal physics. Rendered reticle comparison, impulse measurement, physical input and multiplayer are **Not run** for this batch.
+
+### CMC landing state window
+
+Run `Scripts/migrate_cmc_landing_state.py` to move the landing velocity and the retriggerable flag to C++. The landing event writes velocity before the existing foley call and opens the 0.3-second window after dispatch. The animation graph keeps reading the same fields.
+
+The Win64 Editor build and CMC pawn Blueprint compile passed. In `DefaultLevel` PIE, two calls through the existing landing event updated the velocity immediately. The flag stayed active past the original expiration and cleared 0.333 seconds after the second call at the sampled tick rate. The second velocity remained available after the flag cleared. This check supplied both landing velocities directly. Real landing input, audible foley and remote proxy timing are **Not run** for this batch.
