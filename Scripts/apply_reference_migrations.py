@@ -62,6 +62,7 @@ MIGRATIONS = (
     "mover_transition_crouch",
     "ragdoll_demo_spawn",
     "ragdoll_demo_aim",
+    "cmc_landing_state",
 )
 
 

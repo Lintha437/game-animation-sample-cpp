@@ -57,6 +57,10 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
     static bool ForwardRagdollDemoSpawn(UBlueprint* Blueprint, UEdGraph* Graph);
 
+    /** Moves the CMC landing velocity and retriggerable flag into native code around the existing foley call. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
+    static bool ForwardCmcLandingState(UBlueprint* Blueprint, UEdGraph* Graph);
+
     /**
      * Reads compiled function flags before an authored function or event is replaced.
      * @param Blueprint Blueprint whose generated class owns the function.

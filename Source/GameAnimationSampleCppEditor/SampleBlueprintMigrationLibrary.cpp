@@ -659,6 +659,48 @@ bool USampleBlueprintMigrationLibrary::ForwardRagdollDemoSpawn(UBlueprint* Bluep
     return NativeClass->DefaultObject == SpawnClass;
 }
 
+bool USampleBlueprintMigrationLibrary::ForwardCmcLandingState(UBlueprint* Blueprint, UEdGraph* Graph)
+{
+    if (!Blueprint || !Blueprint->ParentClass || !Graph || Graph->GetOuter() != Blueprint ||
+        Graph->GetFName() != TEXT("EventGraph"))
+    {
+        return false;
+    }
+    const FName RecordName(TEXT("RecordLandingVelocity"));
+    const FName StartName(TEXT("StartLandingWindow"));
+    if (FindUniqueCall(*Graph, RecordName) && FindUniqueCall(*Graph, StartName))
+    {
+        return true;
+    }
+
+    const auto* Record = Blueprint->ParentClass->FindFunctionByName(RecordName);
+    const auto* Start = Blueprint->ParentClass->FindFunctionByName(StartName);
+    auto* Delay = FindUniqueCall(*Graph, TEXT("RetriggerableDelay"));
+    auto* Enter = Cast<UK2Node_VariableSet>(GetOnlyPeer(Delay ? Delay->GetExecPin() : nullptr));
+    auto* Exit = Cast<UK2Node_VariableSet>(GetOnlyPeer(Delay ? Delay->GetThenPin() : nullptr));
+    auto* Foley = Cast<UK2Node_CallFunction>(GetOnlyPeer(Enter ? Enter->FindPin(UEdGraphSchema_K2::PN_Execute) : nullptr));
+    auto* Velocity = Cast<UK2Node_VariableSet>(GetOnlyPeer(Foley ? Foley->GetExecPin() : nullptr));
+    auto* Value = Velocity ? Velocity->FindPin(TEXT("LandVelocity"), EGPD_Input) : nullptr;
+    auto* Event = Cast<UK2Node_CustomEvent>(GetOnlyPeer(Value));
+    const auto* Duration = Delay ? Delay->FindPin(TEXT("Duration"), EGPD_Input) : nullptr;
+    const auto MatchesFlag = [](const UK2Node_VariableSet* Node, const TCHAR* Expected)
+    {
+        const auto* Pin = Node ? Node->FindPin(TEXT("JustLanded"), EGPD_Input) : nullptr;
+        return Pin && Node->GetVarName() == TEXT("JustLanded") && Pin->LinkedTo.IsEmpty() && Pin->DefaultValue == Expected;
+    };
+    if (!Record || !Start || !Duration || !Duration->LinkedTo.IsEmpty() ||
+        !FMath::IsNearlyEqual(FCString::Atof(*Duration->DefaultValue), 0.3f) ||
+        !MatchesFlag(Enter, TEXT("true")) || !MatchesFlag(Exit, TEXT("false")) ||
+        !Foley || Foley->FunctionReference.GetMemberName() != TEXT("PlayFoleyEvent") ||
+        !Velocity || Velocity->GetVarName() != TEXT("LandVelocity") || !Event ||
+        Event->CustomFunctionName != TEXT("Custom OnLanded Event"))
+    {
+        return false;
+    }
+    return InstallTraversalCall(*Blueprint, *Graph, {Velocity, Velocity, Record, {{TEXT("LandVelocity"), Value}}}) &&
+        InstallExecutionTail(*Blueprint, *Graph, Enter->FindPin(UEdGraphSchema_K2::PN_Execute), *Start);
+}
+
 bool USampleBlueprintMigrationLibrary::ForwardIsolatedEventOverride(UBlueprint* Blueprint, UEdGraph* Graph,
     FName EventName, FName FunctionName)
 {

@@ -63,6 +63,17 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Movement")
     void UpdateSimulatedGroundTransition(FVector OldVelocity);
 
+    /**
+     * Writes the world-space, pre-impact velocity used by the authored landing foley.
+     * @param LandVelocity Velocity in centimeters per second from the local landing or simulated transition.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Movement")
+    void RecordLandingVelocity(FVector LandVelocity);
+
+    /** Opens a 0.3-second landing window after foley dispatch. Repeated landings restart the window. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Movement")
+    void StartLandingWindow();
+
     ASampleCmcCharacter();
 
     /**
@@ -152,6 +163,9 @@ protected:
         const FVector& PreviousFloorContactNormal, const FVector& PreviousLocation, float TimeDelta) override;
 
 private:
+    UFUNCTION()
+    void ClearLandingWindow();
+
     /** Enable after the authored camera-style key group is removed. */
     UPROPERTY(EditDefaultsOnly, Category = "Sample|Possession")
     bool bUseNativeCameraStyleKeys = false;
