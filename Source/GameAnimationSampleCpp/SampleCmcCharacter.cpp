@@ -11,6 +11,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "InputAction.h"
 #include "Kismet/KismetMathLibrary.h"
+#include "Kismet/KismetSystemLibrary.h"
 #include "KismetAnimationLibrary.h"
 #include "Math/RotationMatrix.h"
 #include "Net/Core/PushModel/PushModel.h"
@@ -26,6 +27,8 @@ namespace
     constexpr int64 WalkGait = 0;
     constexpr int64 RunGait = 1;
     constexpr int64 SprintGait = 2;
+    constexpr int32 LandingWindowAction = 0x434D4301;
+    const FName JustLandedName(TEXT("JustLanded"));
     const FName GaitName(TEXT("Gait"));
     const FName StickModeName(TEXT("MovementStickMode"));
     const FName InputStateName(TEXT("CharacterInputState"));
@@ -191,6 +194,33 @@ void ASampleCmcCharacter::UpdateSimulatedGroundTransition(FVector OldVelocity)
         }
     }
     Previous->SetPropertyValue_InContainer(this, bOnGround);
+}
+
+void ASampleCmcCharacter::RecordLandingVelocity(FVector LandVelocity)
+{
+    const auto* Velocity = FindFProperty<FStructProperty>(GetClass(), TEXT("LandVelocity"));
+    if (Velocity && Velocity->Struct == TBaseStructure<FVector>::Get())
+    {
+        *Velocity->ContainerPtrToValuePtr<FVector>(this) = LandVelocity;
+    }
+}
+
+void ASampleCmcCharacter::StartLandingWindow()
+{
+    if (const auto* JustLanded = FindFProperty<FBoolProperty>(GetClass(), JustLandedName))
+    {
+        JustLanded->SetPropertyValue_InContainer(this, true);
+        UKismetSystemLibrary::RetriggerableDelay(this, 0.3f, FLatentActionInfo(
+            0, LandingWindowAction, GET_FUNCTION_NAME_STRING_CHECKED(ASampleCmcCharacter, ClearLandingWindow), this));
+    }
+}
+
+void ASampleCmcCharacter::ClearLandingWindow()
+{
+    if (const auto* JustLanded = FindFProperty<FBoolProperty>(GetClass(), JustLandedName))
+    {
+        JustLanded->SetPropertyValue_InContainer(this, false);
+    }
 }
 
 void ASampleCmcCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
