@@ -701,6 +701,111 @@ bool USampleBlueprintMigrationLibrary::ForwardCmcLandingState(UBlueprint* Bluepr
         InstallExecutionTail(*Blueprint, *Graph, Enter->FindPin(UEdGraphSchema_K2::PN_Execute), *Start);
 }
 
+bool USampleBlueprintMigrationLibrary::ForwardMoverDirectionSector(UBlueprint* Blueprint, UEdGraph* Graph)
+{
+    if (!Blueprint || !Blueprint->ParentClass || !Graph || Graph->GetOuter() != Blueprint ||
+        Graph->GetFName() != TEXT("Get_MovementDirectionAndOffset"))
+    {
+        return false;
+    }
+    const FName NativeName(TEXT("PrepareMoverDirectionalOffset"));
+    if (FindUniqueCall(*Graph, NativeName))
+    {
+        return true;
+    }
+
+    const auto* Function = Blueprint->ParentClass->FindFunctionByName(NativeName);
+    auto* Curve = FindUniqueCall(*Graph, TEXT("GetFloatValue"));
+    auto* Chooser = GetOnlyPeer(Curve ? Curve->FindPin(UEdGraphSchema_K2::PN_Self, EGPD_Input) : nullptr);
+    auto* Angle = Curve ? Curve->FindPin(TEXT("InTime"), EGPD_Input) : nullptr;
+    auto* Context = GetOnlyPeer(Chooser
+        ? Chooser->FindPin(TEXT("S_RotationOffsetCurveChooser_Inputs"), EGPD_Input) : nullptr);
+    auto* ChooserSector = Context ? Context->FindPin(TEXT("MovementDirection_2_D5D2C02345E313621C7390A0620142F6"), EGPD_Input) : nullptr;
+    auto* Mode = Cast<UK2Node_CallFunction>(GetOnlyPeer(Context
+        ? Context->FindPin(TEXT("MovementMode_5_6869EC0C4C816E7A69DFEBA731B5A584"), EGPD_Input) : nullptr));
+    auto* ChooserExec = Chooser ? Chooser->FindPin(UEdGraphSchema_K2::PN_Execute, EGPD_Input) : nullptr;
+    auto* Success = Cast<UK2Node_FunctionResult>(GetOnlyPeer(
+        Chooser ? Chooser->FindPin(UEdGraphSchema_K2::PN_Execute, EGPD_Output) : nullptr));
+    auto* ResultSector = Success ? Success->FindPin(TEXT("MovementDirection"), EGPD_Input) : nullptr;
+    auto* Definition = ResultSector ? Cast<UEnum>(ResultSector->PinType.PinSubCategoryObject.Get()) : nullptr;
+    TArray<UK2Node_FunctionEntry*> Entries;
+    TArray<UK2Node_FunctionResult*> Results;
+    Graph->GetNodesOfClass(Entries);
+    Graph->GetNodesOfClass(Results);
+    if (!Function || !Angle || !ChooserExec || Chooser->GetClass()->GetFName() != TEXT("K2Node_EvaluateChooser2") ||
+        !ChooserSector || !Definition || !Mode || Mode->FunctionReference.GetMemberName() != TEXT("Get_CurrentMovementMode") ||
+        Entries.Num() != 1 || Results.Num() != 3)
+    {
+        return false;
+    }
+
+    UK2Node_FunctionResult* Fallback = nullptr;
+    for (auto* Result : Results)
+    {
+        if (Result == Success)
+        {
+            continue;
+        }
+        auto* Direction = Result->FindPin(TEXT("MovementDirection"), EGPD_Input);
+        auto* Offset = Result->FindPin(TEXT("RotationOffset"), EGPD_Input);
+        if (!Direction || !Offset || !Direction->LinkedTo.IsEmpty() || !Offset->LinkedTo.IsEmpty() ||
+            Direction->DefaultValue != TEXT("NewEnumerator0") || FCString::Atod(*Offset->DefaultValue) != 0.0)
+        {
+            return false;
+        }
+        Fallback = Result;
+    }
+    if (!Fallback)
+    {
+        return false;
+    }
+    auto* Entry = Entries[0];
+    const TSet<UEdGraphNode*> Keep{Entry, Fallback, Chooser, Context, Mode, Success, Curve};
+    TSet<UEdGraphNode*> Remove;
+    for (UEdGraphNode* Node : Graph->Nodes)
+    {
+        if (!Keep.Contains(Node))
+        {
+            Remove.Add(Node);
+        }
+    }
+    RemoveNodes(*Blueprint, *Graph, Remove);
+    Entry->Modify();
+    Entry->LocalVariables.Reset();
+
+    FGraphNodeCreator<UK2Node_CallFunction> CreateCall(*Graph);
+    auto* Call = CreateCall.CreateNode();
+    Call->SetFromFunction(Function);
+    Call->NodePosX = Entry->NodePosX + 300;
+    Call->NodePosY = Entry->NodePosY;
+    CreateCall.Finalize();
+
+    FGraphNodeCreator<UK2Node_IfThenElse> CreateGate(*Graph);
+    auto* Gate = CreateGate.CreateNode();
+    Gate->NodePosX = Call->NodePosX + 380;
+    Gate->NodePosY = Entry->NodePosY;
+    CreateGate.Finalize();
+
+    FGraphNodeCreator<UK2Node_CastByteToEnum> CreateConversion(*Graph);
+    auto* Convert = CreateConversion.CreateNode();
+    Convert->Enum = Definition;
+    Convert->bSafe = true;
+    Convert->NodePosX = Call->NodePosX + 380;
+    Convert->NodePosY = Call->NodePosY + 240;
+    CreateConversion.Finalize();
+
+    const auto* Schema = Graph->GetSchema();
+    auto* Sector = Convert->FindPin(UEdGraphSchema_K2::PN_ReturnValue, EGPD_Output);
+    return Schema->TryCreateConnection(Entry->FindPin(UEdGraphSchema_K2::PN_Then, EGPD_Output), Call->GetExecPin()) &&
+        Schema->TryCreateConnection(Call->GetThenPin(), Gate->GetExecPin()) &&
+        Schema->TryCreateConnection(Call->GetReturnValuePin(), Gate->GetConditionPin()) &&
+        Schema->TryCreateConnection(Gate->GetThenPin(), ChooserExec) &&
+        Schema->TryCreateConnection(Gate->GetElsePin(), Fallback->FindPin(UEdGraphSchema_K2::PN_Execute, EGPD_Input)) &&
+        Schema->TryCreateConnection(Call->FindPin(TEXT("Angle"), EGPD_Output), Angle) &&
+        Schema->TryCreateConnection(Call->FindPin(TEXT("Sector"), EGPD_Output), Convert->FindPin(TEXT("Byte"), EGPD_Input)) &&
+        Schema->TryCreateConnection(Sector, ChooserSector) && Schema->TryCreateConnection(Sector, ResultSector);
+}
+
 bool USampleBlueprintMigrationLibrary::ForwardIsolatedEventOverride(UBlueprint* Blueprint, UEdGraph* Graph,
     FName EventName, FName FunctionName)
 {
