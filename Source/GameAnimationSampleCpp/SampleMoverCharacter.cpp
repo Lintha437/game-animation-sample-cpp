@@ -44,6 +44,8 @@ namespace
     const FName MoverWalkIntent(TEXT("WantsToWalk_3_78963B154975E3BDE244A3BE438473E3"));
     const FName MoverStrafeIntent(TEXT("WantsToStrafe_5_64E842184F7691CD179DFCBA7158A4D9"));
     const FName MoverAimIntent(TEXT("WantsToAim_7_3A4AA0AA4DE529A3B213E68BECD246F8"));
+    const FName MovementSectorField(TEXT("MovementDirection_2_19B243824010A37C0D54A7A28A5C6EFA"));
+    const FName DirectionalOffsetField(TEXT("RotationOffset_14_9438753848B6A37A4F76569318195C60"));
     const FName MoverCrouchIntent(TEXT("WantsToCrouch_9_47D0791142F36BB93FFD9EA12F96F2B9"));
     const FName RagdollMode(TEXT("Ragdoll"));
     const FName RagdollTransformField(TEXT("RagdollTransform_33_5FE542414D593629259855B867DEA655"));
@@ -68,6 +70,14 @@ namespace
         Traversing,
         Ragdoll,
         Flying,
+    };
+
+    enum class EAuthoredMovementSector : uint8
+    {
+        Forward = 0,
+        Backward = 1,
+        Left = 2,
+        Right = 4,
     };
 
     int64 ReadEnum(const FProperty& Property, const void* Value)
@@ -817,6 +827,95 @@ uint8 ASampleMoverCharacter::ResolveGaitValue() const
     return AnalogStyle == 1 && Deflection > 0.7 ? MoverGaitRun : MoverGaitWalk;
 }
 
+bool ASampleMoverCharacter::PrepareMoverDirectionalOffset(double& Angle, uint8& Sector)
+{
+    Angle = 0.0;
+    Sector = static_cast<uint8>(EAuthoredMovementSector::Forward);
+    const auto* Defaults = GetPreSimInputs(*this);
+    const auto* Snapshot = FindSnapshot(*this, TEXT("MoverCustomInputs_PreSim"));
+    const int64 Rotation = GetPreSimRotationMode(*this);
+    FVector Direction = FVector::ZeroVector;
+    if (Defaults && Snapshot && Rotation != FaceMovement)
+    {
+        switch (static_cast<EAuthoredMovementMode>(ResolveMovementModeValue()))
+        {
+        case EAuthoredMovementMode::Grounded:
+            Direction = Defaults->GetMoveInput();
+            break;
+        case EAuthoredMovementMode::Airborne:
+        case EAuthoredMovementMode::Sliding:
+            if (const auto* Mover = FindComponentByClass<UCharacterMoverComponent>())
+            {
+                Direction = Mover->GetVelocity().GetSafeNormal2D(0.0001);
+            }
+            break;
+        default:
+            break;
+        }
+    }
+    if (Direction.IsZero())
+    {
+        WriteNumber(GetClass(), this, TEXT("DebugAngle"), 0.0);
+        return false;
+    }
+
+    const UScriptStruct* Type = Snapshot->Struct;
+    const void* Data = Snapshot->ContainerPtrToValuePtr<void>(this);
+    const auto* PreviousField = Type->FindPropertyByName(MovementSectorField);
+    const auto Previous = static_cast<EAuthoredMovementSector>(PreviousField
+        ? ReadEnum(*PreviousField, PreviousField->ContainerPtrToValuePtr<void>(Data)) : 0);
+    const double IntentYaw = Defaults->OrientationIntent.Rotation().Yaw;
+    Angle = FRotator::NormalizeAxis(Direction.Rotation().Yaw - IntentYaw);
+    if (Previous == EAuthoredMovementSector::Forward)
+    {
+        const double Offset = ReadNumber(Type, Data, DirectionalOffsetField);
+        const double Side = Offset == 0.0 ? FRotator::NormalizeAxis(GetActorRotation().Yaw - IntentYaw) : Offset;
+        if (Side > 0.0 && Angle >= -180.0 && Angle <= -170.0)
+        {
+            Angle = 179.0;
+        }
+        else if (Side <= 0.0 && Angle >= 170.0 && Angle <= 180.0)
+        {
+            Angle = -179.0;
+        }
+    }
+    WriteNumber(GetClass(), this, TEXT("DebugAngle"), Angle);
+
+    const int32 Style = UKismetSystemLibrary::GetConsoleVariableIntValue(
+        Rotation == AimRotationMode ? TEXT("DDCvar.AimStyle") : TEXT("DDCvar.StrafeStyle"));
+    double ForwardLimit = 0.0;
+    double BackwardLimit = 0.0;
+    switch (Style)
+    {
+    case 0:
+    {
+        const bool bPreviouslyAxial = Previous == EAuthoredMovementSector::Forward || Previous == EAuthoredMovementSector::Backward;
+        ForwardLimit = bPreviouslyAxial ? 60.0 : 40.0;
+        BackwardLimit = bPreviouslyAxial ? 120.0 : 140.0;
+        break;
+    }
+    case 1:
+        ForwardLimit = BackwardLimit = Previous == EAuthoredMovementSector::Backward ? 120.0 : 140.0;
+        break;
+    case 2:
+        ForwardLimit = BackwardLimit = 180.0;
+        break;
+    default:
+        break;
+    }
+
+    const auto* Gait = Type->FindPropertyByName(TEXT("Gait_5_13BB29FB446593C2412547A541C4C00B"));
+    if ((Gait && ReadEnum(*Gait, Gait->ContainerPtrToValuePtr<void>(Data)) == MoverGaitSprint) ||
+        FMath::Abs(Angle) <= ForwardLimit)
+    {
+        return true;
+    }
+    const auto Selected = FMath::Abs(Angle) > BackwardLimit ? EAuthoredMovementSector::Backward
+        : (Angle < 0.0 ? EAuthoredMovementSector::Left : EAuthoredMovementSector::Right);
+    Sector = static_cast<uint8>(Selected);
+    return true;
+}
+
 FMoverInputCmdContext ASampleMoverCharacter::BuildMoverInputCommand(int32 SimTimeMs)
 {
     FMoverInputCmdContext Command;
@@ -856,9 +955,9 @@ FMoverInputCmdContext ASampleMoverCharacter::BuildMoverInputCommand(int32 SimTim
     {
         FStructOnScope Args(Direction);
         ProcessEvent(Direction, Args.GetStructMemory());
-        CopyEnum(CustomType->FindPropertyByName(TEXT("MovementDirection_2_19B243824010A37C0D54A7A28A5C6EFA")),
+        CopyEnum(CustomType->FindPropertyByName(MovementSectorField),
             CustomData, Direction->FindPropertyByName(TEXT("MovementDirection")), Args.GetStructMemory());
-        WriteNumber(CustomType, CustomData, TEXT("RotationOffset_14_9438753848B6A37A4F76569318195C60"),
+        WriteNumber(CustomType, CustomData, DirectionalOffsetField,
             ReadNumber(Direction, Args.GetStructMemory(), TEXT("RotationOffset")));
     }
 

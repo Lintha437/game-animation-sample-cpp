@@ -65,6 +65,15 @@ public:
     UFUNCTION(BlueprintPure, Category = "Sample|Mover")
     uint8 ResolveGaitValue() const;
 
+    /**
+     * Prepares the facing sector and sampled heading for the authored rotation-offset Chooser.
+     * @param Angle Signed angle from orientation intent to desired movement, in degrees.
+     * @param Sector Value in the imported movement-direction enum.
+     * @return True if the authored Chooser should run. False yields the forward sector with zero offset.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover")
+    bool PrepareMoverDirectionalOffset(double& Angle, uint8& Sector);
+
     /** @return Horizontal speed from the Mover simulation, in centimeters per second. */
     UFUNCTION(BlueprintPure, Category = "Sample|Mover")
     double Get_Speed() const;
