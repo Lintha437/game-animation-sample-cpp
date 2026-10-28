@@ -61,6 +61,10 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
     static bool ForwardCmcLandingState(UBlueprint* Blueprint, UEdGraph* Graph);
 
+    /** Replaces the Mover direction calculations while preserving the rotation-offset Chooser and curve sample. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
+    static bool ForwardMoverDirectionSector(UBlueprint* Blueprint, UEdGraph* Graph);
+
     /**
      * Reads compiled function flags before an authored function or event is replaced.
      * @param Blueprint Blueprint whose generated class owns the function.

@@ -63,6 +63,7 @@ MIGRATIONS = (
     "ragdoll_demo_spawn",
     "ragdoll_demo_aim",
     "cmc_landing_state",
+    "mover_direction_sector",
 )
 
 

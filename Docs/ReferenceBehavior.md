@@ -644,3 +644,9 @@ The Win64 Editor build and ragdoll pawn Blueprint compile passed. In `RagdollLev
 Run `Scripts/migrate_cmc_landing_state.py` to move the landing velocity and the retriggerable flag to C++. The landing event writes velocity before the existing foley call and opens the 0.3-second window after dispatch. The animation graph keeps reading the same fields.
 
 The Win64 Editor build and CMC pawn Blueprint compile passed. In `DefaultLevel` PIE, two calls through the existing landing event updated the velocity immediately. The flag stayed active past the original expiration and cleared 0.333 seconds after the second call at the sampled tick rate. The second velocity remained available after the flag cleared. This check supplied both landing velocities directly. Real landing input, audible foley and remote proxy timing are **Not run** for this batch.
+
+### Mover directional sectors
+
+Run `Scripts/migrate_mover_direction_sector.py` to transfer the direction classification, rear-angle stability and sprint fallback into the native pre-simulation path. The existing function retains the authored rotation-offset Chooser and feeds its curve sample to the Mover command through the original interface.
+
+The Win64 Editor build and primary Mover pawn Blueprint compile passed. In `DefaultLevel` PIE, 810 grounded snapshots replayed through the original graph and its replacement returned identical sectors, curve outputs and debug angles to the sampling tolerance of 0.0002 degrees. The replay varied previous direction, style, gait and input angle, including stationary inputs and rear-angle wraparound. It injected snapshots directly. Airborne, sliding and network gameplay replay are **Not run** for this batch.

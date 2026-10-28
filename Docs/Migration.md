@@ -66,6 +66,8 @@ Route jump presses through the movement mode and traversal gate before publishin
 
 The sample falling mode extends stock Mover air movement with command-driven facing at up to 300 degrees per second. Preserve the custom command's rotation offset and verify the turn after a jump. Its slide transitions enter above 380 cm/s while crouched and exit at or below 200 cm/s or when standing. Keep both thresholds aligned with the destination's authored movement speeds.
 
+To carry over directional movement, derive the signed heading from pre-simulation orientation intent and the current move input on the ground. Use planar velocity in air and during a slide. Carry the previous sector and offset between commands so the heading remains stable across rear-angle wraparound. Apply aim and strafe thresholds before evaluating the existing rotation-offset Chooser and its curves. Preserve the forward fallback for sprinting, stationary input and orient-to-movement.
+
 For the sample's flight shortcut, queue a mode transition through Mover. An active flight returns to Falling. The desktop `Z` binding is for development builds, and the gamepad stick click uses the standard input binding.
 
 Apply crouch cleanup after Mover finalizes a transition. On airborne entry, clear the stored crouch request and uncrouch when the character is crouched. On slide exit, clear the stored crouch request when sprint is held. Keep the slide exit cleanup after the original audio fade when importing the sample's presentation.
