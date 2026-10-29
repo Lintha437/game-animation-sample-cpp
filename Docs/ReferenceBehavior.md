@@ -650,3 +650,9 @@ The Win64 Editor build and CMC pawn Blueprint compile passed. In `DefaultLevel` 
 Run `Scripts/migrate_mover_direction_sector.py` to transfer the direction classification, rear-angle stability and sprint fallback into the native pre-simulation path. The existing function retains the authored rotation-offset Chooser and feeds its curve sample to the Mover command through the original interface.
 
 The Win64 Editor build and primary Mover pawn Blueprint compile passed. In `DefaultLevel` PIE, 810 grounded snapshots replayed through the original graph and its replacement returned identical sectors, curve outputs and debug angles to the sampling tolerance of 0.0002 degrees. The replay varied previous direction, style, gait and input angle, including stationary inputs and rear-angle wraparound. It injected snapshots directly. Airborne, sliding and network gameplay replay are **Not run** for this batch.
+
+### Ragdoll impact prediction
+
+Run `Scripts/migrate_ragdoll_impact_prediction.py` to connect the existing impact query to the native pawn. Native ragdoll updates run the prediction immediately after sampling spine velocity. The animation interface retains its time and socket-local direction fields.
+
+The Win64 Editor build and ragdoll pawn Blueprint compile passed. In `RagdollLevel` PIE, nine cases matched the original Blueprint's destination time and local angles within 0.001 degrees. The replay injected three spine velocities against a clear path, a fixture that ignored the PhysicsBody trace, and a trace-blocking fixture. The one-second horizon and early stops at 0.2 and 0.4 seconds matched. Rendered animation, debug drawing and networked physics are **Not run** for this batch.

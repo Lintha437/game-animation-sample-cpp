@@ -64,6 +64,7 @@ MIGRATIONS = (
     "ragdoll_demo_aim",
     "cmc_landing_state",
     "mover_direction_sector",
+    "ragdoll_impact_prediction",
 )
 
 
