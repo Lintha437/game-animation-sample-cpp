@@ -205,6 +205,14 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Ragdoll")
     void UpdateRagdollVelocities();
 
+    /**
+     * Predicts the ragdoll's next contact from the trace socket and spine velocity.
+     * The authored animation graph reads the time and socket-local yaw and pitch.
+     * With a clear path the snapshot describes the final prediction sample.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Ragdoll")
+    void UpdatePredictedRagdollImpact();
+
     /** Applies the configured gravity multiplier until the ragdoll reaches its downward speed limit. */
     UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Ragdoll")
     void UpdateRagdollGravity();

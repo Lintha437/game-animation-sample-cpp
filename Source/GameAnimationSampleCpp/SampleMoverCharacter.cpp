@@ -1262,16 +1262,50 @@ void ASampleMoverCharacter::UpdateRagdollGravity()
 void ASampleMoverCharacter::UpdateRagdollBehavior()
 {
     UpdateRagdollVelocities();
-    if (UFunction* Impact = FindFunction(TEXT("Ragdoll_UpdateImpactDirection")); Impact && Impact->NumParms == 0)
-    {
-        ProcessEvent(Impact, nullptr);
-    }
+    UpdatePredictedRagdollImpact();
     UpdateRagdollRollForce();
     UpdateRagdollGravity();
     if (!IsPlayerControlled() && FMath::IsNearlyZero(ReadNumber(GetClass(), this, TEXT("Ragdoll_Speed")), SettledRagdollSpeed))
     {
         ScheduleRagdollRecoveryCheck();
     }
+}
+
+void ASampleMoverCharacter::UpdatePredictedRagdollImpact()
+{
+    const auto* Mesh = GetRagdollMesh(*this);
+    const auto* DirectionProperty = FindFProperty<FStructProperty>(GetClass(), TEXT("Ragdoll_ImpactDirection"));
+    if (!Mesh || !DirectionProperty || DirectionProperty->Struct != TBaseStructure<FVector2D>::Get())
+    {
+        return;
+    }
+
+    const FTransform Socket = Mesh->GetSocketTransform(TEXT("RagdollTrace"), RTS_World);
+    FPredictProjectilePathParams Params;
+    Params.StartLocation = Socket.GetLocation();
+    Params.LaunchVelocity = ReadVector(*this, TEXT("Ragdoll_SpineVelocity"));
+    Params.bTraceWithCollision = true;
+    Params.bTraceWithChannel = true;
+    Params.TraceChannel = ECC_PhysicsBody;
+    Params.ProjectileRadius = 20.0f;
+    Params.MaxSimTime = 1.0f;
+    Params.SimFrequency = 10.0f;
+    Params.ActorsToIgnore.Add(this);
+    if (const auto* Debug = FindFProperty<FIntProperty>(GetClass(), TEXT("DebugState"));
+        Debug && Debug->GetPropertyValue_InContainer(this) == 1)
+    {
+        Params.DrawDebugType = EDrawDebugTrace::ForOneFrame;
+    }
+
+    FPredictProjectilePathResult Prediction;
+    UGameplayStatics::PredictProjectilePath(this, Params, Prediction);
+    const auto& Destination = Prediction.LastTraceDestination;
+    const FVector Direction = (Destination.Location - Socket.GetLocation()).GetSafeNormal(0.0001);
+    const FVector Relative = Socket.InverseTransformVectorNoScale(Direction);
+    const double Yaw = FMath::RadiansToDegrees(FMath::Atan2(Relative.Y, Relative.X));
+    const double Pitch = FMath::RadiansToDegrees(FMath::Atan2(Relative.Z, Relative.Size2D()));
+    WriteNumber(GetClass(), this, TEXT("Ragdoll_TimeToImpact"), Destination.Time);
+    *DirectionProperty->ContainerPtrToValuePtr<FVector2D>(this) = FVector2D(Yaw, Pitch);
 }
 
 void ASampleMoverCharacter::UpdateRagdollRollForce()
