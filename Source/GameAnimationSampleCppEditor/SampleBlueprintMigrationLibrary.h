@@ -65,6 +65,10 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
     static bool ForwardMoverDirectionSector(UBlueprint* Blueprint, UEdGraph* Graph);
 
+    /** Removes the isolated click chains for the native Look At possession and patrol buttons. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
+    static bool RemoveLookAtGameplayButtons(UBlueprint* Blueprint, UEdGraph* Graph);
+
     /**
      * Reads compiled function flags before an authored function or event is replaced.
      * @param Blueprint Blueprint whose generated class owns the function.

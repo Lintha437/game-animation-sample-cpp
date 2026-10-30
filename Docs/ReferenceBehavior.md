@@ -656,3 +656,9 @@ The Win64 Editor build and primary Mover pawn Blueprint compile passed. In `Defa
 Run `Scripts/migrate_ragdoll_impact_prediction.py` to connect the existing impact query to the native pawn. Native ragdoll updates run the prediction immediately after sampling spine velocity. The animation interface retains its time and socket-local direction fields.
 
 The Win64 Editor build and ragdoll pawn Blueprint compile passed. In `RagdollLevel` PIE, nine cases matched the original Blueprint's destination time and local angles within 0.001 degrees. The replay injected three spine velocities against a clear path, a fixture that ignored the PhysicsBody trace, and a trace-blocking fixture. The one-second horizon and early stops at 0.2 and 0.4 seconds matched. Rendered animation, debug drawing and networked physics are **Not run** for this batch.
+
+### Look At gameplay buttons
+
+Run `Scripts/migrate_look_at_gameplay_buttons.py` to bind Spawn, Despawn and Patrol Teleport in the native widget parent. The controller owns possession and the imported widget still defines the controls, layout and animation selection.
+
+The Win64 Editor build and widget Blueprint compile passed. In `LookAtPOI_Level` PIE, broadcasting the authored buttons' click delegates switched from the existing spectator to the demo player and back, with the expected collapsed and visible states. The patrol reset moved a pawn displaced by 123.69 cm back to the authored position. Pointer hardware, rendered layout comparison and multiplayer are **Not run** for this batch.

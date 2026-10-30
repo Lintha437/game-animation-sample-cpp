@@ -172,6 +172,8 @@ If you move the isolated Locomotor example, preserve its walker and animation as
 
 If you move the Look At POI example, let the controller own the local interface and the player-to-spectator switch. Assign the host's playable pawn and existing spectator. Clear obsolete target gizmos on entry and deselect zones on return. Keep the demonstration's authored look-at graph, gesture montages, and interface layout.
 
+Bind the possession buttons once when the widget initializes. After each controller request, show the opposite action and collapse the action just used. The patrol reset reads the currently selected animation instance to find its pawn and restores the authored patrol transform. Carry the layout's three button names and its selection fields over when reusing the sample widget parent.
+
 Let one zone own the current selection and its target gizmo. Deselect the previous zone before handing the selected pawn and target to animation. Use the current world actors so zones created after startup can participate. Retain the host interface delegate and keep gizmo appearance on its asset.
 
 Bind pointer events to the zone's authored hit components after they are initialized. Apply hover and selected colors through its dynamic materials and update an active gizmo from the assigned pawn's world position plus the authored offset.
