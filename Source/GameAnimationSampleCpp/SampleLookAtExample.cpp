@@ -1,13 +1,15 @@
 #include "SampleLookAtExample.h"
 
-#include "Blueprint/UserWidget.h"
+#include "Animation/AnimInstance.h"
 #include "Camera/PlayerCameraManager.h"
+#include "Components/Button.h"
 #include "Components/PrimitiveComponent.h"
 #include "DrawDebugLibrary.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/SpectatorPawn.h"
 #include "InputCoreTypes.h"
+#include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "UObject/StructOnScope.h"
 #include "UObject/UnrealType.h"
@@ -77,6 +79,65 @@ namespace
             GizmoParameter->SetObjectPropertyValue_InContainer(Data, Gizmo);
             Controller.ProcessEvent(Callback, Data);
         }
+    }
+}
+
+void USampleLookAtInterface::NativeOnInitialized()
+{
+    Super::NativeOnInitialized();
+    if (auto* Button = Cast<UButton>(GetWidgetFromName(TEXT("Button_Spawn"))))
+    {
+        Button->OnClicked.AddUniqueDynamic(this, &USampleLookAtInterface::SpawnDemoPlayer);
+    }
+    if (auto* Button = Cast<UButton>(GetWidgetFromName(TEXT("Button_DeSpawn"))))
+    {
+        Button->OnClicked.AddUniqueDynamic(this, &USampleLookAtInterface::DespawnDemoPlayer);
+    }
+    if (auto* Button = Cast<UButton>(GetWidgetFromName(TEXT("Button_Teleport"))))
+    {
+        Button->OnClicked.AddUniqueDynamic(this, &USampleLookAtInterface::ResetPatrolPawn);
+    }
+}
+
+void USampleLookAtInterface::SpawnDemoPlayer()
+{
+    if (auto* Controller = Cast<ASampleLookAtController>(UGameplayStatics::GetPlayerController(this, 0)))
+    {
+        Controller->EnterLookAtPlayerMode();
+        SetPlayerButtonVisibility(true);
+    }
+}
+
+void USampleLookAtInterface::DespawnDemoPlayer()
+{
+    if (auto* Controller = Cast<ASampleLookAtController>(UGameplayStatics::GetPlayerController(this, 0)))
+    {
+        Controller->EnterLookAtSpectatorMode();
+        SetPlayerButtonVisibility(false);
+    }
+}
+
+void USampleLookAtInterface::ResetPatrolPawn()
+{
+    const auto* AnimationField = FindFProperty<FObjectPropertyBase>(GetClass(), TEXT("Selected Anim Instance"));
+    const auto* Animation = AnimationField ? Cast<UAnimInstance>(AnimationField->GetObjectPropertyValue_InContainer(this)) : nullptr;
+    APawn* PatrolPawn = Animation ? Animation->TryGetPawnOwner() : nullptr;
+    const auto* Transform = FindFProperty<FStructProperty>(GetClass(), TEXT("Patrol Default Loc"));
+    if (PatrolPawn && Transform && Transform->Struct == TBaseStructure<FTransform>::Get())
+    {
+        PatrolPawn->SetActorTransform(*Transform->ContainerPtrToValuePtr<FTransform>(this), false, nullptr, ETeleportType::None);
+    }
+}
+
+void USampleLookAtInterface::SetPlayerButtonVisibility(bool bPlayerMode)
+{
+    if (auto* Despawn = GetWidgetFromName(TEXT("Button_DeSpawn")))
+    {
+        Despawn->SetVisibility(bPlayerMode ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+    }
+    if (auto* Spawn = GetWidgetFromName(TEXT("Button_Spawn")))
+    {
+        Spawn->SetVisibility(bPlayerMode ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
     }
 }
 

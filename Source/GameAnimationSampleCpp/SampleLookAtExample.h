@@ -1,11 +1,38 @@
 #pragma once
 
+#include "Blueprint/UserWidget.h"
 #include "GameFramework/PlayerController.h"
 #include "InputCoreTypes.h"
 #include "SampleLookAtExample.generated.h"
 
 class ASpectatorPawn;
-class UUserWidget;
+
+/** Routes the isolated Look At interface's possession and patrol reset buttons. */
+UCLASS(Blueprintable)
+class GAMEANIMATIONSAMPLECPP_API USampleLookAtInterface : public UUserWidget
+{
+    GENERATED_BODY()
+
+protected:
+    /** Binds the three authored buttons once per initialized widget instance. */
+    virtual void NativeOnInitialized() override;
+
+private:
+    /** Requests player possession from the sample's first player controller. */
+    UFUNCTION()
+    void SpawnDemoPlayer();
+
+    /** Returns the sample's first player controller to its spectator. */
+    UFUNCTION()
+    void DespawnDemoPlayer();
+
+    /** Restores the selected patrol pawn's authored transform through normal actor movement. */
+    UFUNCTION()
+    void ResetPatrolPawn();
+
+    /** Reflects the reference interface's visible and collapsed states after a valid toolbar request. */
+    void SetPlayerButtonVisibility(bool bPlayerMode);
+};
 
 /** Owns player possession and the local interface in the isolated Look At POI example. */
 UCLASS(Blueprintable)

@@ -65,6 +65,7 @@ MIGRATIONS = (
     "cmc_landing_state",
     "mover_direction_sector",
     "ragdoll_impact_prediction",
+    "look_at_gameplay_buttons",
 )
 
 

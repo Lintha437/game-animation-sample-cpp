@@ -6,6 +6,7 @@
 #include "InputAction.h"
 #include "K2Node_CallFunction.h"
 #include "K2Node_CastByteToEnum.h"
+#include "K2Node_ComponentBoundEvent.h"
 #include "K2Node_CustomEvent.h"
 #include "K2Node_DynamicCast.h"
 #include "K2Node_EnhancedInputAction.h"
@@ -423,6 +424,37 @@ bool USampleBlueprintMigrationLibrary::RemoveIsolatedEventOverride(UBlueprint* B
     }
     TSet<UEdGraphNode*> Remove;
     if (!CollectIsolatedChain(Match, Remove))
+    {
+        return false;
+    }
+    RemoveNodes(*Blueprint, *Graph, Remove);
+    return true;
+}
+
+bool USampleBlueprintMigrationLibrary::RemoveLookAtGameplayButtons(UBlueprint* Blueprint, UEdGraph* Graph)
+{
+    if (!Blueprint || !Graph || Graph->GetOuter() != Blueprint || Graph->GetFName() != TEXT("EventGraph"))
+    {
+        return false;
+    }
+    const TSet<FName> Expected{TEXT("Button_Spawn"), TEXT("Button_DeSpawn"), TEXT("Button_Teleport")};
+    TSet<FName> Found;
+    TSet<UEdGraphNode*> Remove;
+    for (UEdGraphNode* Node : Graph->Nodes)
+    {
+        const auto* Event = Cast<UK2Node_ComponentBoundEvent>(Node);
+        if (!Event || !Expected.Contains(Event->GetComponentPropertyName()))
+        {
+            continue;
+        }
+        if (Event->DelegatePropertyName != TEXT("OnClicked") || Found.Contains(Event->GetComponentPropertyName()) ||
+            !CollectIsolatedChain(Node, Remove))
+        {
+            return false;
+        }
+        Found.Add(Event->GetComponentPropertyName());
+    }
+    if (Found.Num() != Expected.Num())
     {
         return false;
     }
