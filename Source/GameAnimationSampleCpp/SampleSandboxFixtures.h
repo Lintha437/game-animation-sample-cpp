@@ -122,6 +122,13 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Level Block")
     void RefreshBlockText();
 
+    /**
+     * Rebuilds the traversal spline list and opposite pairs from the four authored ledges.
+     * Called after parent construction. The spline components are owned by the block.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Level Block")
+    void RebuildTraversalLedges();
+
     /** Applies the active style's material group to a block that opts into level colors. */
     void ApplyLevelStyle(const ASampleLevelVisuals& Visuals);
 

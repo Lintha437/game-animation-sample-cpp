@@ -662,3 +662,9 @@ The Win64 Editor build and ragdoll pawn Blueprint compile passed. In `RagdollLev
 Run `Scripts/migrate_look_at_gameplay_buttons.py` to bind Spawn, Despawn and Patrol Teleport in the native widget parent. The controller owns possession and the imported widget still defines the controls, layout and animation selection.
 
 The Win64 Editor build and widget Blueprint compile passed. In `LookAtPOI_Level` PIE, broadcasting the authored buttons' click delegates switched from the existing spectator to the demo player and back, with the expected collapsed and visible states. The patrol reset moved a pawn displaced by 123.69 cm back to the authored position. Pointer hardware, rendered layout comparison and multiplayer are **Not run** for this batch.
+
+### Traversal ledge construction
+
+Run `Scripts/migrate_traversal_ledge_setup.py` to route spline collection and opposite pairing to the native block after parent construction. The spline points, normals and per-instance transforms stay authored.
+
+The Win64 Editor build and traversal block Blueprint compile passed. In `DefaultLevel` PIE, all 28 placed traversal blocks exposed their four splines in reference order with the four reciprocal opposite mappings. A dynamically spawned block exposed the same wiring immediately after construction, and a repeated native rebuild produced the same list and map. Full traversal replay and editor-time actor reconstruction are **Not run** for this batch.

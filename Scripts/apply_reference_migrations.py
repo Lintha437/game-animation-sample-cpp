@@ -66,6 +66,7 @@ MIGRATIONS = (
     "mover_direction_sector",
     "ragdoll_impact_prediction",
     "look_at_gameplay_buttons",
+    "traversal_ledge_setup",
 )
 
 

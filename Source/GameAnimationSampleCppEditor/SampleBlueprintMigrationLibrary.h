@@ -69,6 +69,10 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
     static bool RemoveLookAtGameplayButtons(UBlueprint* Blueprint, UEdGraph* Graph);
 
+    /** Replaces traversal ledge setup after the authored parent construction call. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
+    static bool ForwardTraversalLedgeSetup(UBlueprint* Blueprint, UEdGraph* Graph);
+
     /**
      * Reads compiled function flags before an authored function or event is replaced.
      * @param Blueprint Blueprint whose generated class owns the function.
