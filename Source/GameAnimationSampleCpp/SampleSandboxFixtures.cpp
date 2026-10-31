@@ -3,6 +3,7 @@
 #include "Components/MeshComponent.h"
 #include "Components/DecalComponent.h"
 #include "Components/ExponentialHeightFogComponent.h"
+#include "Components/SplineComponent.h"
 #include "Components/TextRenderComponent.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -374,6 +375,50 @@ void ASampleLevelBlock::RefreshBlockText()
     {
         Label->SetText(ReadFixtureText(*this, TEXT("Name")));
     }
+}
+
+void ASampleLevelBlock::RebuildTraversalLedges()
+{
+    const auto* Ledges = FindFProperty<FArrayProperty>(GetClass(), TEXT("Ledges"));
+    const auto* Opposites = FindFProperty<FMapProperty>(GetClass(), TEXT("OppositeLedges"));
+    const auto* Element = Ledges ? CastField<FObjectPropertyBase>(Ledges->Inner) : nullptr;
+    const auto* Key = Opposites ? CastField<FObjectPropertyBase>(Opposites->KeyProp) : nullptr;
+    const auto* Value = Opposites ? CastField<FObjectPropertyBase>(Opposites->ValueProp) : nullptr;
+    if (!Element || !Key || !Value || Element->PropertyClass != USplineComponent::StaticClass() ||
+        Key->PropertyClass != Element->PropertyClass || Value->PropertyClass != Element->PropertyClass)
+    {
+        return;
+    }
+
+    USplineComponent* Splines[] = {
+        ReadFixtureObject<USplineComponent>(*this, TEXT("Ledge_1")),
+        ReadFixtureObject<USplineComponent>(*this, TEXT("Ledge_2")),
+        ReadFixtureObject<USplineComponent>(*this, TEXT("Ledge_3")),
+        ReadFixtureObject<USplineComponent>(*this, TEXT("Ledge_4")),
+    };
+    FScriptArrayHelper Array(Ledges, Ledges->ContainerPtrToValuePtr<void>(this));
+    Array.EmptyValues();
+    for (auto* Spline : Splines)
+    {
+        Element->SetObjectPropertyValue(Array.GetRawPtr(Array.AddValue()), Spline);
+    }
+
+    FScriptMapHelper Map(Opposites, Opposites->ContainerPtrToValuePtr<void>(this));
+    Map.EmptyValues();
+    TMap<USplineComponent*, int32> Entries;
+    for (int32 Index = 0; Index < UE_ARRAY_COUNT(Splines); ++Index)
+    {
+        USplineComponent* Spline = Splines[Index];
+        const int32* Existing = Entries.Find(Spline);
+        const int32 Entry = Existing ? *Existing : Map.AddDefaultValue_Invalid_NeedsRehash();
+        if (!Existing)
+        {
+            Entries.Add(Spline, Entry);
+            Key->SetObjectPropertyValue(Map.GetKeyPtr(Entry), Spline);
+        }
+        Value->SetObjectPropertyValue(Map.GetValuePtr(Entry), Splines[Index ^ 1]);
+    }
+    Map.Rehash();
 }
 
 void ASampleLevelBlock::OnConstruction(const FTransform& Transform)
