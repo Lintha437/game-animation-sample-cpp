@@ -5,6 +5,7 @@
 #include "Engine/Blueprint.h"
 #include "InputAction.h"
 #include "K2Node_CallFunction.h"
+#include "K2Node_CallParentFunction.h"
 #include "K2Node_CastByteToEnum.h"
 #include "K2Node_ComponentBoundEvent.h"
 #include "K2Node_CustomEvent.h"
@@ -460,6 +461,35 @@ bool USampleBlueprintMigrationLibrary::RemoveLookAtGameplayButtons(UBlueprint* B
     }
     RemoveNodes(*Blueprint, *Graph, Remove);
     return true;
+}
+
+bool USampleBlueprintMigrationLibrary::ForwardTraversalLedgeSetup(UBlueprint* Blueprint, UEdGraph* Graph)
+{
+    if (!Blueprint || !Blueprint->ParentClass || !Graph || Graph->GetOuter() != Blueprint ||
+        Graph->GetFName() != TEXT("UserConstructionScript"))
+    {
+        return false;
+    }
+    const FName Name(TEXT("RebuildTraversalLedges"));
+    if (FindUniqueCall(*Graph, Name))
+    {
+        return true;
+    }
+    const auto* Function = Blueprint->ParentClass->FindFunctionByName(Name);
+    TArray<UK2Node_CallParentFunction*> ParentCalls;
+    Graph->GetNodesOfClass(ParentCalls);
+    const auto* Parent = ParentCalls.Num() == 1 ? ParentCalls[0] : nullptr;
+    auto* Ledges = Cast<UK2Node_VariableSet>(GetOnlyPeer(Parent ? Parent->GetThenPin() : nullptr));
+    auto* Opposites = Cast<UK2Node_VariableSet>(GetOnlyPeer(
+        Ledges ? Ledges->FindPin(UEdGraphSchema_K2::PN_Then, EGPD_Output) : nullptr));
+    const auto* End = Opposites ? Opposites->FindPin(UEdGraphSchema_K2::PN_Then, EGPD_Output) : nullptr;
+    if (!Function || !Parent || Parent->FunctionReference.GetMemberName() != TEXT("UserConstructionScript") ||
+        !Ledges || Ledges->GetVarName() != TEXT("Ledges") ||
+        !Opposites || Opposites->GetVarName() != TEXT("OppositeLedges") || !End || !End->LinkedTo.IsEmpty())
+    {
+        return false;
+    }
+    return InstallExecutionTail(*Blueprint, *Graph, Ledges->FindPin(UEdGraphSchema_K2::PN_Execute, EGPD_Input), *Function);
 }
 
 bool USampleBlueprintMigrationLibrary::ReplacePairedInteractionCollision(UBlueprint* Blueprint, UEdGraph* MatchGraph,

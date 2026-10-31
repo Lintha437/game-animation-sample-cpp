@@ -124,6 +124,8 @@ Track temporary collision changes for the same lifetime as the action that acqui
 
 Give each traversable obstacle a set of spline components, ordered consistently, and map each front spline to its opposite where applicable. Author each spline's up vector to represent its outward ledge normal in world space. Preserve spline direction, scale, and the corner clearance when porting existing levels. The sample chooses the front spline from the pawn position, projects the collision impact to that spline, clamps the point half the minimum ledge width away from either end, and samples the opposite spline from the clamped position.
 
+Build the ledge list after parent construction has initialized the block. The sample uses the four authored components in numeric order and pairs 1 with 2 and 3 with 4 in both directions. Rebuild both collections when the block is reconstructed so spline references belong to the current instance.
+
 Keep the query result in a typed native structure in the host project. Update it when the host's gameplay trace hits a block and feed the resulting transforms into the existing action and animation pipeline. The sample's one-call Blueprint adapter exists to preserve the imported traversal result structure. When adapting the native query, map the obstacle's ordered splines, opposites, and minimum width to the host's own types. Verify straight and curved splines, narrow edges, missing opposites, and obstacles rotated in the level.
 
 ### Validate traversal clearance before selection
