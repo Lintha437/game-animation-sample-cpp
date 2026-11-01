@@ -176,6 +176,8 @@ If you move the Look At POI example, let the controller own the local interface 
 
 Bind the possession buttons once when the widget initializes. After each controller request, show the opposite action and collapse the action just used. The patrol reset reads the currently selected animation instance to find its pawn and restores the authored patrol transform. Carry the layout's three button names and its selection fields over when reusing the sample widget parent.
 
+Publish zone selection on the controller before notifying the animation instance and widget. Cache the zone type, assigned pawn, animation instance and optional gizmo. Reject unsupported pawn types before replacing the active selection or dispatching the authored look-at and widget callbacks.
+
 Let one zone own the current selection and its target gizmo. Deselect the previous zone before handing the selected pawn and target to animation. Use the current world actors so zones created after startup can participate. Retain the host interface delegate and keep gizmo appearance on its asset.
 
 Bind pointer events to the zone's authored hit components after they are initialized. Apply hover and selected colors through its dynamic materials and update an active gizmo from the assigned pawn's world position plus the authored offset.

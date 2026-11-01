@@ -73,6 +73,10 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
     static bool ForwardTraversalLedgeSetup(UBlueprint* Blueprint, UEdGraph* Graph);
 
+    /** Forwards Look At zone selection state and preserves the authored animation and widget dispatch. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
+    static bool ForwardLookAtZoneSelection(UBlueprint* Blueprint, UEdGraph* Graph);
+
     /**
      * Reads compiled function flags before an authored function or event is replaced.
      * @param Blueprint Blueprint whose generated class owns the function.
