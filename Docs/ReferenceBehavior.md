@@ -668,3 +668,9 @@ The Win64 Editor build and widget Blueprint compile passed. In `LookAtPOI_Level`
 Run `Scripts/migrate_traversal_ledge_setup.py` to route spline collection and opposite pairing to the native block after parent construction. The spline points, normals and per-instance transforms stay authored.
 
 The Win64 Editor build and traversal block Blueprint compile passed. In `DefaultLevel` PIE, all 28 placed traversal blocks exposed their four splines in reference order with the four reciprocal opposite mappings. A dynamically spawned block exposed the same wiring immediately after construction, and a repeated native rebuild produced the same list and map. Full traversal replay and editor-time actor reconstruction are **Not run** for this batch.
+
+### Look At zone selection state
+
+Run `Scripts/migrate_look_at_selection_state.py` to publish the zone type, assigned pawn, gizmo and animation instance in the native controller. The reference animation and widget callbacks still run after a successful selection.
+
+The Win64 Editor build and Look At controller Blueprint compile passed. In `LookAtPOI_Level` PIE, selecting the Patrol and Gestures zones gave the controller and widget the matching animation instance, retained the current gizmo and enabled the authored look-at state. Selecting the spectator through the existing event stored the requested type and preserved the last valid pawn, gizmo and widget selection. Mouse input and rendered pose comparison are **Not run** for this batch.

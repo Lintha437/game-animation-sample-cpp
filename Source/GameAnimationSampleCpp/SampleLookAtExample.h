@@ -51,6 +51,16 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Look At")
     void EnterLookAtSpectatorMode();
 
+    /**
+     * Publishes the selected zone before the authored animation and widget callbacks run.
+     * @param SelectedPawn Pawn assigned to the selected zone.
+     * @param ZoneType Authored zone type sent to the interface, even if the pawn is unsupported.
+     * @param Gizmo Optional actor that supplies the look-at target.
+     * @return True if the pawn matches the controller's authored character type.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Look At")
+    bool CaptureLookAtZoneSelection(APawn* SelectedPawn, const FString& ZoneType, AActor* Gizmo);
+
 protected:
     /** Applies the scene camera FOV and creates the authored interface for the owning player. */
     virtual void BeginPlay() override;

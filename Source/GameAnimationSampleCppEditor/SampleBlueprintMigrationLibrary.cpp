@@ -492,6 +492,71 @@ bool USampleBlueprintMigrationLibrary::ForwardTraversalLedgeSetup(UBlueprint* Bl
     return InstallExecutionTail(*Blueprint, *Graph, Ledges->FindPin(UEdGraphSchema_K2::PN_Execute, EGPD_Input), *Function);
 }
 
+bool USampleBlueprintMigrationLibrary::ForwardLookAtZoneSelection(UBlueprint* Blueprint, UEdGraph* Graph)
+{
+    if (!Blueprint || !Blueprint->ParentClass || !Graph || Graph->GetOuter() != Blueprint ||
+        Graph->GetFName() != TEXT("EventGraph"))
+    {
+        return false;
+    }
+    const FName NativeName(TEXT("CaptureLookAtZoneSelection"));
+    if (FindUniqueCall(*Graph, NativeName))
+    {
+        return true;
+    }
+    const auto* Native = Blueprint->ParentClass->FindFunctionByName(NativeName);
+    TArray<UK2Node_CustomEvent*> Events;
+    Graph->GetNodesOfClass(Events);
+    const auto* Event = Events.FindByPredicate([](const auto* Node)
+    {
+        return Node->CustomFunctionName == TEXT("Zone Was Selected");
+    });
+    const auto NextSet = [](UEdGraphPin* Exec, FName Name) -> UK2Node_VariableSet*
+    {
+        auto* Node = Cast<UK2Node_VariableSet>(GetOnlyPeer(Exec));
+        return Node && Node->GetVarName() == Name ? Node : nullptr;
+    };
+    const auto Then = [](const UEdGraphNode* Node)
+    {
+        return Node ? Node->FindPin(UEdGraphSchema_K2::PN_Then, EGPD_Output) : nullptr;
+    };
+    auto* Type = NextSet(Then(Event ? *Event : nullptr), TEXT("Selected Zone Type"));
+    auto* CastPawn = Cast<UK2Node_DynamicCast>(GetOnlyPeer(Then(Type)));
+    auto* Pawn = NextSet(Then(CastPawn), TEXT("Active Pawn"));
+    auto* Gizmo = NextSet(Then(Pawn), TEXT("Gizmo Obj"));
+    auto* Anim = NextSet(Then(Gizmo), TEXT("AnimInstance"));
+    auto* Enable = NextSet(Then(Anim), TEXT("Look At Enabled"));
+    auto* TypeInput = Type ? Type->FindPin(TEXT("Selected Zone Type"), EGPD_Input) : nullptr;
+    auto* PawnInput = CastPawn ? CastPawn->GetCastSourcePin() : nullptr;
+    auto* GizmoInput = Gizmo ? Gizmo->FindPin(TEXT("Gizmo Obj"), EGPD_Input) : nullptr;
+    const auto* Failure = CastPawn ? CastPawn->FindPin(TEXT("CastFailed"), EGPD_Output) : nullptr;
+    if (!Native || !Enable || !Failure || !Failure->LinkedTo.IsEmpty() ||
+        !TypeInput || !PawnInput || !GizmoInput ||
+        !InstallTraversalCall(*Blueprint, *Graph, {Type, Anim, Native,
+            {{TEXT("ZoneType"), TypeInput}, {TEXT("SelectedPawn"), PawnInput}, {TEXT("Gizmo"), GizmoInput}},
+            {CastPawn, Pawn, Gizmo}}))
+    {
+        return false;
+    }
+
+    auto* Call = FindUniqueCall(*Graph, NativeName);
+    auto* Continue = Enable->FindPin(UEdGraphSchema_K2::PN_Execute, EGPD_Input);
+    if (!Call || !Continue || GetOnlyPeer(Call->GetThenPin()) != Enable)
+    {
+        return false;
+    }
+    FGraphNodeCreator<UK2Node_IfThenElse> CreateGate(*Graph);
+    auto* Gate = CreateGate.CreateNode();
+    Gate->NodePosX = Call->NodePosX + 350;
+    Gate->NodePosY = Call->NodePosY;
+    CreateGate.Finalize();
+    Call->GetThenPin()->BreakLinkTo(Continue);
+    const auto* Schema = Graph->GetSchema();
+    return Schema->TryCreateConnection(Call->GetThenPin(), Gate->GetExecPin()) &&
+        Schema->TryCreateConnection(Call->GetReturnValuePin(), Gate->GetConditionPin()) &&
+        Schema->TryCreateConnection(Gate->GetThenPin(), Continue);
+}
+
 bool USampleBlueprintMigrationLibrary::ReplacePairedInteractionCollision(UBlueprint* Blueprint, UEdGraph* MatchGraph,
     UEdGraph* EventGraph)
 {

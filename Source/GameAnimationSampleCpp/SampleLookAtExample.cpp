@@ -4,6 +4,7 @@
 #include "Camera/PlayerCameraManager.h"
 #include "Components/Button.h"
 #include "Components/PrimitiveComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "DrawDebugLibrary.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -251,6 +252,25 @@ void ASampleLookAtController::EnterLookAtSpectatorMode()
             CallLookAtCallback(**Zone, TEXT("Deselect Zone"));
         }
     }
+}
+
+bool ASampleLookAtController::CaptureLookAtZoneSelection(APawn* SelectedPawn, const FString& ZoneType, AActor* Gizmo)
+{
+    if (const auto* Type = FindFProperty<FStrProperty>(GetClass(), TEXT("Selected Zone Type")))
+    {
+        Type->SetPropertyValue_InContainer(this, ZoneType);
+    }
+    const auto* ActivePawn = FindFProperty<FObjectPropertyBase>(GetClass(), TEXT("Active Pawn"));
+    if (!ActivePawn || !IsValid(SelectedPawn) || !SelectedPawn->IsA(ActivePawn->PropertyClass))
+    {
+        return false;
+    }
+
+    ActivePawn->SetObjectPropertyValue_InContainer(this, SelectedPawn);
+    WriteLookAtObject(*this, TEXT("Gizmo Obj"), Gizmo);
+    const auto* Mesh = SelectedPawn->FindComponentByClass<USkeletalMeshComponent>();
+    WriteLookAtObject(*this, TEXT("AnimInstance"), Mesh ? Mesh->GetAnimInstance() : nullptr);
+    return true;
 }
 
 ASampleLookAtZone::ASampleLookAtZone()
