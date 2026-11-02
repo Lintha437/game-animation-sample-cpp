@@ -146,6 +146,8 @@ Start the NPC StateTree from the AI controller when the host is ready. The sampl
 
 The Smart Object use step dispatches the engine's Gameplay Interaction AI task for the already claimed slot. Keep that task under the controller's lifetime while the StateTree continues into the authored interaction. Apply and remove capsule ignores through the same replicated event on entry and cleanup. If the host uses CMC, apply its temporary correction override only on the intended peers and verify that cleanup restores the previous gameplay policy.
 
+For approach selection, measure the world-space distance to the slot and the signed bearing in the slot's local transform. The authored Chooser may use both values. On player cancellation, dispatch the existing completion request before clearing the active interaction flag, then close the playback gate.
+
 For player interactions, configure the StateTree and matching payload type on the interaction component. Supply the player interaction gameplay tag and register interactable world geometry on the query's object type. The request accepts the nearest free slot within 300 cm from the object's front side. Keep the playback-cancellation gate tied to accepted requests and retain the StateTree's claim step to handle contention between search and use.
 
 ## Port sandbox obstacles

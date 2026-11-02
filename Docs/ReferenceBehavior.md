@@ -674,3 +674,9 @@ The Win64 Editor build and traversal block Blueprint compile passed. In `Default
 Run `Scripts/migrate_look_at_selection_state.py` to publish the zone type, assigned pawn, gizmo and animation instance in the native controller. The reference animation and widget callbacks still run after a successful selection.
 
 The Win64 Editor build and Look At controller Blueprint compile passed. In `LookAtPOI_Level` PIE, selecting the Patrol and Gestures zones gave the controller and widget the matching animation instance, retained the current gizmo and enabled the authored look-at state. Selecting the spectator through the existing event stored the requested type and preserved the last valid pawn, gizmo and widget selection. Mouse input and rendered pose comparison are **Not run** for this batch.
+
+### Smart Object approach and cancellation state
+
+Run `Scripts/migrate_smart_object_approach.py` to move the approach distance and bearing into the native interaction component. The native cancellation state update runs after the authored completion request and before the existing playback gate closes.
+
+The Win64 Editor build and interaction component Blueprint compile passed. In `NPCLevel` PIE, the original approach function returned the expected distance and bearing for an aligned slot, a rotated and scaled slot, and a coincident slot. A direct front-facing bench request set the active interaction flag, which the native cleanup cleared. Movement-input cancellation through the playback gate and completion on a remote peer are **Not run** for this batch.
