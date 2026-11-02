@@ -39,6 +39,19 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Interaction")
     bool TryStartPlayerInteraction();
 
+    /** Clears the player's active interaction after the cancellation delegate is dispatched. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Interaction")
+    void ClearPlayerInteractionState();
+
+    /**
+     * Measures the owner against an authored interaction destination.
+     * @param Destination The target slot's world transform.
+     * @param Distance World-space distance in centimeters.
+     * @param Angle Destination-local bearing in degrees, including the destination's rotation and scale.
+     */
+    UFUNCTION(BlueprintPure, Category = "Sample|Interaction")
+    void GetNpcApproachMetrics(const FTransform& Destination, double& Distance, double& Angle) const;
+
 private:
     /** StateTree receiving the existing player interaction event. */
     UPROPERTY(EditDefaultsOnly, Category = "Sample|Interaction")

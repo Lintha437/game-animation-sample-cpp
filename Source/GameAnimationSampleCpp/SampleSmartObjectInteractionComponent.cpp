@@ -19,6 +19,8 @@
 
 namespace
 {
+    const FName PlayerInteractionState(TEXT("PlayerIsInteracting"));
+
     void CacheInteractionComponent(UActorComponent& Receiver, FName Name, UActorComponent* Component)
     {
         const auto* Property = FindFProperty<FObjectPropertyBase>(Receiver.GetClass(), Name);
@@ -139,7 +141,7 @@ void USampleSmartObjectInteractionComponent::CacheInteractionComponents()
 bool USampleSmartObjectInteractionComponent::TryStartPlayerInteraction()
 {
     AActor* Owner = GetOwner();
-    const auto* IsInteracting = FindFProperty<FBoolProperty>(GetClass(), TEXT("PlayerIsInteracting"));
+    const auto* IsInteracting = FindFProperty<FBoolProperty>(GetClass(), PlayerInteractionState);
     const auto* TreeProperty = FindFProperty<FObjectPropertyBase>(GetClass(), TEXT("StateTreeComponent"));
     if (!IsValid(Owner) || !IsInteracting || !TreeProperty || UAIBlueprintHelperLibrary::GetAIController(Owner))
     {
@@ -197,4 +199,29 @@ bool USampleSmartObjectInteractionComponent::TryStartPlayerInteraction()
     }
     IsInteracting->SetPropertyValue_InContainer(this, true);
     return true;
+}
+
+void USampleSmartObjectInteractionComponent::ClearPlayerInteractionState()
+{
+    if (const auto* State = FindFProperty<FBoolProperty>(GetClass(), PlayerInteractionState))
+    {
+        State->SetPropertyValue_InContainer(this, false);
+    }
+}
+
+void USampleSmartObjectInteractionComponent::GetNpcApproachMetrics(
+    const FTransform& Destination, double& Distance, double& Angle) const
+{
+    Distance = 0.0;
+    Angle = 0.0;
+    const AActor* Owner = GetOwner();
+    if (!Owner)
+    {
+        return;
+    }
+
+    const FVector Position = Owner->GetActorLocation();
+    Distance = FVector::Dist(Position, Destination.GetLocation());
+    const FVector Direction = Destination.InverseTransformPosition(Position).GetSafeNormal(0.0001);
+    Angle = FMath::RadiansToDegrees(FMath::Atan2(Direction.Y, Direction.X));
 }
