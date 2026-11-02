@@ -557,6 +557,37 @@ bool USampleBlueprintMigrationLibrary::ForwardLookAtZoneSelection(UBlueprint* Bl
         Schema->TryCreateConnection(Gate->GetThenPin(), Continue);
 }
 
+bool USampleBlueprintMigrationLibrary::ForwardPlayerInteractionCleanup(UBlueprint* Blueprint, UEdGraph* Graph)
+{
+    if (!Blueprint || !Blueprint->ParentClass || !Graph || Graph->GetOuter() != Blueprint ||
+        Graph->GetFName() != TEXT("EventGraph"))
+    {
+        return false;
+    }
+    const FName FunctionName(TEXT("ClearPlayerInteractionState"));
+    if (FindUniqueCall(*Graph, FunctionName))
+    {
+        return true;
+    }
+    const auto* Function = Blueprint->ParentClass->FindFunctionByName(FunctionName);
+    TArray<UK2Node_VariableSet*> Writes;
+    Graph->GetNodesOfClass(Writes);
+    const auto* Match = Writes.FindByPredicate([](const auto* Node) { return Node->GetVarName() == TEXT("PlayerIsInteracting"); });
+    auto* State = Match ? *Match : nullptr;
+    const auto* Value = State ? State->FindPin(TEXT("PlayerIsInteracting"), EGPD_Input) : nullptr;
+    auto* Previous = Cast<UK2Node_ExecutionSequence>(GetOnlyPeer(State
+        ? State->FindPin(UEdGraphSchema_K2::PN_Execute, EGPD_Input) : nullptr));
+    const auto* Notify = Cast<UK2Node_CallFunction>(GetOnlyPeer(Previous ? Previous->GetThenPinGivenIndex(0) : nullptr));
+    const auto* Close = Cast<UK2Node_Knot>(GetOnlyPeer(State
+        ? State->FindPin(UEdGraphSchema_K2::PN_Then, EGPD_Output) : nullptr));
+    if (!Function || !Value || Value->DefaultValue != TEXT("false") || !Value->LinkedTo.IsEmpty() ||
+        !Notify || Notify->FunctionReference.GetMemberName() != TEXT("On Montage Finished Requested") || !Close)
+    {
+        return false;
+    }
+    return InstallTraversalCall(*Blueprint, *Graph, {State, State, Function, {}});
+}
+
 bool USampleBlueprintMigrationLibrary::ReplacePairedInteractionCollision(UBlueprint* Blueprint, UEdGraph* MatchGraph,
     UEdGraph* EventGraph)
 {

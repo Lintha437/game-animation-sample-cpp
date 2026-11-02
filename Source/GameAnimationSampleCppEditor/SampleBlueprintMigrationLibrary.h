@@ -77,6 +77,10 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
     static bool ForwardLookAtZoneSelection(UBlueprint* Blueprint, UEdGraph* Graph);
 
+    /** Forwards the player Smart Object cancellation state update between the delegate and gate close. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
+    static bool ForwardPlayerInteractionCleanup(UBlueprint* Blueprint, UEdGraph* Graph);
+
     /**
      * Reads compiled function flags before an authored function or event is replaced.
      * @param Blueprint Blueprint whose generated class owns the function.
