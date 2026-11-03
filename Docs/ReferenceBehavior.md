@@ -15,7 +15,7 @@ Install the assets into the native checkout or prepare an isolated workspace as 
 | Retargeting and presentation | Retargeted character Blueprints, MetaHumans, camera rigs, widgets and audio | Retain skeletal data and authored graph assets. Test pawn/visual switching, retargeted poses, HUD/debug controls, foley and foot placement. |
 | Isolated examples | `LocomotorLevel`, `LookAtPOI_Level`, `IsolatedExamples` | Reference behavior remains. Verify each example's controls and transitions and its travel back to the sandbox. |
 
-The copied sample continues to run its gameplay Blueprints for most systems. The two animation tick dispatchers now execute in the project runtime module. Pawn and animation parity still require wiring the remaining native behavior and comparing it under equivalent inputs.
+The native module handles the sample's movement, input, traversal clearance and movement modes, ragdoll state, Smart Object requests and collision, and several scenario controls. Imported Blueprint packages retain the serialized interfaces and call into the native module at the migrated entry points. The sections below record runtime checks, authored callbacks, and remaining comparisons.
 
 The isolated workspace built its Win64 Development Editor target. In unattended `UnrealEditor-Cmd.exe -game -NullRHI` smoke runs, all five level worlds started for play and exited with code zero. A content-only control run of `DefaultLevel` reproduced the 39 widget Blueprint compiler messages in the native workspace with no difference in the compiler messages. Headless startup verifies package loading and world initialization. Rendered gameplay and widget behavior are **Not run**.
 
@@ -584,6 +584,8 @@ Visual Studio 2026 loaded the C++ project from both game solution formats and di
 ### Clean reference installation
 
 The Win64 Editor target built in an independent reference workspace. The ordered migration command then applied all 43 stages to a fresh copy of the acquired sample using binaries from that build. It completed in two Editor processes and restarted after the Mover parent recompile dirtied a dependent package. The five map packages and the primary CMC and Mover Animation Blueprints matched the original sample by SHA-256 after migration. Runtime replay in this second reference workspace is **Not run**.
+
+A later clean installation built the Win64 Development Editor target from source in a short-path workspace and applied all 59 stages. The runner resumed in new Editor processes after stages 24 and 48. All five maps and both primary character Animation Blueprints again matched the acquired reference packages by SHA-256 after migration. Gameplay replay in this isolated copy is **Not run**.
 
 ### Sandbox pawn possession setup
 
