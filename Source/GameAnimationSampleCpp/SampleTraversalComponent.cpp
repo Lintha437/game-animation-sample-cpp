@@ -1,17 +1,20 @@
 #include "SampleTraversalComponent.h"
 
 #include "Components/PrimitiveComponent.h"
+#include "DefaultMovementSet/CharacterMoverComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "MoverComponent.h"
 #include "MoverTypes.h"
+#include "UObject/StructOnScope.h"
 #include "UObject/UnrealType.h"
 
 namespace
 {
     const FName TraversingMode(TEXT("Traversing"));
     const FName WalkingMode(TEXT("Walking"));
+    const FName MoverFlag(TEXT("IsMoverCharacter"));
 
     UCharacterMovementComponent* FindCharacterMovement(const UActorComponent& Component)
     {
@@ -46,6 +49,39 @@ namespace
     }
 }
 
+void USampleTraversalComponent::InitializeTraversalRuntime()
+{
+    auto* Owner = GetOwner();
+    if (const auto* Snapshot = FindFProperty<FStructProperty>(GetClass(), TEXT("CharacterProperties")))
+    {
+        void* Cached = Snapshot->ContainerPtrToValuePtr<void>(this);
+        UFunction* Query = Owner ? Owner->FindFunction(TEXT("Get_PropertiesForTraversal")) : nullptr;
+        const auto* Result = Query ? CastField<FStructProperty>(Query->GetReturnProperty()) : nullptr;
+        if (Result && Query->NumParms == 1 && Result->SameType(Snapshot))
+        {
+            FStructOnScope Parameters(Query);
+            Owner->ProcessEvent(Query, Parameters.GetStructMemory());
+            Snapshot->CopyCompleteValue(Cached, Result->ContainerPtrToValuePtr<void>(Parameters.GetStructMemory()));
+        }
+        else
+        {
+            Snapshot->Struct->ClearScriptStruct(Cached);
+        }
+    }
+
+    const auto* IsMover = FindFProperty<FBoolProperty>(GetClass(), MoverFlag);
+    const auto* Pawn = Cast<APawn>(Owner);
+    if (Pawn && IsMover && IsMover->GetPropertyValue_InContainer(this))
+    {
+        const auto* MoverField = FindFProperty<FObjectPropertyBase>(GetClass(), TEXT("Mover"));
+        auto* Movement = Pawn->FindComponentByClass<UCharacterMoverComponent>();
+        if (MoverField && IsValid(Movement) && Movement->IsA(MoverField->PropertyClass))
+        {
+            MoverField->SetObjectPropertyValue_InContainer(this, Movement);
+        }
+    }
+}
+
 void USampleTraversalComponent::SetMovementMode_CMC(EMovementMode CMCMovementMode)
 {
     if (UCharacterMovementComponent* Movement = FindCharacterMovement(*this))
@@ -61,7 +97,6 @@ EMovementMode USampleTraversalComponent::GetEndMovementMode_CMC() const
 
 void USampleTraversalComponent::SetReplicationBehavior(bool ClientAuthoritative)
 {
-    static const FName MoverFlag(TEXT("IsMoverCharacter"));
     const FBoolProperty* IsMover = FindFProperty<FBoolProperty>(GetClass(), MoverFlag);
     if (IsMover && IsMover->GetPropertyValue_InContainer(this))
     {

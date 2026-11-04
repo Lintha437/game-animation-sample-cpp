@@ -682,3 +682,9 @@ The Win64 Editor build and Look At controller Blueprint compile passed. In `Look
 Run `Scripts/migrate_smart_object_approach.py` to move the approach distance and bearing into the native interaction component. The native cancellation state update runs after the authored completion request and before the existing playback gate closes.
 
 The Win64 Editor build and interaction component Blueprint compile passed. In `NPCLevel` PIE, the original approach function returned the expected distance and bearing for an aligned slot, a rotated and scaled slot, and a coincident slot. A direct front-facing bench request set the active interaction flag, which the native cleanup cleared. Movement-input cancellation through the playback gate and completion on a remote peer are **Not run** for this batch.
+
+### Traversal component startup
+
+Run `Scripts/migrate_traversal_startup.py` to connect the component's BeginPlay to native startup. It caches the original character interface result and resolves the owning Character Mover Component when the asset selects Mover playback.
+
+The Win64 Editor build and traversal component Blueprint compile passed. In `DefaultLevel` PIE, the possessed Mover pawn and a newly spawned CMC pawn both cached their own capsule, mesh and motion-warping components. An explicit refresh matched the complete interface snapshot for each pawn. The Mover reference was present only on the Mover pawn. Full traversal replay and multiplayer startup are **Not run** for this batch.
