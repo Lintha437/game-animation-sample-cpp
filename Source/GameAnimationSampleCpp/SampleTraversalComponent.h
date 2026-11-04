@@ -22,6 +22,13 @@ class GAMEANIMATIONSAMPLECPP_API USampleTraversalComponent : public UActorCompon
 
 public:
     /**
+     * Caches the owner's authored traversal interface and resolves the Mover playback component.
+     * Called at the reference component's BeginPlay. The owner and its components remain externally owned.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Traversal")
+    void InitializeTraversalRuntime();
+
+    /**
      * Changes the owning Character Movement Component to a standard mode.
      * Other owner types or missing movement components are ignored.
      * @param CMCMovementMode Standard movement mode. Custom mode is reset to zero.
