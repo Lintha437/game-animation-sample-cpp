@@ -177,6 +177,10 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
     static bool ReplaceTraversalReplay(UBlueprint* Blueprint, UEdGraph* Graph);
 
+    /** Routes a successful traversal result to native storage and dispatch with the original RPC. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
+    static bool ForwardTraversalActionDispatch(UBlueprint* Blueprint, UEdGraph* Graph);
+
     /**
      * Connects a zero-argument Blueprint enum query to a native byte-valued member.
      * The existing graph and typed return pin preserve the imported enum contract.
