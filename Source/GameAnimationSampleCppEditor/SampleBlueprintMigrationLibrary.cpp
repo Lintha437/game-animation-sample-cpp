@@ -1453,6 +1453,35 @@ bool USampleBlueprintMigrationLibrary::ReplaceTraversalReplay(UBlueprint* Bluepr
     return InstallTraversalCall(*Blueprint, *Graph, Replacement);
 }
 
+bool USampleBlueprintMigrationLibrary::ForwardTraversalActionDispatch(UBlueprint* Blueprint, UEdGraph* Graph)
+{
+    if (!Blueprint || !Blueprint->ParentClass || !Graph || Graph->GetOuter() != Blueprint ||
+        Graph->GetFName() != TEXT("TryTraversalAction"))
+    {
+        return false;
+    }
+    const FName Name(TEXT("PublishTraversalAction"));
+    const FName Result(TEXT("TraversalResult"));
+    if (FindUniqueCall(*Graph, Name))
+    {
+        return true;
+    }
+    const auto* Native = Blueprint->ParentClass->FindFunctionByName(Name);
+    auto* Play = FindUniqueCall(*Graph, TEXT("PerformTraversalAction"));
+    auto* Server = Play ? GetNextCall(*Play, TEXT("PerformTraversalAction_Server")) : nullptr;
+    auto* Store = Cast<UK2Node_VariableSet>(GetOnlyPeer(Play ? Play->GetExecPin() : nullptr));
+    auto* Input = Store ? Store->FindPin(Result, EGPD_Input) : nullptr;
+    const auto* ServerInput = Server ? Server->FindPin(Result, EGPD_Input) : nullptr;
+    const auto* StoredResult = Cast<UK2Node_VariableGet>(GetOnlyPeer(ServerInput));
+    if (!Native || !Server || !Store || Store->GetVarName() != Result || !Input || Input->LinkedTo.Num() != 1 ||
+        !StoredResult || StoredResult->GetVarName() != Result ||
+        !Cast<UK2Node_FunctionResult>(GetOnlyPeer(Server->GetThenPin())))
+    {
+        return false;
+    }
+    return InstallTraversalCall(*Blueprint, *Graph, {Store, Server, Native, {{Result, Input}}, {Play}});
+}
+
 bool USampleBlueprintMigrationLibrary::ReplaceEnumQuery(UBlueprint* Blueprint, UEdGraph* Graph, FName FunctionName)
 {
     if (!Blueprint || !Blueprint->ParentClass || !Graph || Graph->GetOuter() != Blueprint)

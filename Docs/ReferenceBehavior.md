@@ -688,3 +688,9 @@ The Win64 Editor build and interaction component Blueprint compile passed. In `N
 Run `Scripts/migrate_traversal_startup.py` to connect the component's BeginPlay to native startup. It caches the original character interface result and resolves the owning Character Mover Component when the asset selects Mover playback.
 
 The Win64 Editor build and traversal component Blueprint compile passed. In `DefaultLevel` PIE, the possessed Mover pawn and a newly spawned CMC pawn both cached their own capsule, mesh and motion-warping components. An explicit refresh matched the complete interface snapshot for each pawn. The Mover reference was present only on the Mover pawn. Full traversal replay and multiplayer startup are **Not run** for this batch.
+
+### Accepted traversal dispatch
+
+Run `Scripts/migrate_traversal_dispatch.py` to route accepted traversal results through native storage and dispatch. The existing Chooser selects the montage. The native path stores its typed result before starting authored local playback and invokes the original server RPC with the stored result.
+
+The Win64 Editor build and traversal component Blueprint compile passed. In `DefaultLevel` PIE, a supplied approach to `LevelBlock_Traversable_C_4` selected an authored hurdle montage. The component published the matching obstacle and montage and entered its active traversal state. Remote RPC delivery, CMC playback and montage completion are **Not run** for this batch.

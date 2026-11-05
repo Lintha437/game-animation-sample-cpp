@@ -70,6 +70,7 @@ MIGRATIONS = (
     "look_at_selection_state",
     "smart_object_approach",
     "traversal_startup",
+    "traversal_dispatch",
 )
 
 

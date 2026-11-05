@@ -114,6 +114,8 @@ The reference controller's gaze teleport is a local sandbox navigation command. 
 
 At component startup, cache the owner's authored capsule and mesh interface. For the Mover path, resolve the owning pawn's Character Mover Component before binding playback. Rebuild the cache when the host replaces the traversal owner.
 
+After geometry and montage selection succeed, publish the accepted result before starting local playback. Send the stored result through the server RPC after the local start so the network path preserves the original ownership and playback order.
+
 Keep the montage and warp target data in the animation assets. Wire the action's start, blend-out, and interruption callbacks to the host movement system. The sample CMC path enters flying and chooses walking or falling from the traversal result. Its sample-specific replication window stays bounded by the traversal cleanup. In an authoritative host, decide which movement state the client may predict and verify restoration on every exit. Exercise target loss, montage failure, interruption, unpossession, and level travel. Keep Mover mode queues separate from CMC movement flags.
 
 For CMC, let the current action own the correction timer. Starting another action during the grace period must cancel the previous timer. For Mover, distinguish a queued traversal mode from an active one. If a montage is interrupted before the start takes effect, cancel the pending request while preserving the current movement mode. Once traversal is active, apply the host's exit policy. Test cancellation both in the same simulation step as entry and after the mode changes.
