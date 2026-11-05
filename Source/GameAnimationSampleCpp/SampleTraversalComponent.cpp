@@ -268,6 +268,43 @@ void USampleTraversalComponent::ApplyTraversalReplay(int32&)
     checkNoEntry();
 }
 
+void USampleTraversalComponent::PublishTraversalAction(int32&)
+{
+    checkNoEntry();
+}
+
+DEFINE_FUNCTION(USampleTraversalComponent::execPublishTraversalAction)
+{
+    Stack.StepCompiledIn<FStructProperty>(nullptr);
+    const auto* Incoming = CastField<FStructProperty>(Stack.MostRecentProperty);
+    const void* Data = Stack.MostRecentPropertyAddress;
+    P_FINISH;
+
+    P_NATIVE_BEGIN;
+    const FName ResultName(TEXT("TraversalResult"));
+    const auto* Stored = FindFProperty<FStructProperty>(P_THIS->GetClass(), ResultName);
+    if (Stored && Incoming && Data && Stored->SameType(Incoming))
+    {
+        void* CachedResult = Stored->ContainerPtrToValuePtr<void>(P_THIS);
+        Stored->CopyCompleteValue(CachedResult, Data);
+        if (UFunction* Play = P_THIS->FindFunction(TEXT("PerformTraversalAction")); Play && Play->NumParms == 0)
+        {
+            P_THIS->ProcessEvent(Play, nullptr);
+        }
+
+        UFunction* Server = P_THIS->FindFunction(TEXT("PerformTraversalAction_Server"));
+        const auto* Parameter = Server ? FindFProperty<FStructProperty>(Server, ResultName) : nullptr;
+        if (Parameter && Parameter->SameType(Stored) && Server->NumParms == 1 &&
+            Server->HasAllFunctionFlags(FUNC_Net | FUNC_NetServer))
+        {
+            FStructOnScope Params(Server);
+            Parameter->CopyCompleteValue(Parameter->ContainerPtrToValuePtr<void>(Params.GetStructMemory()), CachedResult);
+            P_THIS->ProcessEvent(Server, Params.GetStructMemory());
+        }
+    }
+    P_NATIVE_END;
+}
+
 DEFINE_FUNCTION(USampleTraversalComponent::execApplyTraversalReplay)
 {
     Stack.StepCompiledIn<FStructProperty>(nullptr);

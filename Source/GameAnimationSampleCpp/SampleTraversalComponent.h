@@ -146,6 +146,17 @@ public:
     /** Reads the reflected network payload directly from the Blueprint VM. */
     DECLARE_FUNCTION(execApplyTraversalReplay);
 
+    /**
+     * Stores an accepted traversal result, starts authored local playback and submits the original server RPC.
+     * @param TraversalResult Typed result of the authored traversal Chooser.
+     */
+    UFUNCTION(BlueprintCallable, CustomThunk, Category = "Sample|Traversal",
+        meta = (CustomStructureParam = "TraversalResult"))
+    void PublishTraversalAction(UPARAM(ref) int32& TraversalResult);
+
+    /** Reads the authored traversal result struct directly from the Blueprint VM. */
+    DECLARE_FUNCTION(execPublishTraversalAction);
+
     /** @return Whether this copy needs traversal replay from the multicast. */
     bool ShouldReceiveTraversalReplay() const;
 
