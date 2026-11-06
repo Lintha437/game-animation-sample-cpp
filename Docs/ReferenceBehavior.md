@@ -693,4 +693,6 @@ The Win64 Editor build and traversal component Blueprint compile passed. In `Def
 
 Run `Scripts/migrate_traversal_dispatch.py` to route accepted traversal results through native storage and dispatch. The existing Chooser selects the montage. The native path stores its typed result before starting authored local playback and invokes the original server RPC with the stored result.
 
-The Win64 Editor build and traversal component Blueprint compile passed. In `DefaultLevel` PIE, a supplied approach to `LevelBlock_Traversable_C_4` selected an authored hurdle montage. The component published the matching obstacle and montage and entered its active traversal state. Remote RPC delivery, CMC playback and montage completion are **Not run** for this batch.
+The Win64 Editor build and traversal component Blueprint compile passed. In `DefaultLevel` PIE, a supplied approach to `LevelBlock_Traversable_C_4` selected an authored hurdle montage. The component published the matching obstacle and montage and entered its active traversal state.
+
+In two-player listen-server PIE, the owning Mover client initiated the hurdle using the same supplied approach. The authority copy received the same montage and obstacle through the existing RPC. Both copies entered Traversing, cleared their active flags and returned to Walking. The test positioned both copies before dispatch. CMC playback through this dispatch path and unassisted input are **Not run**.
