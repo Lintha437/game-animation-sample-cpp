@@ -133,6 +133,17 @@ bool FSampleTraversalMovementMigrationTest::RunTest(const FString& Parameters)
     World->GetTimerManager().ClearAllTimersForObject(Traversal);
     Traversal->SetReplicationBehavior(false);
 
+    Controller->UnPossess();
+    Character->SetAutonomousProxy(true);
+    TestEqual(TEXT("The authority receives autonomous moves"), Character->GetRemoteRole(), ROLE_AutonomousProxy);
+    Traversal->BeginCmcTraversalMode();
+    Traversal->FinishCmcTraversalMode();
+    TestEqual(TEXT("Authority waits for the owning client's exit mode"), Movement->MovementMode.GetValue(), MOVE_Flying);
+    TestTrue(TEXT("Authority still accepts the owner's move"), Movement->bServerAcceptClientAuthoritativePosition);
+    World->GetTimerManager().ClearAllTimersForObject(Traversal);
+    Traversal->SetReplicationBehavior(false);
+    Character->SetAutonomousProxy(false);
+
     const FBoolProperty* Mover = FindFProperty<FBoolProperty>(Class, TEXT("IsMoverCharacter"));
     if (!TestNotNull(TEXT("Authored Mover selector"), Mover))
     {

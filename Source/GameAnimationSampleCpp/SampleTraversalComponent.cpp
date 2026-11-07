@@ -15,6 +15,13 @@ namespace
     const FName TraversingMode(TEXT("Traversing"));
     const FName WalkingMode(TEXT("Walking"));
     const FName MoverFlag(TEXT("IsMoverCharacter"));
+    constexpr float CorrectionGracePeriod = 0.2f;
+    constexpr float MaxRemoteExitWait = 2.0f;
+
+    bool ReceivesAutonomousMoves(const AActor* Owner)
+    {
+        return Owner && Owner->HasAuthority() && Owner->GetRemoteRole() == ROLE_AutonomousProxy;
+    }
 
     UCharacterMovementComponent* FindCharacterMovement(const UActorComponent& Component)
     {
@@ -194,21 +201,49 @@ void USampleTraversalComponent::BeginCmcTraversalMode()
 
 void USampleTraversalComponent::FinishCmcTraversalMode()
 {
-    SetMovementMode_CMC(GetEndMovementMode_CMC());
+    UWorld* World = GetWorld();
+    const bool bWaitForClientExit = World && bCmcCorrectionSuspended && ReceivesAutonomousMoves(GetOwner());
+    if (!bWaitForClientExit)
+    {
+        SetMovementMode_CMC(GetEndMovementMode_CMC());
+    }
     if (!bCmcCorrectionSuspended)
     {
         return;
     }
-    if (UWorld* World = GetWorld())
+    if (World)
     {
-        constexpr float CorrectionGracePeriod = 0.2f;
-        World->GetTimerManager().SetTimer(CmcCorrectionTimer, this, &USampleTraversalComponent::RestoreCmcCorrection,
+        const double Deadline = World->GetTimeSeconds() + MaxRemoteExitWait;
+        World->GetTimerManager().SetTimer(CmcCorrectionTimer,
+            FTimerDelegate::CreateUObject(this, &USampleTraversalComponent::CompleteCmcCorrection,
+                bWaitForClientExit, Deadline),
             CorrectionGracePeriod, false);
     }
     else
     {
         RestoreCmcCorrection();
     }
+}
+
+void USampleTraversalComponent::CompleteCmcCorrection(bool bWaitForClientExit, double Deadline)
+{
+    UWorld* World = GetWorld();
+    const UCharacterMovementComponent* Movement = FindCharacterMovement(*this);
+    if (bWaitForClientExit && Movement && Movement->MovementMode == MOVE_Flying)
+    {
+        // The authority's montage can finish before the owner sends its first post-traversal move.
+        // Keep accepting movement modes until that move arrives or the handoff times out.
+        if (World && World->GetTimeSeconds() < Deadline && ReceivesAutonomousMoves(GetOwner()))
+        {
+            World->GetTimerManager().SetTimer(CmcCorrectionTimer,
+                FTimerDelegate::CreateUObject(this, &USampleTraversalComponent::CompleteCmcCorrection,
+                    bWaitForClientExit, Deadline),
+                CorrectionGracePeriod, false);
+            return;
+        }
+        SetMovementMode_CMC(GetEndMovementMode_CMC());
+    }
+    RestoreCmcCorrection();
 }
 
 void USampleTraversalComponent::RestoreCmcCorrection()
