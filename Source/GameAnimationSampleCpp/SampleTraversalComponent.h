@@ -108,13 +108,14 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Traversal")
     void EndTraversalCollision();
 
-    /** Enters flying and starts the CMC correction grace period for the current montage. */
+    /** Enters Flying and suspends CMC correction during the current montage. */
     UFUNCTION(BlueprintCallable, Category = "Sample|Traversal")
     void BeginCmcTraversalMode();
 
     /**
-     * Selects the authored CMC exit mode and restores normal correction after 0.2 seconds.
-     * A new traversal cancels a still-pending restoration from the previous action.
+     * Applies the authored exit mode locally and restores normal correction after a 0.2-second grace period.
+     * The authority for an autonomous proxy waits for the owner's first non-Flying move, with a bounded
+     * fallback to the authored mode. Starting another traversal cancels any pending restoration.
      */
     UFUNCTION(BlueprintCallable, Category = "Sample|Traversal")
     void FinishCmcTraversalMode();
@@ -165,6 +166,7 @@ protected:
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
+    void CompleteCmcCorrection(bool bWaitForClientExit, double Deadline);
     void RestoreCmcCorrection();
 
     TWeakObjectPtr<UPrimitiveComponent> TraversalCapsule;
