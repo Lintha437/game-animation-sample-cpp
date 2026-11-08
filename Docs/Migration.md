@@ -166,6 +166,8 @@ For a randomized test obstacle, capture its starting transform during setup. Sam
 
 If the host uses sandbox themes, keep style data and material parameter names with its art assets. Create the block's dynamic material during construction and apply either its own values or the active theme group. Apply the same theme to fog, decal and landscape consumers when it changes. The sample's Landscape API requires a landscape configured for dynamic material instances.
 
+When porting the sandbox still camera, keep the camera component and follow/look options on its asset. Aim from the current camera location first, then translate by the watched actor's movement since the previous tick. Update the saved location even when follow is off so switching follow on preserves the current framing.
+
 ## Bring in licensed animation data
 
 For optional character appearances, keep the selected visual actor class separate from the gameplay pawn. Resolve soft classes asynchronously and cancel superseded requests. Assign the visual actor to a tagged child component and restore the source mesh when the selected class clears. Carry the existing replication notification to the destination if remote peers must update the same appearance.

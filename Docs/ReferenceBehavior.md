@@ -704,3 +704,9 @@ When the authority's montage ended before the owning client's montage, CMC could
 In two-player listen-server PIE in `DefaultLevel`, the owning CMC client started the authored vault from the supplied placement. Before the fix, the owner briefly reached Falling, then returned to Flying alongside the authority. With the fix, both copies played the same vault montage, reached Falling and settled into Walking at 3 FPS and 60 FPS with both correction flags cleared. At four game seconds the positions were 1.11 cm apart at 3 FPS and matched to the log's 0.001 cm precision at 60 FPS. The test used `DDCvar.PawnClass 0`, `t.MaxFPS 3` or `t.MaxFPS 60`, and the existing `TryTraversalAction` entry point.
 
 The Win64 Development Editor built, and `GameAnimationSampleCpp.Migration.TraversalMovement` passed. It verifies that authority holds Flying and accepts the owner's move after finishing the local montage. The timeout fallback, packet loss, dedicated server and other vault approaches are **Not run**.
+
+### Sandbox still camera
+
+`Scripts/migrate_sandbox_fixtures.py` gives `StillCam` a native parent that updates its tracking transform. The asset retains its camera component and existing fields. The native tick aims before following and records the target's current location even with follow disabled, so enabling follow uses the next movement delta. A missing target leaves the camera and its last location alone.
+
+The Win64 Development Editor built, the fixture migration compiled the asset, and its second run saved no package. `GameAnimationSampleCpp.Migration.StillCamera` passed with the migrated generated class. It covered look-only, simultaneous look and follow, and loss of the target. Switching through the sandbox widget and checking the rendered camera view are **Not run**.
