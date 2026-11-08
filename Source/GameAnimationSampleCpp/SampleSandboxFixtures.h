@@ -6,6 +6,27 @@
 class ASampleTeleporterDestination;
 class ASampleLevelVisuals;
 
+/**
+ * Updates the transform of an authored sandbox spectator camera.
+ * The derived asset owns the camera component, watched actor and follow/look settings.
+ */
+UCLASS(Blueprintable)
+class GAMEANIMATIONSAMPLECPP_API ASampleStillCamera : public AActor
+{
+    GENERATED_BODY()
+
+public:
+    /** Enables the tick used to aim at and follow the assigned actor. */
+    ASampleStillCamera();
+
+    /**
+     * Aims from the current camera position before applying the target's translation delta.
+     * A valid target refreshes the saved location even when following is disabled.
+     * @param DeltaSeconds Time supplied by the actor tick.
+     */
+    virtual void Tick(float DeltaSeconds) override;
+};
+
 /** Routes the authored trigger to a destination in the current world. */
 UCLASS(Blueprintable)
 class GAMEANIMATIONSAMPLECPP_API ASampleTeleporterSender : public AActor
