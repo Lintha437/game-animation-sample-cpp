@@ -1,4 +1,4 @@
-"""Install the native sandbox teleporters, targeting dummy, and level button."""
+"""Install native sandbox fixtures behind their existing asset paths."""
 
 from hashlib import sha256
 from pathlib import Path
@@ -9,14 +9,17 @@ import unreal
 
 ROOT = "/Game/Levels/LevelPrototyping"
 FIXTURES = {
-    "TargetDummy": ("SampleTargetDummy", "1bb6f0159b2b6612ee9f30b473530656d268a9295dfdaa314428219f48922c67"),
-    "Teleporter_Sender": (
+    f"{ROOT}/TargetDummy": ("SampleTargetDummy", "1bb6f0159b2b6612ee9f30b473530656d268a9295dfdaa314428219f48922c67"),
+    f"{ROOT}/Teleporter_Sender": (
         "SampleTeleporterSender", "b9c54e88cf265f9540d8428e4f394415f9a90a6bd4e8b61e0ef5f96355a1863b"
     ),
-    "Teleporter_Destination": (
+    f"{ROOT}/Teleporter_Destination": (
         "SampleTeleporterDestination", "c0843323cda8d08d32cfe1c8d3a6830e02b3495b93639e97dae64ed3732d7279"
     ),
-    "LevelButton": ("SampleLevelButton", "e3412979c50c306de435b6e10cbc579c1a89d954c55f6502c509989fc15c5928"),
+    f"{ROOT}/LevelButton": ("SampleLevelButton", "e3412979c50c306de435b6e10cbc579c1a89d954c55f6502c509989fc15c5928"),
+    "/Game/Widgets/WidgetData/StillCam": (
+        "SampleStillCamera", "189fdf6eb70d3356933c814f1cc0f096228dca13a9387208e70d659dfee3eda4"
+    ),
 }
 
 
@@ -29,8 +32,7 @@ def migrate():
     dirty = {item.get_name() for item in unreal.EditorLoadingAndSavingUtils.get_dirty_content_packages()}
     pending = []
 
-    for name, (native_name, digest) in FIXTURES.items():
-        path = f"{ROOT}/{name}"
+    for path, (native_name, digest) in FIXTURES.items():
         asset = unreal.load_asset(path)
         native = unreal.load_class(None, f"/Script/GameAnimationSampleCpp.{native_name}")
         if not asset or not native or path in dirty:
@@ -46,20 +48,20 @@ def migrate():
         backup = descriptor.parent / "Saved/BlueprintMigration/SandboxFixtures" / package.name
         if backup.exists() and sha256(backup.read_bytes()).hexdigest() != digest:
             raise RuntimeError(f"The fixture backup differs from the reference: {backup}")
-        pending.append((name, asset, native, package, backup))
+        pending.append((asset, native, package, backup))
 
-    for name, asset, native, package, backup in pending:
+    for asset, native, package, backup in pending:
         backup.parent.mkdir(parents=True, exist_ok=True)
         if not backup.exists():
             shutil.copy2(package, backup)
         for graph in editor.list_graphs(asset):
-            if (name, graph.get_name()) != ("LevelButton", "ButtonPressed"):
+            if (asset.get_name(), graph.get_name()) != ("LevelButton", "ButtonPressed"):
                 editor.remove_graph(asset, graph)
         editor.reparent_blueprint(asset, native)
         if editor.get_blueprint_parent_class(asset) != native or not editor.compile_blueprint(asset):
             raise RuntimeError(f"The fixture failed to compile: {asset.get_path_name()}")
 
-    for _, asset, _, _, _ in pending:
+    for asset, _, _, _ in pending:
         if not assets.save_loaded_asset(asset, only_if_is_dirty=False):
             raise RuntimeError(f"Could not save the fixture: {asset.get_path_name()}")
     unreal.log("Native sandbox fixtures installed." if pending else "Sandbox fixtures already migrated.")

@@ -7,6 +7,7 @@
 #include "Components/TextRenderComponent.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "Kismet/KismetMathLibrary.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "LandscapeProxy.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -108,6 +109,40 @@ namespace
         return Field && Field->SignatureFunction && Field->SignatureFunction->NumParms == 0
             ? Field->ContainerPtrToValuePtr<FMulticastScriptDelegate>(&Button) : nullptr;
     }
+}
+
+ASampleStillCamera::ASampleStillCamera()
+{
+    PrimaryActorTick.bCanEverTick = true;
+}
+
+void ASampleStillCamera::Tick(float DeltaSeconds)
+{
+    Super::Tick(DeltaSeconds);
+
+    const auto* Target = ReadFixtureObject<AActor>(*this, TEXT("TargetActor"));
+    if (!IsValid(Target))
+    {
+        return;
+    }
+    const auto* LookAt = FindFProperty<FBoolProperty>(GetClass(), TEXT("LookAtTarget"));
+    if (LookAt && LookAt->GetPropertyValue_InContainer(this))
+    {
+        SetActorRotation(UKismetMathLibrary::FindLookAtRotation(GetActorLocation(), Target->GetActorLocation()));
+    }
+    const auto* LastLocationField = FindFProperty<FStructProperty>(GetClass(), TEXT("LastTargetLocation"));
+    if (!LastLocationField || LastLocationField->Struct != TBaseStructure<FVector>::Get())
+    {
+        return;
+    }
+    FVector& LastLocation = *LastLocationField->ContainerPtrToValuePtr<FVector>(this);
+    const FVector TargetLocation = Target->GetActorLocation();
+    const auto* Follow = FindFProperty<FBoolProperty>(GetClass(), TEXT("FollowTarget"));
+    if (Follow && Follow->GetPropertyValue_InContainer(this))
+    {
+        AddActorWorldOffset(TargetLocation - LastLocation);
+    }
+    LastLocation = TargetLocation;
 }
 
 ASampleTeleporterDestination* ASampleTeleporterSender::GetDestination() const
