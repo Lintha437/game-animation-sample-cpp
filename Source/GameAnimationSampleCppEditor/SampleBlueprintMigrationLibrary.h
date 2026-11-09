@@ -223,4 +223,8 @@ public:
      */
     UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
     static bool ReplacePlayerSmartObjectInput(UBlueprint* Blueprint, UEdGraph* EventGraph);
+
+    /** Replaces the interaction action nodes with callbacks into the existing playback gate. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
+    static bool ReplacePlayerInteractionInputBindings(UBlueprint* Blueprint, UEdGraph* Graph);
 };
