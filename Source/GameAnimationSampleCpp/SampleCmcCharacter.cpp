@@ -16,6 +16,7 @@
 #include "Math/RotationMatrix.h"
 #include "Net/Core/PushModel/PushModel.h"
 #include "SampleAnimationTickComponent.h"
+#include "SampleSmartObjectInteractionComponent.h"
 #include "SampleTraversalClearance.h"
 #include "SampleTraversalComponent.h"
 #include "UObject/StructOnScope.h"
@@ -276,6 +277,10 @@ void ASampleCmcCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInput
         Bind(SprintAction.LoadSynchronous(), &ASampleCmcCharacter::HandleSprintIntent);
         Bind(StrafeAction.LoadSynchronous(), &ASampleCmcCharacter::HandleStrafeIntent);
         Bind(AimAction.LoadSynchronous(), &ASampleCmcCharacter::HandleAimIntent);
+    }
+    if (auto* Interaction = FindComponentByClass<USampleSmartObjectInteractionComponent>())
+    {
+        Interaction->BindPlayerInteractionInput(*Input);
     }
 }
 

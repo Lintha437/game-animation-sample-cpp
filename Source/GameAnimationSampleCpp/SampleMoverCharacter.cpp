@@ -24,6 +24,7 @@
 #include "PhysicsControlBPLibrary.h"
 #include "PhysicsControlComponent.h"
 #include "SampleAnimationTickComponent.h"
+#include "SampleSmartObjectInteractionComponent.h"
 #include "SampleTraversalClearance.h"
 #include "SampleTraversalComponent.h"
 #include "StructUtils/UserDefinedStruct.h"
@@ -461,6 +462,10 @@ void ASampleMoverCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInp
     Bind(MoverSprintAction, &ASampleMoverCharacter::HandleMoverSprint);
     Bind(MoverStrafeAction, &ASampleMoverCharacter::HandleMoverStrafe);
     Bind(MoverAimAction, &ASampleMoverCharacter::HandleMoverAim);
+    if (auto* Interaction = FindComponentByClass<USampleSmartObjectInteractionComponent>())
+    {
+        Interaction->BindPlayerInteractionInput(*Input);
+    }
 }
 
 FVector2D ASampleMoverCharacter::ReadMoverAction(const TSoftObjectPtr<UInputAction>& Action) const
