@@ -8,6 +8,8 @@
 #include "GameplayInteractionSmartObjectBehaviorDefinition.h"
 #include "GameplayTask.h"
 #include "Kismet/GameplayStatics.h"
+#include "MoverComponent.h"
+#include "Navigation/PathFollowingComponent.h"
 #include "NavigationSystem.h"
 #include "SampleCmcCharacter.h"
 #include "SampleMoverCharacter.h"
@@ -21,6 +23,13 @@
 
 namespace
 {
+    const FName ApproachActorName(TEXT("Actor"));
+    const FName ApproachMoverName(TEXT("PossibleOwnerMoverComponent"));
+    const FName ApproachAnimationName(TEXT("Smart Object Animation Component"));
+    const FName MoveCompletedName(TEXT("OnMovementCompleted"));
+    const FName MontageFinishedName(TEXT("On Montage Finished"));
+    const FName MontageFinishedDelegateName(TEXT("Owner Montage Finished"));
+
     template <typename T>
     T* FindStruct(UObject& Task, FName Name, const UScriptStruct* Type)
     {
@@ -100,6 +109,100 @@ namespace
         }
         return Selected;
     }
+}
+
+void USampleMotionMatchApproachTask::InitializeApproachTask()
+{
+    UnbindApproachCallbacks();
+    AActor* Actor = ReadActor(*this, ApproachActorName);
+    const auto CacheComponent = [this, Actor](FName Name) -> UActorComponent*
+    {
+        const auto* Field = FindFProperty<FObjectPropertyBase>(GetClass(), Name);
+        if (!Field || !Field->PropertyClass->IsChildOf(UActorComponent::StaticClass()))
+        {
+            return nullptr;
+        }
+        UActorComponent* Component = IsValid(Actor) ? Actor->GetComponentByClass(Field->PropertyClass) : nullptr;
+        Field->SetObjectPropertyValue_InContainer(this, Component);
+        return Component;
+    };
+    UActorComponent* Animation = CacheComponent(ApproachAnimationName);
+    CacheComponent(ApproachMoverName);
+
+    AAIController* Controller = UAIBlueprintHelperLibrary::GetAIController(Actor);
+    if (Controller && FindFunction(MoveCompletedName))
+    {
+        FScriptDelegate Handler;
+        Handler.BindUFunction(this, MoveCompletedName);
+        Controller->ReceiveMoveCompleted.AddUnique(Handler);
+        ApproachController = Controller;
+    }
+    const auto* Delegate = Animation
+        ? FindFProperty<FMulticastDelegateProperty>(Animation->GetClass(), MontageFinishedDelegateName) : nullptr;
+    const UFunction* HandlerFunction = FindFunction(MontageFinishedName);
+    if (Delegate && HandlerFunction && HandlerFunction->IsSignatureCompatibleWith(Delegate->SignatureFunction))
+    {
+        FScriptDelegate Handler;
+        Handler.BindUFunction(this, MontageFinishedName);
+        Delegate->AddDelegate(Handler, Animation, Delegate->ContainerPtrToValuePtr<void>(Animation));
+        ApproachAnimation = Animation;
+    }
+}
+
+double USampleMotionMatchApproachTask::ReadApproachDistance() const
+{
+    AActor* Actor = ReadActor(*this, ApproachActorName);
+    const AAIController* Controller = UAIBlueprintHelperLibrary::GetAIController(Actor);
+    const UPathFollowingComponent* Following = Controller ? Controller->GetPathFollowingComponent() : nullptr;
+    const FNavPathSharedPtr Path = Following ? Following->GetPath() : nullptr;
+    if (Path)
+    {
+        return Path->IsValid() ? Path->GetLength() : -1.0;
+    }
+    const auto* Field = FindFProperty<FStructProperty>(GetClass(), TEXT("Destination"));
+    const FVector Destination = Field && Field->Struct == TBaseStructure<FTransform>::Get()
+        ? Field->ContainerPtrToValuePtr<FTransform>(this)->GetLocation() : FVector::ZeroVector;
+    return FVector::Dist(Actor ? Actor->GetActorLocation() : FVector::ZeroVector, Destination);
+}
+
+FVector USampleMotionMatchApproachTask::ReadApproachVelocity() const
+{
+    const auto* Field = FindFProperty<FObjectPropertyBase>(GetClass(), ApproachMoverName);
+    const auto* Mover = Field ? Cast<UMoverComponent>(Field->GetObjectPropertyValue_InContainer(this)) : nullptr;
+    if (IsValid(Mover))
+    {
+        return Mover->GetVelocity();
+    }
+    const AActor* Actor = ReadActor(*this, ApproachActorName);
+    return IsValid(Actor) ? Actor->GetVelocity() : FVector::ZeroVector;
+}
+
+void USampleMotionMatchApproachTask::ExitState(FStateTreeExecutionContext& Context,
+    const FStateTreeTransitionResult& Transition)
+{
+    UnbindApproachCallbacks();
+    Super::ExitState(Context, Transition);
+}
+
+void USampleMotionMatchApproachTask::UnbindApproachCallbacks()
+{
+    if (AAIController* Controller = ApproachController.Get())
+    {
+        FScriptDelegate Handler;
+        Handler.BindUFunction(this, MoveCompletedName);
+        Controller->ReceiveMoveCompleted.Remove(Handler);
+    }
+    if (UActorComponent* Animation = ApproachAnimation.Get())
+    {
+        if (const auto* Delegate = FindFProperty<FMulticastDelegateProperty>(Animation->GetClass(), MontageFinishedDelegateName))
+        {
+            FScriptDelegate Handler;
+            Handler.BindUFunction(this, MontageFinishedName);
+            Delegate->RemoveDelegate(Handler, Animation, Delegate->ContainerPtrToValuePtr<void>(Animation));
+        }
+    }
+    ApproachController.Reset();
+    ApproachAnimation.Reset();
 }
 
 EStateTreeRunStatus USampleFindSmartObjectTask::EnterState(FStateTreeExecutionContext& Context,
