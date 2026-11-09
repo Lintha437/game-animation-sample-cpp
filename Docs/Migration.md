@@ -1,4 +1,4 @@
-# Migrate Sample Locomotion into another UE5 project
+# Game Animation Sample C++ migration guide
 
 Use Unreal Engine 5.9 and a C++ project built with the associated toolchain. Start with the portable plugin if your project already owns possession, input, and animation. Use the licensed reference sandbox as a comparison level if you need to carry over the sample's authored animation stack.
 
@@ -7,6 +7,24 @@ Use Unreal Engine 5.9 and a C++ project built with the associated toolchain. Sta
 | `SampleLocomotion` runtime plugin | Install the plugin and integrate its CMC pawn, animation snapshot, or traversal geometry probe independently. |
 | Project runtime module `GameAnimationSampleCpp` | Review the sample-specific character, tick, notify, and travel adapters before porting any of them. Their existing integrations use imported sample package paths and interfaces. |
 | Locally imported Epic packages | Acquire and migrate the licensed assets separately. Keep the authored animation interfaces and verify each asset's dependencies in the destination. |
+
+## Reproduce the native sample in a clean workspace
+
+1. Acquire the Game Animation Sample through Epic Games Launcher. Keep that project available as the reference and use a short, independent Windows path for the destination.
+2. Follow [local reference workspace setup](../README.md#local-reference-workspace) to copy the acquired content and local configuration, build the Win64 Development Editor, and run the ordered asset migration. Use the destination descriptor for every command. Preserve the reference project's package paths so the native adapters can find their authored fields and classes.
+3. Read the migration log through its final stage. When a stage fails, inspect its per-process log and compare the affected package to its backup under `Saved/BlueprintMigration/`. Close the destination Editor before restoring a package or rerunning a stage.
+4. Regenerate the Visual Studio projects from the destination `.uproject` or with the [project generation script](../README.md#develop-in-visual-studio). Verify both game and both AutomationTool solution formats. Build Development Editor for PIE and Development for the standalone Win64 Game target.
+5. Open `DefaultLevel`, `LocomotorLevel`, `LookAtPOI_Level`, `NPCLevel`, and `RagdollLevel`. Use the [reference behavior inventory](ReferenceBehavior.md) to choose matching inputs, starting state, camera, movement system, and network role. Record both the completed action and its cleanup, including interruption.
+
+## Preserve serialized and animation boundaries
+
+| Boundary | What to preserve during integration |
+| --- | --- |
+| Existing Blueprint subclasses | Keep package paths, authored component templates, tuning defaults, and the fields and delegate signatures used by levels, animation, and StateTree bindings. Update native forwarding and the saved package together. |
+| Character animation | Keep the AnimGraph, retargeters, rig evaluation, Choosers, Pose Search databases, and montage selection and playback with the assets. Carry the native movement snapshots through the same animation interface and update phase. |
+| Linked movement and animation | Keep motion-warp targets and animation timing together. Put gameplay collision, claims, movement modes, and recovery in the native owner that can release them on completion, interruption, or teardown. |
+| Smart Objects | Keep the StateTree's bindings and authored animation costs and playback gates. Bind movement and interaction ownership to the actual actor and verify claim and correction cleanup on each participating peer. |
+| Sample presentation | Retain authored layouts, meshes, light and material tuning, and timelines. Preserve camera and demonstration controls used by each level when moving their state or input handling. |
 
 ## Install the runtime plugin
 

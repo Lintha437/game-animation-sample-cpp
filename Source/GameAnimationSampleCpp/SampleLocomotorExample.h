@@ -21,12 +21,15 @@ protected:
     /** Binds the three authored actions to their Triggered handlers on the local input component. */
     virtual void SetupInputComponent() override;
 
+    /** Axis2D action supplying normalized controller-relative movement. */
     UPROPERTY(EditDefaultsOnly, Category = "Sample|Input")
     TSoftObjectPtr<UInputAction> MoveAction;
 
+    /** Axis2D mouse delta action sampled with the example's fixed sensitivity. */
     UPROPERTY(EditDefaultsOnly, Category = "Sample|Input")
     TSoftObjectPtr<UInputAction> MouseLookAction;
 
+    /** Axis2D stick rate action scaled by the current frame time. */
     UPROPERTY(EditDefaultsOnly, Category = "Sample|Input")
     TSoftObjectPtr<UInputAction> GamepadLookAction;
 
@@ -52,6 +55,7 @@ public:
     virtual void PawnClientRestart() override;
 
 protected:
+    /** Context added to the owning local player once per input subsystem. */
     UPROPERTY(EditDefaultsOnly, Category = "Sample|Input")
     TSoftObjectPtr<UInputMappingContext> InputMapping;
 

@@ -25,9 +25,17 @@ SHA-256 comparison matched all 3,899 files under the installed sample's `Content
 
 ## Retained authoring
 
-- Animation Blueprints, Pose Search, Chooser, curves, IK rigs, retargeters and Control Rigs encode authored pose behavior and dependencies. Preserve their interfaces while migrating reusable calculations.
-- Gameplay Camera rigs, widget layout, sound data, level geometry, input actions and mapping contexts stay authorable. Move reusable runtime orchestration to native code only after verifying the graph's runtime inputs and outputs.
-- The existing pawn, controller, traversal and NPC gameplay graphs remain in the local workspace. The portable plugin currently implements the interfaces documented in the [migration guide](Migration.md).
+| Assets | Logic retained and reason |
+| --- | --- |
+| Main Animation Blueprints, Pose Search and Chooser Tables, IK rigs, retargeters, Control Rig, and MetaHuman setup | Pose selection, blending, rig evaluation, retargeting, eye setup, and binding to authored character data remain with the animation stack. |
+| `AC_TraversalLogic` | The CMC and Mover montage nodes, their phase callbacks, motion-warp setup and Choosers consume the native clearance and action result. The original typed RPC declarations remain to preserve their Blueprint struct payload and network flags. |
+| `AC_SmartObjectAnimation`, `STT_PlayAnimFromBestCost`, and `STT_PlayAnimMontage` | Montage evaluation and cost gates, start time, looping, warp targets, and completion callbacks stay with the authored interaction. The StateTree assets retain their bindings and state transitions. |
+| `SandboxCharacter_Mover_Ragdoll` and Mover/CMC pawn interface graphs | Motion Match Multi, rolling get-up selection, rig physics profiles and authored pose data remain editable. The interface graphs assemble existing Blueprint structs for animation, camera and traversal consumers. |
+| Gameplay Camera rigs, foley, widget layouts, and timeline obstacles | Camera rigs, sound recipes, material settings, UI layouts and the authored timing of obstacle playback stay editable. This includes `SpinningArrow` and the proximity-driven Bumper and SmackArm timelines. |
+
+### Remaining runtime graph audit
+
+The five maps' Blueprint dependency inventory still includes the sandbox input display (`WB_SimpleController`), Blueprint debug helpers (`BFL_HelpfulFunctions` and the pawn and AI debug graphs), Look At POI demonstration presentation and level-script setup, and the legacy pawn `GetTraversalCheckInputs` wrappers. These paths need individual caller and runtime checks before counting them as migrated. The main native jump handlers already build and submit their own traversal queries. Full runtime graph migration and rendered parity remain open.
 
 ## Blueprint migration acceptance
 
@@ -682,6 +690,22 @@ The Win64 Editor build and Look At controller Blueprint compile passed. In `Look
 Run `Scripts/migrate_smart_object_approach.py` to move the approach distance and bearing into the native interaction component. The native cancellation state update runs after the authored completion request and before the existing playback gate closes.
 
 The Win64 Editor build and interaction component Blueprint compile passed. In `NPCLevel` PIE, the original approach function returned the expected distance and bearing for an aligned slot, a rotated and scaled slot, and a coincident slot. A direct front-facing bench request set the active interaction flag, which the native cleanup cleared. Movement-input cancellation through the playback gate and completion on a remote peer are **Not run** for this batch.
+
+### Smart Object motion-match approach task
+
+`Scripts/migrate_smart_object_approach_task.py` reparents `STT_PlayAnimFromBestCost` to `USampleMotionMatchApproachTask` and replaces its three setup, navigation-distance, and velocity wrappers. The native task resolves the bound actor's animation and Mover components, registers the existing move and montage completion callbacks, and unbinds them on StateTree exit or reuse. Navigation distance follows the current path length when a path is available, with a direct actor-to-destination fallback. The task retains its montage choice, cost evaluation, and authored StateTree bindings.
+
+On 2026-11-22, the Win64 Development Editor build passed and the saved approach task compiled during the migration. `GameAnimationSampleCpp.Migration.SmartObjectApproachTask` passed in `SmartObjectTargetedFinal.log`. The targeted test checks the imported class and StateTree fields, a 50 cm direct-distance fallback, a 70 cm navigation path, CMC velocity, and removal of a move-completion binding when the task is reused. Live NPC StateTree execution, montage completion, invalidated paths, and networked interaction parity are **Not run** for this batch.
+
+An isolated second run of the approach-task installer exited successfully and reported `Smart Object approach task already migrated.` in `SmartObjectApproachRerun.log`.
+
+### Native player Smart Object input dispatch
+
+`Scripts/migrate_player_interaction_bindings.py` removes the imported component's two Enhanced Input event wrappers and installs the original playback-opening and cancellation chains behind native Blueprint events. The CMC and Mover pawns bind `IA_Interact` and `IA_Move` on their existing input components. The saved component enables the native opt-in only after its wrappers are replaced. The authoritative slot request and authored StateTree remain in their earlier migrated locations.
+
+On 2026-11-22, the Win64 Development Editor and Game builds passed. `GameAnimationSampleCpp.Migration.SmartObjectInputBindings` passed in `SmartObjectTargetedFinal.log`. It checks both action bindings on the migrated component and confirms the native base remains opt-out. The two-test `GameAnimationSampleCpp.Migration.SmartObject` queue completed successfully. Real Enhanced Input events during NPCLevel PIE, cancellation timing, paired animation, and multiplayer interaction are **Not run** for this batch.
+
+An isolated second run of the input installer exited successfully and reported `Native player interaction input already installed.` in `SmartObjectInputRerun.log`.
 
 ### Traversal component startup
 

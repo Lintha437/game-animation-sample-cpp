@@ -54,7 +54,10 @@ public:
     void UpdateScale();
 
 protected:
+    /** Refreshes the label, materials and pose from the assigned destination. */
     virtual void OnConstruction(const FTransform& Transform) override;
+
+    /** Binds the authored trigger after the asset's components are initialized. */
     virtual void PostInitializeComponents() override;
 
 private:
@@ -81,6 +84,7 @@ class GAMEANIMATIONSAMPLECPP_API ASampleTargetDummy : public AActor
     GENERATED_BODY()
 
 protected:
+    /** Binds both overlap edges so nearby pawns can maintain their target candidates. */
     virtual void PostInitializeComponents() override;
 
 private:
@@ -113,6 +117,8 @@ public:
 protected:
     /** Applies the per-instance text, material color, and plate scale. */
     virtual void OnConstruction(const FTransform& Transform) override;
+
+    /** Registers the overlap handler once the authored button trigger is ready. */
     virtual void PostInitializeComponents() override;
 
 private:
@@ -156,6 +162,8 @@ public:
 protected:
     /** Creates the dynamic grid material and captures the baseline for offset changes. */
     virtual void OnConstruction(const FTransform& Transform) override;
+
+    /** Binds the placed randomization button once the block's components are ready. */
     virtual void PostInitializeComponents() override;
 
 private:
@@ -184,7 +192,10 @@ public:
     const void* FindGridSettings(FName Group, const UScriptStruct*& OutType) const;
 
 protected:
+    /** Applies the selected style when the placed actor is constructed or edited. */
     virtual void OnConstruction(const FTransform& Transform) override;
+
+    /** Reapplies the style after the level and its presentation actors enter play. */
     virtual void BeginPlay() override;
 
 private:

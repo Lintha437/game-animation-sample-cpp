@@ -68,9 +68,11 @@ protected:
     /** Removes the locally owned interface before level teardown. */
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
+    /** Authored pawn type accepted for zone selection and player-mode possession. */
     UPROPERTY(EditDefaultsOnly, Category = "Sample|Look At")
     TSoftClassPtr<APawn> DemoPlayerClass;
 
+    /** Interface created for the local controller and removed when the controller leaves play. */
     UPROPERTY(EditDefaultsOnly, Category = "Sample|Look At")
     TSoftClassPtr<UUserWidget> DemoWidgetClass;
 
