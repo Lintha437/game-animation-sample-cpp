@@ -71,6 +71,8 @@ MIGRATIONS = (
     "smart_object_approach",
     "traversal_startup",
     "traversal_dispatch",
+    "smart_object_approach_task",
+    "player_interaction_bindings",
 )
 
 

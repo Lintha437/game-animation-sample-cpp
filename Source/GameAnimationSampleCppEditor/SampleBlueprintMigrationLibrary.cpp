@@ -1712,6 +1712,15 @@ bool USampleBlueprintMigrationLibrary::ReplacePlayerSmartObjectInput(UBlueprint*
     {
         return true;
     }
+    TArray<UK2Node_Event*> Events;
+    EventGraph->GetNodesOfClass(Events);
+    if (Events.ContainsByPredicate([](const UK2Node_Event* Event)
+    {
+        return Event->EventReference.GetMemberName() == TEXT("OpenPlayerInteractionGate");
+    }))
+    {
+        return true;
+    }
     TArray<UK2Node_EnhancedInputAction*> Actions;
     EventGraph->GetNodesOfClass(Actions);
     auto* Action = Actions.FindByPredicate([](const UK2Node_EnhancedInputAction* Candidate)
@@ -1802,4 +1811,78 @@ bool USampleBlueprintMigrationLibrary::ReplacePlayerSmartObjectInput(UBlueprint*
         Schema->TryCreateConnection(Call->GetThenPin(), Branch->FindPin(UEdGraphSchema_K2::PN_Execute)) &&
         Schema->TryCreateConnection(Call->GetReturnValuePin(), Branch->FindPin(UEdGraphSchema_K2::PN_Condition)) &&
         Schema->TryCreateConnection(Branch->FindPin(UEdGraphSchema_K2::PN_Then), GateOpen);
+}
+
+bool USampleBlueprintMigrationLibrary::ReplacePlayerInteractionInputBindings(UBlueprint* Blueprint, UEdGraph* Graph)
+{
+    if (!Blueprint || !Blueprint->ParentClass || !Graph || Graph->GetOuter() != Blueprint ||
+        Graph->GetFName() != TEXT("EventGraph"))
+    {
+        return false;
+    }
+    static const FName OpenName(TEXT("OpenPlayerInteractionGate"));
+    static const FName CancelName(TEXT("RequestPlayerInteractionCancellation"));
+    TArray<UK2Node_Event*> Events;
+    Graph->GetNodesOfClass(Events);
+    if (Events.ContainsByPredicate([](const UK2Node_Event* Event) { return Event->GetFunctionName() == OpenName; }) &&
+        Events.ContainsByPredicate([](const UK2Node_Event* Event) { return Event->GetFunctionName() == CancelName; }))
+    {
+        return ListEnhancedInputActions(Graph).IsEmpty();
+    }
+
+    TArray<UK2Node_EnhancedInputAction*> Actions;
+    Graph->GetNodesOfClass(Actions);
+    const auto FindTrigger = [&Actions](const TCHAR* Path) -> UEdGraphPin*
+    {
+        for (UK2Node_EnhancedInputAction* Action : Actions)
+        {
+            if (!Action->InputAction || Action->InputAction->GetPathName() != Path)
+            {
+                continue;
+            }
+            UEdGraphPin* Trigger = Action->FindPin(TEXT("Triggered"), EGPD_Output);
+            if (GetOnlyPeer(Trigger) && !Action->Pins.ContainsByPredicate([Trigger](const UEdGraphPin* Pin)
+            {
+                return Pin != Trigger && !Pin->LinkedTo.IsEmpty();
+            }))
+            {
+                return Trigger;
+            }
+        }
+        return nullptr;
+    };
+    UEdGraphPin* Interact = FindTrigger(TEXT("/Game/Input/IA_Interact.IA_Interact"));
+    UEdGraphPin* Move = FindTrigger(TEXT("/Game/Input/IA_Move.IA_Move"));
+    auto* Start = Cast<UK2Node_CallFunction>(GetOnlyPeer(Interact));
+    auto* Accepted = Cast<UK2Node_IfThenElse>(Start ? GetOnlyPeer(Start->GetThenPin()) : nullptr);
+    UEdGraphPin* Open = Accepted ? Accepted->GetThenPin() : nullptr;
+    const UFunction* OpenEvent = Blueprint->ParentClass->FindFunctionByName(OpenName);
+    const UFunction* CancelEvent = Blueprint->ParentClass->FindFunctionByName(CancelName);
+    if (Actions.Num() != 2 || !Move || !Start || Start->FunctionReference.GetMemberName() != TEXT("TryStartPlayerInteraction") ||
+        !Accepted || Start->GetReturnValuePin()->LinkedTo.Num() != 1 ||
+        Start->GetReturnValuePin()->LinkedTo[0] != Accepted->GetConditionPin() ||
+        !Accepted->GetElsePin()->LinkedTo.IsEmpty() || !GetOnlyPeer(Open) || !OpenEvent || !CancelEvent)
+    {
+        return false;
+    }
+
+    const auto Connect = [Graph](UEdGraphPin* OldPin, const UFunction& Event) -> bool
+    {
+        UEdGraphPin* Next = OldPin->LinkedTo[0];
+        FGraphNodeCreator<UK2Node_Event> Creator(*Graph);
+        UK2Node_Event* Callback = Creator.CreateNode();
+        Callback->EventReference.SetExternalMember(Event.GetFName(), Event.GetOwnerClass());
+        Callback->bOverrideFunction = true;
+        Callback->NodePosX = OldPin->GetOwningNode()->NodePosX;
+        Callback->NodePosY = OldPin->GetOwningNode()->NodePosY;
+        Creator.Finalize();
+        OldPin->BreakLinkTo(Next);
+        return Graph->GetSchema()->TryCreateConnection(Callback->FindPin(UEdGraphSchema_K2::PN_Then), Next);
+    };
+    if (!Connect(Open, *OpenEvent) || !Connect(Move, *CancelEvent))
+    {
+        return false;
+    }
+    RemoveNodes(*Blueprint, *Graph, {Interact->GetOwningNode(), Move->GetOwningNode(), Start, Accepted});
+    return true;
 }

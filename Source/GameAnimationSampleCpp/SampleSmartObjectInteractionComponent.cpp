@@ -4,10 +4,12 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StateTreeComponent.h"
+#include "EnhancedInputComponent.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameplayInteractionSmartObjectBehaviorDefinition.h"
 #include "GameplayStateTreeBlueprintFunctionLibrary.h"
+#include "InputAction.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "MoverComponent.h"
 #include "SmartObjectBlueprintFunctionLibrary.h"
@@ -199,6 +201,31 @@ bool USampleSmartObjectInteractionComponent::TryStartPlayerInteraction()
     }
     IsInteracting->SetPropertyValue_InContainer(this, true);
     return true;
+}
+
+void USampleSmartObjectInteractionComponent::BindPlayerInteractionInput(UEnhancedInputComponent& Input)
+{
+    if (!bUseNativePlayerInteractionInput)
+    {
+        return;
+    }
+    const auto Bind = [this, &Input](const TCHAR* Path, void (USampleSmartObjectInteractionComponent::*Handler)())
+    {
+        if (const UInputAction* Action = LoadObject<UInputAction>(nullptr, Path))
+        {
+            Input.BindAction(Action, ETriggerEvent::Triggered, this, Handler);
+        }
+    };
+    Bind(TEXT("/Game/Input/IA_Interact.IA_Interact"), &USampleSmartObjectInteractionComponent::HandlePlayerInteractionInput);
+    Bind(TEXT("/Game/Input/IA_Move.IA_Move"), &USampleSmartObjectInteractionComponent::RequestPlayerInteractionCancellation);
+}
+
+void USampleSmartObjectInteractionComponent::HandlePlayerInteractionInput()
+{
+    if (TryStartPlayerInteraction())
+    {
+        OpenPlayerInteractionGate();
+    }
 }
 
 void USampleSmartObjectInteractionComponent::ClearPlayerInteractionState()

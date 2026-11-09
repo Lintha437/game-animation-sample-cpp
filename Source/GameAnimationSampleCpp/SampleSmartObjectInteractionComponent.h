@@ -4,6 +4,7 @@
 #include "SampleSmartObjectInteractionComponent.generated.h"
 
 class UStateTree;
+class UEnhancedInputComponent;
 
 /** Applies capsule collision and correction policy for the sample's authored paired interactions. */
 UCLASS(Abstract, Blueprintable, ClassGroup = (Gameplay))
@@ -31,6 +32,9 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Interaction")
     void CacheInteractionComponents();
 
+    /** Installs the local player's authored interaction and move actions on the current input component. */
+    void BindPlayerInteractionInput(UEnhancedInputComponent& Input);
+
     /**
      * Searches the player's forward interaction box and submits the nearest eligible free slot.
      * The StateTree continues to own the choice and playback of the entry animation.
@@ -52,7 +56,22 @@ public:
     UFUNCTION(BlueprintPure, Category = "Sample|Interaction")
     void GetNpcApproachMetrics(const FTransform& Destination, double& Distance, double& Angle) const;
 
+protected:
+    /** Opens the authored cancellation gate after a native slot request has been accepted. */
+    UFUNCTION(BlueprintImplementableEvent, Category = "Sample|Interaction")
+    void OpenPlayerInteractionGate();
+
+    /** Lets the authored graph cancel its current loop and clear gameplay state in that order. */
+    UFUNCTION(BlueprintImplementableEvent, Category = "Sample|Interaction")
+    void RequestPlayerInteractionCancellation();
+
 private:
+    void HandlePlayerInteractionInput();
+
+    /** Enables native dispatch after the imported component's two input nodes have been replaced. */
+    UPROPERTY(EditDefaultsOnly, Category = "Sample|Interaction")
+    bool bUseNativePlayerInteractionInput = false;
+
     /** StateTree receiving the existing player interaction event. */
     UPROPERTY(EditDefaultsOnly, Category = "Sample|Interaction")
     TSoftObjectPtr<UStateTree> PlayerInteractionTree{

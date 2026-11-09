@@ -6,6 +6,42 @@
 #include "GameFramework/Actor.h"
 #include "SampleSmartObjectTasks.generated.h"
 
+class AAIController;
+class UActorComponent;
+
+/** Supplies navigation state to the retained Smart Object montage selection task. */
+UCLASS(Abstract, Blueprintable)
+class GAMEANIMATIONSAMPLECPP_API USampleMotionMatchApproachTask : public UStateTreeTaskBlueprintBase
+{
+    GENERATED_BODY()
+
+public:
+    /** Binds navigation and montage completion to the current StateTree actor on entry. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Smart Object")
+    void InitializeApproachTask();
+
+    /**
+     * @return Current navigation path length, or straight-line distance when no path exists.
+     * A path invalidated while still owned by path following keeps the reference result of -1.
+     */
+    UFUNCTION(BlueprintPure, Category = "Sample|Smart Object")
+    double ReadApproachDistance() const;
+
+    /** @return Mover velocity when the actor supplies Mover, otherwise its normal actor velocity. */
+    UFUNCTION(BlueprintPure, Category = "Sample|Smart Object")
+    FVector ReadApproachVelocity() const;
+
+protected:
+    /** Removes callbacks registered for this execution before the StateTree can reuse the task. */
+    virtual void ExitState(FStateTreeExecutionContext& Context, const FStateTreeTransitionResult& Transition) override;
+
+private:
+    void UnbindApproachCallbacks();
+
+    TWeakObjectPtr<AAIController> ApproachController;
+    TWeakObjectPtr<UActorComponent> ApproachAnimation;
+};
+
 /**
  * Finds an available slot matching the sample's Gameplay Interaction and user tag requirements.
  * The imported task subclass owns the existing StateTree input and output bindings.
@@ -81,6 +117,7 @@ class GAMEANIMATIONSAMPLECPP_API USampleFocusInteractionTargetTask : public USta
     GENERATED_BODY()
 
 protected:
+    /** Focuses a valid bound target and leaves state completion to the other tasks. */
     virtual EStateTreeRunStatus EnterState(FStateTreeExecutionContext& Context,
         const FStateTreeTransitionResult& Transition) override;
 };
@@ -92,6 +129,7 @@ class GAMEANIMATIONSAMPLECPP_API USampleClearInteractionFocusTask : public UStat
     GENERATED_BODY()
 
 protected:
+    /** Clears the bound controller's gameplay focus when the cleanup state begins. */
     virtual EStateTreeRunStatus EnterState(FStateTreeExecutionContext& Context,
         const FStateTreeTransitionResult& Transition) override;
 };
@@ -103,6 +141,7 @@ class GAMEANIMATIONSAMPLECPP_API USampleFindSlotTransformTask : public UStateTre
     GENERATED_BODY()
 
 protected:
+    /** Publishes the slot transform, or identity if the claim no longer resolves to a slot. */
     virtual EStateTreeRunStatus EnterState(FStateTreeExecutionContext& Context,
         const FStateTreeTransitionResult& Transition) override;
 };
@@ -114,6 +153,7 @@ class GAMEANIMATIONSAMPLECPP_API USampleSetInteractionCollisionTask : public USt
     GENERATED_BODY()
 
 protected:
+    /** Sends the requested ignore state through the character's existing replicated event. */
     virtual EStateTreeRunStatus EnterState(FStateTreeExecutionContext& Context,
         const FStateTreeTransitionResult& Transition) override;
 };
@@ -125,6 +165,7 @@ class GAMEANIMATIONSAMPLECPP_API USampleAddInteractionCooldownTask : public USta
     GENERATED_BODY()
 
 protected:
+    /** Replaces the named cooldown using the active world's elapsed game time. */
     virtual EStateTreeRunStatus EnterState(FStateTreeExecutionContext& Context,
         const FStateTreeTransitionResult& Transition) override;
 };
@@ -136,6 +177,7 @@ class GAMEANIMATIONSAMPLECPP_API USampleCheckInteractionCooldownCondition : publ
     GENERATED_BODY()
 
 protected:
+    /** Blocks while the named entry has time remaining and removes the entry when it expires. */
     virtual bool TestCondition(FStateTreeExecutionContext& Context) const override;
 };
 
