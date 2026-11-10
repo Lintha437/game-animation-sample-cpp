@@ -1,6 +1,6 @@
 #pragma once
 
-#include "GameFramework/GameModeBase.h"
+#include "SampleMultiplayerSpawnGameMode.h"
 #include "SampleSandboxGameMode.generated.h"
 
 struct FStreamableHandle;
@@ -10,7 +10,7 @@ struct FStreamableHandle;
  * Map assets continue to select their GameMode subclass and its authored pawn options.
  */
 UCLASS(Blueprintable)
-class GAMEANIMATIONSAMPLECPP_API ASampleSandboxGameMode : public AGameModeBase
+class GAMEANIMATIONSAMPLECPP_API ASampleSandboxGameMode : public ASampleMultiplayerSpawnGameMode
 {
     GENERATED_BODY()
 

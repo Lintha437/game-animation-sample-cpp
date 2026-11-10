@@ -13,6 +13,8 @@ class GAMEANIMATIONSAMPLECPP_API USampleSmartObjectInteractionComponent : public
     GENERATED_BODY()
 
 public:
+    USampleSmartObjectInteractionComponent();
+
     /**
      * Applies a movement ignore entry to each of the owner's capsules.
      * @param bShouldIgnore True during the paired interaction, false during cleanup.
@@ -36,9 +38,10 @@ public:
     void BindPlayerInteractionInput(UEnhancedInputComponent& Input);
 
     /**
-     * Searches the player's forward interaction box and submits the nearest eligible free slot.
-     * The StateTree continues to own the choice and playback of the entry animation.
-     * @return True if playback may open its cancellation gate.
+     * On authority, searches the player's forward box and submits the nearest eligible free slot.
+     * An owning client requests server validation asynchronously. The authored StateTree continues
+     * to own the montage choice and playback.
+     * @return True only if the call synchronously accepted an authoritative interaction.
      */
     UFUNCTION(BlueprintCallable, Category = "Sample|Interaction")
     bool TryStartPlayerInteraction();
@@ -57,6 +60,9 @@ public:
     void GetNpcApproachMetrics(const FTransform& Destination, double& Distance, double& Angle) const;
 
 protected:
+    /** Replicates the authoritative interaction flag to player and observer copies. */
+    virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
     /** Opens the authored cancellation gate after a native slot request has been accepted. */
     UFUNCTION(BlueprintImplementableEvent, Category = "Sample|Interaction")
     void OpenPlayerInteractionGate();
@@ -67,6 +73,26 @@ protected:
 
 private:
     void HandlePlayerInteractionInput();
+    void HandlePlayerInteractionCancellationInput();
+    void SetPlayerInteractionState(bool bActive);
+
+    /** The owning client requests validation using the server pawn position and Smart Object state. */
+    UFUNCTION(Server, Reliable)
+    void ServerRequestPlayerInteraction();
+
+    /** Acknowledges the accepted request so the owning client's existing input gate can open. */
+    UFUNCTION(Client, Reliable)
+    void ClientAcceptPlayerInteraction();
+
+    /** Runs the authored cancellation event on authority as well as the locally controlled pawn. */
+    UFUNCTION(Server, Reliable)
+    void ServerCancelPlayerInteraction();
+
+    UFUNCTION()
+    void OnRep_PlayerInteractionActive();
+
+    UPROPERTY(Transient, ReplicatedUsing = OnRep_PlayerInteractionActive)
+    bool bPlayerInteractionActive = false;
 
     /** Enables native dispatch after the imported component's two input nodes have been replaced. */
     UPROPERTY(EditDefaultsOnly, Category = "Sample|Interaction")

@@ -104,6 +104,24 @@ bool FSampleSmartObjectInputBindingsTest::RunTest(const FString& Parameters)
     }
 
     auto* Component = NewObject<USampleSmartObjectInteractionComponent>(GetTransientPackage(), Class);
+    TestTrue(TEXT("Interaction component is replicated for owning-client RPC delivery"),
+        Component->GetIsReplicated());
+    const UFunction* Request = Class->FindFunctionByName(TEXT("ServerRequestPlayerInteraction"));
+    const UFunction* Accepted = Class->FindFunctionByName(TEXT("ClientAcceptPlayerInteraction"));
+    const UFunction* Cancel = Class->FindFunctionByName(TEXT("ServerCancelPlayerInteraction"));
+    TestTrue(TEXT("Interaction requests are validated on authority"),
+        Request && Request->HasAllFunctionFlags(FUNC_Net | FUNC_NetServer | FUNC_NetReliable));
+    TestTrue(TEXT("Acceptance is acknowledged to the owning client"),
+        Accepted && Accepted->HasAllFunctionFlags(FUNC_Net | FUNC_NetClient | FUNC_NetReliable));
+    TestTrue(TEXT("Cancellation reaches authority"),
+        Cancel && Cancel->HasAllFunctionFlags(FUNC_Net | FUNC_NetServer | FUNC_NetReliable));
+    const FProperty* Active = FindFProperty<FProperty>(Class, TEXT("bPlayerInteractionActive"));
+    TestTrue(TEXT("Authoritative interaction state is replicated"),
+        Active && Active->HasAllPropertyFlags(CPF_Net));
+    const UFunction* MontageReplay = Class->FindFunctionByName(TEXT("PlayMontage_Multi"));
+    TestTrue(TEXT("Authored montage playback remains a multicast event"),
+        MontageReplay && MontageReplay->HasAllFunctionFlags(FUNC_Net | FUNC_NetMulticast));
+
     auto* Input = NewObject<UEnhancedInputComponent>();
     Component->BindPlayerInteractionInput(*Input);
     const auto& Bindings = Input->GetActionEventBindings();
