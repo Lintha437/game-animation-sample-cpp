@@ -180,6 +180,9 @@ class GAMEANIMATIONSAMPLECPP_API ASampleLevelVisuals : public AActor
     GENERATED_BODY()
 
 public:
+    /** Makes the placed visual controller available to every network client. */
+    ASampleLevelVisuals();
+
     /** Saves the requested index and applies the style selected within the authored array bounds. */
     UFUNCTION(BlueprintCallable, Category = "Sample|Level Visuals")
     void SetLevelStyle(int32 Index);
@@ -191,6 +194,9 @@ public:
     /** Looks up an authored grid group. The returned values remain owned by the style array. */
     const void* FindGridSettings(FName Group, const UScriptStruct*& OutType) const;
 
+    /** Replicates the authoritative selection, including to clients joining after a style change. */
+    virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
 protected:
     /** Applies the selected style when the placed actor is constructed or edited. */
     virtual void OnConstruction(const FTransform& Transform) override;
@@ -199,5 +205,13 @@ protected:
     virtual void BeginPlay() override;
 
 private:
+    /** Mirrors the Blueprint-authored StyleIndex once the server enters play. */
+    UPROPERTY(ReplicatedUsing = OnRep_StyleIndex)
+    int32 ReplicatedStyleIndex = INDEX_NONE;
+
+    /** Copies a received server selection into the original Blueprint field and refreshes presentation. */
+    UFUNCTION()
+    void OnRep_StyleIndex();
+
     const void* FindStyle(const UScriptStruct*& OutType) const;
 };

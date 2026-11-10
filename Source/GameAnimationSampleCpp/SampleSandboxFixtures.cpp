@@ -11,6 +11,7 @@
 #include "Kismet/KismetSystemLibrary.h"
 #include "LandscapeProxy.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Net/UnrealNetwork.h"
 #include "UObject/StructOnScope.h"
 #include "UObject/UnrealType.h"
 
@@ -328,6 +329,10 @@ void ASampleLevelButton::PostInitializeComponents()
 void ASampleLevelButton::OnTriggerEntered(UPrimitiveComponent* Trigger, AActor* OtherActor,
     UPrimitiveComponent* OtherComponent, int32 BodyIndex, bool bFromSweep, const FHitResult& Sweep)
 {
+    if (!HasAuthority())
+    {
+        return;
+    }
     constexpr double Cooldown = 0.2;
     const double Now = GetWorld()->GetTimeSeconds();
     if (Now >= NextOverlapPressTime)
@@ -339,6 +344,10 @@ void ASampleLevelButton::OnTriggerEntered(UPrimitiveComponent* Trigger, AActor* 
 
 void ASampleLevelButton::SimulatePress()
 {
+    if (!HasAuthority())
+    {
+        return;
+    }
     const auto* Event = FindFProperty<FMulticastDelegateProperty>(GetClass(), TEXT("ButtonPressed"));
     if (Event && Event->SignatureFunction && Event->SignatureFunction->NumParms == 0)
     {
@@ -557,6 +566,27 @@ void ASampleLevelBlock::ApplyGridMaterial(const UScriptStruct& Type, const void*
     }
 }
 
+ASampleLevelVisuals::ASampleLevelVisuals()
+{
+    bReplicates = true;
+    bAlwaysRelevant = true;
+}
+
+void ASampleLevelVisuals::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+    DOREPLIFETIME(ASampleLevelVisuals, ReplicatedStyleIndex);
+}
+
+void ASampleLevelVisuals::OnRep_StyleIndex()
+{
+    if (const auto* Field = FindFProperty<FIntProperty>(GetClass(), TEXT("StyleIndex")))
+    {
+        Field->SetPropertyValue_InContainer(this, ReplicatedStyleIndex);
+        UpdateVisuals();
+    }
+}
+
 const void* ASampleLevelVisuals::FindStyle(const UScriptStruct*& OutType) const
 {
     OutType = nullptr;
@@ -601,15 +631,32 @@ void ASampleLevelVisuals::OnConstruction(const FTransform& Transform)
 void ASampleLevelVisuals::BeginPlay()
 {
     Super::BeginPlay();
+    if (HasAuthority())
+    {
+        if (const auto* Field = FindFProperty<FIntProperty>(GetClass(), TEXT("StyleIndex")))
+        {
+            ReplicatedStyleIndex = Field->GetPropertyValue_InContainer(this);
+        }
+    }
+    else if (ReplicatedStyleIndex != INDEX_NONE)
+    {
+        OnRep_StyleIndex();
+    }
     UpdateVisuals();
 }
 
 void ASampleLevelVisuals::SetLevelStyle(int32 Index)
 {
+    if (!HasAuthority())
+    {
+        return;
+    }
     if (const auto* Field = FindFProperty<FIntProperty>(GetClass(), TEXT("StyleIndex")))
     {
         Field->SetPropertyValue_InContainer(this, Index);
+        ReplicatedStyleIndex = Index;
         UpdateVisuals();
+        ForceNetUpdate();
     }
 }
 
