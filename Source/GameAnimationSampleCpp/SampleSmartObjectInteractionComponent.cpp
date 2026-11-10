@@ -7,11 +7,13 @@
 #include "EnhancedInputComponent.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/Pawn.h"
 #include "GameplayInteractionSmartObjectBehaviorDefinition.h"
 #include "GameplayStateTreeBlueprintFunctionLibrary.h"
 #include "InputAction.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "MoverComponent.h"
+#include "Net/UnrealNetwork.h"
 #include "SmartObjectBlueprintFunctionLibrary.h"
 #include "SmartObjectRequestTypes.h"
 #include "SmartObjectSubsystem.h"
@@ -92,6 +94,32 @@ namespace
     }
 }
 
+USampleSmartObjectInteractionComponent::USampleSmartObjectInteractionComponent()
+{
+    SetIsReplicatedByDefault(true);
+}
+
+void USampleSmartObjectInteractionComponent::GetLifetimeReplicatedProps(
+    TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+    DOREPLIFETIME(USampleSmartObjectInteractionComponent, bPlayerInteractionActive);
+}
+
+void USampleSmartObjectInteractionComponent::SetPlayerInteractionState(bool bActive)
+{
+    bPlayerInteractionActive = bActive;
+    if (const auto* State = FindFProperty<FBoolProperty>(GetClass(), PlayerInteractionState))
+    {
+        State->SetPropertyValue_InContainer(this, bActive);
+    }
+}
+
+void USampleSmartObjectInteractionComponent::OnRep_PlayerInteractionActive()
+{
+    SetPlayerInteractionState(bPlayerInteractionActive);
+}
+
 void USampleSmartObjectInteractionComponent::UpdateInteractionCollision(bool bShouldIgnore, AActor* OtherActor)
 {
     const AActor* Owner = GetOwner();
@@ -150,19 +178,23 @@ bool USampleSmartObjectInteractionComponent::TryStartPlayerInteraction()
         return false;
     }
 
-    auto* Tree = Cast<UStateTreeComponent>(TreeProperty->GetObjectPropertyValue_InContainer(this));
-    if (!IsValid(Tree))
+    if (bPlayerInteractionActive || IsInteracting->GetPropertyValue_InContainer(this))
     {
-        if (!UGameplayStateTreeBlueprintFunctionLibrary::RunStateTree(Owner, PlayerInteractionTree.LoadSynchronous()))
-        {
-            return false;
-        }
-        Tree = Owner->FindComponentByClass<UStateTreeComponent>();
-        CacheInteractionComponent(*this, TEXT("StateTreeComponent"), Tree);
+        return false;
     }
+    if (!Owner->HasAuthority())
+    {
+        if (const APawn* Pawn = Cast<APawn>(Owner); Pawn && Pawn->IsLocallyControlled())
+        {
+            ServerRequestPlayerInteraction();
+        }
+        return false;
+    }
+
+    auto* Tree = Cast<UStateTreeComponent>(TreeProperty->GetObjectPropertyValue_InContainer(this));
     const auto* Subsystem = USmartObjectSubsystem::GetCurrent(GetWorld());
     const FGameplayTag Tag = FGameplayTag::RequestGameplayTag(TEXT("SmartObject.ObjectType.Player"), false);
-    if (!Tree || !Subsystem || !Tag.IsValid())
+    if (!Subsystem || !Tag.IsValid())
     {
         return false;
     }
@@ -187,20 +219,51 @@ bool USampleSmartObjectInteractionComponent::TryStartPlayerInteraction()
         return false;
     }
     const FSmartObjectSlotHandle Slot = SelectPlayerSlot(*Subsystem, Results, Origin);
-    if (Target->GetActorTransform().InverseTransformPosition(Origin).X <= 0.0 ||
-        IsInteracting->GetPropertyValue_InContainer(this) || !Slot.IsValid())
+    if (Target->GetActorTransform().InverseTransformPosition(Origin).X <= 0.0 || !Slot.IsValid())
     {
-        IsInteracting->SetPropertyValue_InContainer(this, false);
         return false;
     }
 
+    if (!IsValid(Tree))
+    {
+        if (!UGameplayStateTreeBlueprintFunctionLibrary::RunStateTree(Owner, PlayerInteractionTree.LoadSynchronous()))
+        {
+            return false;
+        }
+        Tree = Owner->FindComponentByClass<UStateTreeComponent>();
+        CacheInteractionComponent(*this, TEXT("StateTreeComponent"), Tree);
+    }
+
     UScriptStruct* Payload = PlayerInteractionPayload.LoadSynchronous();
-    if (!Payload || !SendPlayerInteraction(*Tree, *Payload, Tag, *Target, Slot))
+    if (!Tree || !Payload || !SendPlayerInteraction(*Tree, *Payload, Tag, *Target, Slot))
     {
         return false;
     }
-    IsInteracting->SetPropertyValue_InContainer(this, true);
+    SetPlayerInteractionState(true);
     return true;
+}
+
+void USampleSmartObjectInteractionComponent::ServerRequestPlayerInteraction_Implementation()
+{
+    if (TryStartPlayerInteraction())
+    {
+        OpenPlayerInteractionGate();
+        ClientAcceptPlayerInteraction();
+    }
+}
+
+void USampleSmartObjectInteractionComponent::ClientAcceptPlayerInteraction_Implementation()
+{
+    SetPlayerInteractionState(true);
+    OpenPlayerInteractionGate();
+}
+
+void USampleSmartObjectInteractionComponent::ServerCancelPlayerInteraction_Implementation()
+{
+    if (bPlayerInteractionActive)
+    {
+        RequestPlayerInteractionCancellation();
+    }
 }
 
 void USampleSmartObjectInteractionComponent::BindPlayerInteractionInput(UEnhancedInputComponent& Input)
@@ -217,7 +280,7 @@ void USampleSmartObjectInteractionComponent::BindPlayerInteractionInput(UEnhance
         }
     };
     Bind(TEXT("/Game/Input/IA_Interact.IA_Interact"), &USampleSmartObjectInteractionComponent::HandlePlayerInteractionInput);
-    Bind(TEXT("/Game/Input/IA_Move.IA_Move"), &USampleSmartObjectInteractionComponent::RequestPlayerInteractionCancellation);
+    Bind(TEXT("/Game/Input/IA_Move.IA_Move"), &USampleSmartObjectInteractionComponent::HandlePlayerInteractionCancellationInput);
 }
 
 void USampleSmartObjectInteractionComponent::HandlePlayerInteractionInput()
@@ -228,9 +291,38 @@ void USampleSmartObjectInteractionComponent::HandlePlayerInteractionInput()
     }
 }
 
+void USampleSmartObjectInteractionComponent::HandlePlayerInteractionCancellationInput()
+{
+    const AActor* Owner = GetOwner();
+    if (!Owner || !bPlayerInteractionActive)
+    {
+        return;
+    }
+    if (Owner->HasAuthority())
+    {
+        RequestPlayerInteractionCancellation();
+        return;
+    }
+
+    const auto* State = FindFProperty<FBoolProperty>(GetClass(), PlayerInteractionState);
+    if (State && State->GetPropertyValue_InContainer(this))
+    {
+        RequestPlayerInteractionCancellation();
+        // The authored graph clears its local flag when the montage gate accepts the input.
+        if (!State->GetPropertyValue_InContainer(this))
+        {
+            ServerCancelPlayerInteraction();
+        }
+    }
+}
+
 void USampleSmartObjectInteractionComponent::ClearPlayerInteractionState()
 {
-    if (const auto* State = FindFProperty<FBoolProperty>(GetClass(), PlayerInteractionState))
+    if (GetOwner() && GetOwner()->HasAuthority())
+    {
+        SetPlayerInteractionState(false);
+    }
+    else if (const auto* State = FindFProperty<FBoolProperty>(GetClass(), PlayerInteractionState))
     {
         State->SetPropertyValue_InContainer(this, false);
     }
