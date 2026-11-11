@@ -8,6 +8,7 @@ class UInputAction;
 class USkeletalMeshComponent;
 struct FKey;
 struct FInputActionValue;
+struct FSampleTraversalApproach;
 
 /** Native state queries and gameplay movement for the reference Mover pawn. */
 UCLASS(Abstract, Blueprintable)
@@ -16,6 +17,13 @@ class GAMEANIMATIONSAMPLECPP_API ASampleMoverCharacter : public APawn
     GENERATED_BODY()
 
 public:
+    /**
+     * Builds the world-space sweep used by jump input and the authored traversal query interface.
+     * @param Approach Sweep dimensions and direction. Written only for a mode supported by the query.
+     * @return Whether the pawn supplied a traversal approach for its current mode.
+     */
+    bool TryBuildTraversalApproach(FSampleTraversalApproach& Approach) const;
+
     /** Installs the sandbox input context for the current local controller. */
     UFUNCTION(BlueprintCallable, Category = "Sample|Possession")
     void InstallSandboxInputMapping();

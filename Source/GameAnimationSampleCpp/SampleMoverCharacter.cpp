@@ -653,18 +653,19 @@ bool ASampleMoverCharacter::CanStartMoverTraversal() const
     return !Anim || !Anim->IsSlotActive(TEXT("DefaultSlot"));
 }
 
-bool ASampleMoverCharacter::TryMoverTraversal(bool bDrawForDuration)
+bool ASampleMoverCharacter::TryBuildTraversalApproach(FSampleTraversalApproach& Approach) const
 {
-    auto* Traversal = FindComponentByClass<USampleTraversalComponent>();
     const auto* Mover = FindComponentByClass<UCharacterMoverComponent>();
-    if (!Mover || !Traversal)
+    const auto Mode = static_cast<EAuthoredMovementMode>(ResolveMovementModeValue());
+    if (!Mover || (Mode != EAuthoredMovementMode::Grounded && Mode != EAuthoredMovementMode::Airborne &&
+        Mode != EAuthoredMovementMode::Sliding && Mode != EAuthoredMovementMode::Traversing))
     {
         return false;
     }
 
-    FSampleTraversalApproach Approach;
+    Approach = {};
     Approach.Radius = 30.0f;
-    if (ResolveMovementModeValue() == static_cast<uint8>(EAuthoredMovementMode::Airborne))
+    if (Mode == EAuthoredMovementMode::Airborne)
     {
         const auto* Snapshot = FindSnapshot(*this, TEXT("MoverDefaultInputs_PostSim"));
         const FVector Move = Snapshot && Snapshot->Struct == FCharacterDefaultInputs::StaticStruct()
@@ -684,7 +685,15 @@ bool ASampleMoverCharacter::TryMoverTraversal(bool bDrawForDuration)
         Approach.HalfHeight = 60.0f;
     }
 
-    return Traversal->TryAuthoredTraversal(Approach, bDrawForDuration ? EDrawDebugTrace::ForDuration : EDrawDebugTrace::ForOneFrame);
+    return true;
+}
+
+bool ASampleMoverCharacter::TryMoverTraversal(bool bDrawForDuration)
+{
+    auto* Traversal = FindComponentByClass<USampleTraversalComponent>();
+    FSampleTraversalApproach Approach;
+    return Traversal && TryBuildTraversalApproach(Approach) && Traversal->TryAuthoredTraversal(Approach,
+        bDrawForDuration ? EDrawDebugTrace::ForDuration : EDrawDebugTrace::ForOneFrame);
 }
 
 void ASampleMoverCharacter::HandleMoverJumpStarted()

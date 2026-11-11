@@ -5,6 +5,7 @@
 
 class UInputAction;
 struct FInputActionValue;
+struct FSampleTraversalApproach;
 
 /**
  * Input intent carried to the authority.
@@ -43,6 +44,9 @@ class GAMEANIMATIONSAMPLECPP_API ASampleCmcCharacter : public ACharacter
     GENERATED_BODY()
 
 public:
+    /** Builds the world-space approach used by jump input and the authored traversal query interface. */
+    FSampleTraversalApproach BuildTraversalApproach() const;
+
     /** Installs the sandbox input context for the current local controller. */
     UFUNCTION(BlueprintCallable, Category = "Sample|Possession")
     void InstallSandboxInputMapping();

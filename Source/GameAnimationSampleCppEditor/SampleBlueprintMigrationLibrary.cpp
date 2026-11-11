@@ -18,6 +18,7 @@
 #include "K2Node_IfThenElse.h"
 #include "K2Node_InputKey.h"
 #include "K2Node_Knot.h"
+#include "K2Node_Self.h"
 #include "K2Node_SpawnActorFromClass.h"
 #include "K2Node_VariableGet.h"
 #include "K2Node_VariableSet.h"
@@ -1205,6 +1206,74 @@ bool USampleBlueprintMigrationLibrary::ReplaceTraversalGeometry(UBlueprint* Blue
         Schema->TryCreateConnection(Call->GetThenPin(), Branch->GetExecPin()) &&
         Schema->TryCreateConnection(Call->GetReturnValuePin(), Branch->GetConditionPin()) &&
         Schema->TryCreateConnection(Branch->GetElsePin(), Rejection->FindPin(UEdGraphSchema_K2::PN_Execute, EGPD_Input));
+}
+
+bool USampleBlueprintMigrationLibrary::ForwardTraversalCheckInputs(UBlueprint* Blueprint, UEdGraph* Graph, UClass* Library)
+{
+    if (!Blueprint || !Graph || Graph->GetOuter() != Blueprint || Graph->GetFName() != TEXT("GetTraversalCheckInputs"))
+    {
+        return false;
+    }
+    const FName NativeName(TEXT("BuildImportedTraversalInputs"));
+    const UFunction* Native = Library ? Library->FindFunctionByName(NativeName) : nullptr;
+    TArray<UK2Node_FunctionEntry*> Entries;
+    TArray<UK2Node_FunctionResult*> Results;
+    Graph->GetNodesOfClass(Entries);
+    Graph->GetNodesOfClass(Results);
+    if (!Native || Entries.Num() != 1 || Results.IsEmpty() || Results.Num() > 2)
+    {
+        return false;
+    }
+    auto* Entry = Entries[0];
+    auto* Result = Results[0];
+    UEdGraphPin* Output = Result->FindPin(UEdGraphSchema_K2::PN_ReturnValue, EGPD_Input);
+    UEdGraphPin* Exec = Result->FindPin(UEdGraphSchema_K2::PN_Execute, EGPD_Input);
+    UEdGraphPin* Then = Entry->FindPin(UEdGraphSchema_K2::PN_Then, EGPD_Output);
+    if (!Output || !Exec || !Then || Output->PinType.PinCategory != UEdGraphSchema_K2::PC_Struct ||
+        !Output->PinType.PinSubCategoryObject.IsValid() ||
+        Output->PinType.PinSubCategoryObject->GetFName() != TEXT("S_TraversalCheckInputs"))
+    {
+        return false;
+    }
+    if (const auto* Call = FindUniqueCall(*Graph, NativeName))
+    {
+        return Results.Num() == 1 && GetOnlyPeer(Then) == Call &&
+            GetOnlyPeer(Exec) == Call && GetOnlyPeer(Output) == Call;
+    }
+    if (Results.Num() != 2 || Output->SubPins.Num() != 6)
+    {
+        return false;
+    }
+
+    TSet<UEdGraphNode*> OldBody;
+    for (UEdGraphNode* Node : Graph->Nodes)
+    {
+        if (Node != Entry && Node != Result)
+        {
+            OldBody.Add(Node);
+        }
+    }
+    RemoveNodes(*Blueprint, *Graph, OldBody);
+    const UEdGraphSchema* Schema = Graph->GetSchema();
+    Schema->RecombinePin(Output->SubPins[0]);
+
+    FGraphNodeCreator<UK2Node_CallFunction> CreateCall(*Graph);
+    auto* Call = CreateCall.CreateNode();
+    Call->SetFromFunction(Native);
+    Call->NodePosX = Entry->NodePosX + 340;
+    Call->NodePosY = Entry->NodePosY;
+    CreateCall.Finalize();
+    FGraphNodeCreator<UK2Node_Self> CreateSelf(*Graph);
+    auto* Self = CreateSelf.CreateNode();
+    Self->NodePosX = Entry->NodePosX + 100;
+    Self->NodePosY = Entry->NodePosY + 120;
+    CreateSelf.Finalize();
+    Result->NodePosX = Call->NodePosX + 380;
+    Result->NodePosY = Entry->NodePosY;
+    return Schema->TryCreateConnection(Then, Call->GetExecPin()) &&
+        Schema->TryCreateConnection(Self->FindPin(UEdGraphSchema_K2::PN_Self, EGPD_Output), Call->FindPin(TEXT("Pawn"), EGPD_Input)) &&
+        Schema->TryCreateConnection(Call->FindPin(TEXT("Inputs"), EGPD_Output), Output) &&
+        Schema->TryCreateConnection(Call->GetThenPin(), Exec);
 }
 
 bool USampleBlueprintMigrationLibrary::ReplaceTraversalCollision(UBlueprint* Blueprint, UEdGraph* Graph)

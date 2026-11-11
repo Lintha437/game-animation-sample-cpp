@@ -74,6 +74,7 @@ MIGRATIONS = (
     "smart_object_approach_task",
     "player_interaction_bindings",
     "multiplayer_spawn_game_mode",
+    "traversal_input_wrappers",
 )
 
 

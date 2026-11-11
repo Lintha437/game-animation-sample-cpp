@@ -56,7 +56,7 @@ Read the movement action values before applying any normalization for fixed-spee
 
 ### Replace existing input handlers
 
-For CMC jump input, keep the authored montage slot gate and attempt traversal before issuing the usual CMC jump. The ground probe scales its reach with forward speed. Falling and flying use the shorter, taller approach. Both movement systems send the native approach to the same traversal component so the original chooser and playback callbacks can consume it.
+For CMC jump input, keep the authored montage slot gate and attempt traversal before issuing the usual CMC jump. The ground probe scales its reach with forward speed. Falling and flying use the shorter, taller approach. Both movement systems send the native approach to the same traversal component so the original chooser and playback callbacks can consume it. If existing graphs call `GetTraversalCheckInputs`, route that function to the same builder and preserve its typed output.
 
 Bind movement and look on the pawn's local input component during possession. Keep the host's mapping contexts in their existing owner and preserve each action's trigger phase, dead zone and modifiers. If moving an existing Blueprint pawn to native bindings, switch each action's handler at the same time as removing its original event chain. In the editor, verify one callback per trigger phase after possession and after a pawn swap. Test mouse look as a per-update delta and stick look as a turn rate evaluated at several frame rates.
 

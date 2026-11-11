@@ -149,6 +149,16 @@ public:
     static bool ReplaceTraversalGeometry(UBlueprint* Blueprint, UEdGraph* Graph);
 
     /**
+     * Keeps a pawn's authored traversal query signature and forwards its output to C++.
+     * @param Blueprint Pawn asset that owns the graph.
+     * @param Graph Existing GetTraversalCheckInputs graph.
+     * @param Library Class exposing the native wildcard adapter.
+     * @return True when the native wrapper is wired or already installed.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
+    static bool ForwardTraversalCheckInputs(UBlueprint* Blueprint, UEdGraph* Graph, UClass* Library);
+
+    /**
      * Rewires the collision and activity nodes at the four traversal callback sites.
      * Preserves the authored montage, warp target, and movement mode nodes.
      * @param Blueprint Traversal component owning the event graph.
