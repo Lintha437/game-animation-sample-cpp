@@ -342,13 +342,12 @@ void ASampleCmcCharacter::OnWalkingOffLedge_Implementation(const FVector& Previo
     UnCrouch();
 }
 
-bool ASampleCmcCharacter::TryCmcTraversal(bool bDrawForDuration)
+FSampleTraversalApproach ASampleCmcCharacter::BuildTraversalApproach() const
 {
-    auto* Traversal = FindComponentByClass<USampleTraversalComponent>();
     const UCharacterMovementComponent* Movement = GetCharacterMovement();
-    if (!Traversal || !Movement)
+    if (!Movement)
     {
-        return false;
+        return {};
     }
 
     FSampleTraversalApproach Approach;
@@ -366,7 +365,14 @@ bool ASampleCmcCharacter::TryCmcTraversal(bool bDrawForDuration)
         Approach.Distance = FMath::GetMappedRangeValueClamped(FVector2D(0.0, 500.0), FVector2D(75.0, 350.0), LocalSpeed);
         Approach.HalfHeight = 60.0f;
     }
-    return Traversal->TryAuthoredTraversal(Approach, bDrawForDuration ? EDrawDebugTrace::ForDuration : EDrawDebugTrace::ForOneFrame);
+    return Approach;
+}
+
+bool ASampleCmcCharacter::TryCmcTraversal(bool bDrawForDuration)
+{
+    auto* Traversal = FindComponentByClass<USampleTraversalComponent>();
+    return Traversal && GetCharacterMovement() && Traversal->TryAuthoredTraversal(BuildTraversalApproach(),
+        bDrawForDuration ? EDrawDebugTrace::ForDuration : EDrawDebugTrace::ForOneFrame);
 }
 
 void ASampleCmcCharacter::HandleCmcJumpStarted()

@@ -8,6 +8,7 @@
 
 class UPrimitiveComponent;
 class UMoverComponent;
+class APawn;
 struct FSampleTraversalApproach;
 
 /**
@@ -21,6 +22,18 @@ class GAMEANIMATIONSAMPLECPP_API USampleTraversalComponent : public UActorCompon
     GENERATED_BODY()
 
 public:
+    /**
+     * Writes the native approach into the existing imported traversal input struct.
+     * Unsupported pawn classes or modes return the authored struct defaults.
+     * @param Pawn Character whose movement state supplies the sweep.
+     * @param Inputs Typed Blueprint output read by existing traversal callers.
+     */
+    UFUNCTION(BlueprintCallable, CustomThunk, Category = "Sample|Traversal", meta = (CustomStructureParam = "Inputs"))
+    static void BuildImportedTraversalInputs(const APawn* Pawn, int32& Inputs);
+
+    /** Resolves the wildcard output before dispatching to the pawn's native approach builder. */
+    DECLARE_FUNCTION(execBuildImportedTraversalInputs);
+
     /**
      * Caches the owner's authored traversal interface and resolves the Mover playback component.
      * Called at the reference component's BeginPlay. The owner and its components remain externally owned.
