@@ -35,7 +35,7 @@ SHA-256 comparison matched all 3,899 files under the installed sample's `Content
 
 ### Remaining runtime graph audit
 
-The five maps' Blueprint dependency inventory still includes the sandbox input display (`WB_SimpleController`), Blueprint debug helpers (`BFL_HelpfulFunctions` and the pawn and AI debug graphs), Look At POI demonstration presentation and level-script setup, and the legacy pawn `GetTraversalCheckInputs` wrappers. These paths need individual caller and runtime checks before counting them as migrated. The main native jump handlers already build and submit their own traversal queries. Full runtime graph migration and rendered parity remain open.
+The five maps' Blueprint dependency inventory still includes the sandbox input display (`WB_SimpleController`), Blueprint debug helpers (`BFL_HelpfulFunctions` and the pawn and AI debug graphs), and Look At POI demonstration presentation and level-script setup. These paths need individual caller and runtime checks before counting them as migrated. Full runtime graph migration and rendered parity remain open.
 
 ## Blueprint migration acceptance
 
@@ -760,6 +760,12 @@ When the authority's montage ended before the owning client's montage, CMC could
 In two-player listen-server PIE in `DefaultLevel`, the owning CMC client started the authored vault from the supplied placement. Before the fix, the owner briefly reached Falling, then returned to Flying alongside the authority. With the fix, both copies played the same vault montage, reached Falling and settled into Walking at 3 FPS and 60 FPS with both correction flags cleared. At four game seconds the positions were 1.11 cm apart at 3 FPS and matched to the log's 0.001 cm precision at 60 FPS. The test used `DDCvar.PawnClass 0`, `t.MaxFPS 3` or `t.MaxFPS 60`, and the existing `TryTraversalAction` entry point.
 
 The Win64 Development Editor built, and `GameAnimationSampleCpp.Migration.TraversalMovement` passed. It verifies that authority holds Flying and accepts the owner's move after finishing the local montage. The timeout fallback, packet loss, dedicated server and other vault approaches are **Not run**.
+
+### Pawn traversal input queries
+
+`Scripts/migrate_traversal_input_wrappers.py` routes both sandbox pawns' existing `GetTraversalCheckInputs` functions to the builders used by native jump input. Callers still receive `S_TraversalCheckInputs` with the original field names and types. The CMC query keeps its grounded speed range and Falling and Flying sweep. The Mover query uses finalized movement inputs for airborne direction and preserves the imported defaults in modes outside its query.
+
+An unattended Editor comparison called both Blueprint functions before and after conversion. All six sweep fields matched in 13 cases, comprising CMC Walking, Falling and Flying at four velocities and the Mover pawn at rest. Both Blueprints compiled. The installer ran a second time and reported the queries already installed. Both Win64 Development targets built. The `GameAnimationSampleCpp.Migration.Traversal` filter passed its ledge and movement tests. The five map packages and the primary CMC and Mover Animation Blueprints matched the original sample by SHA-256. Moving and airborne Mover comparisons, physical input and rendered traversal are **Not run** for this change.
 
 ### Sandbox still camera
 
