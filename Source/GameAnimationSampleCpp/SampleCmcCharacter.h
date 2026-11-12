@@ -47,6 +47,9 @@ public:
     /** Builds the world-space approach used by jump input and the authored traversal query interface. */
     FSampleTraversalApproach BuildTraversalApproach() const;
 
+    /** Returns the current authored gait used by the traversal chooser. */
+    uint8 GetTraversalGaitValue() const;
+
     /** Installs the sandbox input context for the current local controller. */
     UFUNCTION(BlueprintCallable, Category = "Sample|Possession")
     void InstallSandboxInputMapping();

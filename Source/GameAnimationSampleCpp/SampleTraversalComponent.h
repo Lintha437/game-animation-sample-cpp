@@ -35,6 +35,18 @@ public:
     DECLARE_FUNCTION(execBuildImportedTraversalInputs);
 
     /**
+     * Writes character state and borrowed component references into the authored traversal structure.
+     * Component references remain owned by the pawn. The query samples the current movement state.
+     * @param Pawn Character supplying movement state and components.
+     * @param Properties Typed output used by the authored traversal chooser.
+     */
+    UFUNCTION(BlueprintCallable, CustomThunk, Category = "Sample|Traversal", meta = (CustomStructureParam = "Properties"))
+    static void BuildImportedTraversalProperties(const APawn* Pawn, int32& Properties);
+
+    /** Resolves the typed output before sampling the supplied pawn. */
+    DECLARE_FUNCTION(execBuildImportedTraversalProperties);
+
+    /**
      * Caches the owner's authored traversal interface and resolves the Mover playback component.
      * Called at the reference component's BeginPlay. The owner and its components remain externally owned.
      */

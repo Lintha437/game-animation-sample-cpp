@@ -24,6 +24,9 @@ public:
      */
     bool TryBuildTraversalApproach(FSampleTraversalApproach& Approach) const;
 
+    /** Returns the gait from the finalized Mover input snapshot used by traversal. */
+    uint8 GetTraversalGaitValue() const;
+
     /** Installs the sandbox input context for the current local controller. */
     UFUNCTION(BlueprintCallable, Category = "Sample|Possession")
     void InstallSandboxInputMapping();

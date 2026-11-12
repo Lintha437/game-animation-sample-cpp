@@ -767,6 +767,12 @@ The Win64 Development Editor built, and `GameAnimationSampleCpp.Migration.Traver
 
 An unattended Editor comparison called both Blueprint functions before and after conversion. All six sweep fields matched in 13 cases, comprising CMC Walking, Falling and Flying at four velocities and the Mover pawn at rest. Both Blueprints compiled. The installer ran a second time and reported the queries already installed. Both Win64 Development targets built. The `GameAnimationSampleCpp.Migration.Traversal` filter passed its ledge and movement tests. The five map packages and the primary CMC and Mover Animation Blueprints matched the original sample by SHA-256. Moving and airborne Mover comparisons, physical input and rendered traversal are **Not run** for this change.
 
+### Pawn traversal character state
+
+`Scripts/migrate_traversal_character_state.py` routes both existing `Get_PropertiesForTraversal` functions to C++. The interface still returns `S_CharacterPropertiesForTraversal` at the original call sites. Component references remain owned by their pawn. CMC reads its movement mode, current gait and horizontal speed. Mover uses its finalized gait, mode map and horizontal velocity.
+
+`GameAnimationSampleCpp.Migration.TraversalCharacterState` passed on the original graph bodies and on the native wrappers. It verified component identity and all three movement fields for seven CMC modes at three gait and velocity settings, and two Mover modes at three gait settings. The Mover cases supplied different pre-simulation and finalized gait values. Separate assertions exercised all six fields of the migrated Mover sweep in Walking and Falling with a nonzero horizontal velocity and finalized airborne input. The enclosing `GameAnimationSampleCpp.Migration.Traversal` filter passed all three tests. Both Win64 Development targets built. Both pawn Blueprints compiled, and rerunning both traversal wrapper installers reported the native calls already installed. Rendered traversal and physical input are **Not run** for this change.
+
 ### Sandbox still camera
 
 `Scripts/migrate_sandbox_fixtures.py` gives `StillCam` a native parent that updates its tracking transform. The asset retains its camera component and existing fields. The native tick aims before following and records the target's current location even with follow disabled, so enabling follow uses the next movement delta. A missing target leaves the camera and its last location alone.
