@@ -37,6 +37,7 @@ namespace
     constexpr uint8 MoverGaitWalk = 0;
     constexpr uint8 MoverGaitRun = 1;
     constexpr uint8 MoverGaitSprint = 2;
+    const FName MoverGaitField(TEXT("Gait_5_13BB29FB446593C2412547A541C4C00B"));
     constexpr uint8 FaceMovement = 0;
     constexpr uint8 StrafeRotationMode = 1;
     constexpr uint8 AimRotationMode = 2;
@@ -653,6 +654,14 @@ bool ASampleMoverCharacter::CanStartMoverTraversal() const
     return !Anim || !Anim->IsSlotActive(TEXT("DefaultSlot"));
 }
 
+uint8 ASampleMoverCharacter::GetTraversalGaitValue() const
+{
+    const auto* Snapshot = FindSnapshot(*this, TEXT("MoverCustomInputs_PostSim"));
+    const auto* Gait = Snapshot ? Snapshot->Struct->FindPropertyByName(MoverGaitField) : nullptr;
+    return Gait ? static_cast<uint8>(ReadEnum(*Gait, Gait->ContainerPtrToValuePtr<void>(
+        Snapshot->ContainerPtrToValuePtr<void>(this)))) : MoverGaitWalk;
+}
+
 bool ASampleMoverCharacter::TryBuildTraversalApproach(FSampleTraversalApproach& Approach) const
 {
     const auto* Mover = FindComponentByClass<UCharacterMoverComponent>();
@@ -918,7 +927,7 @@ bool ASampleMoverCharacter::PrepareMoverDirectionalOffset(double& Angle, uint8& 
         break;
     }
 
-    const auto* Gait = Type->FindPropertyByName(TEXT("Gait_5_13BB29FB446593C2412547A541C4C00B"));
+    const auto* Gait = Type->FindPropertyByName(MoverGaitField);
     if ((Gait && ReadEnum(*Gait, Gait->ContainerPtrToValuePtr<void>(Data)) == MoverGaitSprint) ||
         FMath::Abs(Angle) <= ForwardLimit)
     {
@@ -956,7 +965,7 @@ FMoverInputCmdContext ASampleMoverCharacter::BuildMoverInputCommand(int32 SimTim
             CustomData, Rotation->GetReturnProperty(), Args.GetStructMemory());
     }
     Input->OrientationIntent = ResolveOrientationIntent();
-    SetEnumByte(CustomType, CustomData, TEXT("Gait_5_13BB29FB446593C2412547A541C4C00B"), ResolveGaitValue());
+    SetEnumByte(CustomType, CustomData, MoverGaitField, ResolveGaitValue());
     WriteNumber(CustomType, CustomData, TEXT("ControlRotationRate_29_A6F8894147153250CDA5C889CD9DB171"),
         ReadNumber(GetClass(), this, TEXT("ControlRotationRate")));
     const auto* Crouch = FindFProperty<FBoolProperty>(CustomType, TEXT("WantsToCrouch_28_911DFFDE4A6B03A7346BE8A33869E3D6"));

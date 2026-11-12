@@ -342,6 +342,11 @@ void ASampleCmcCharacter::OnWalkingOffLedge_Implementation(const FVector& Previo
     UnCrouch();
 }
 
+uint8 ASampleCmcCharacter::GetTraversalGaitValue() const
+{
+    return static_cast<uint8>(ReadEnumValue(*this, GaitName, WalkGait));
+}
+
 FSampleTraversalApproach ASampleCmcCharacter::BuildTraversalApproach() const
 {
     const UCharacterMovementComponent* Movement = GetCharacterMovement();

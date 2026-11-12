@@ -1,6 +1,9 @@
 #include "SampleTraversalComponent.h"
 
 #include "Components/CapsuleComponent.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "DefaultMovementSet/CharacterMoverComponent.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "SampleCmcCharacter.h"
 #include "SampleMoverCharacter.h"
 #include "SampleTraversalClearance.h"
@@ -62,7 +65,73 @@ namespace
                 Property->SetPropertyValue_InContainer(Data, Value);
             }
         }
+
+        void SetEnum(FName Name, uint8 Value) const
+        {
+            const auto* Property = Type->FindPropertyByName(Name);
+            if (const auto* Enum = CastField<FEnumProperty>(Property))
+            {
+                Enum->GetUnderlyingProperty()->SetIntPropertyValue(Enum->ContainerPtrToValuePtr<void>(Data),
+                    static_cast<uint64>(Value));
+            }
+            else if (const auto* Byte = CastField<FByteProperty>(Property))
+            {
+                Byte->SetPropertyValue_InContainer(Data, Value);
+            }
+        }
+
+        void SetObject(FName Name, UObject* Value) const
+        {
+            if (const auto* Field = FindFProperty<FObjectPropertyBase>(Type, Name);
+                Field && (!Value || Value->IsA(Field->PropertyClass)))
+            {
+                Field->SetObjectPropertyValue_InContainer(Data, Value);
+            }
+        }
     };
+
+    UObject* ReadPawnObject(const APawn& Pawn, FName Name)
+    {
+        const auto* Field = FindFProperty<FObjectPropertyBase>(Pawn.GetClass(), Name);
+        return Field ? Field->GetObjectPropertyValue_InContainer(&Pawn) : nullptr;
+    }
+
+    void WriteCharacterProperties(const FBlueprintStructure& Output, const APawn& Pawn, UObject* Capsule,
+        UObject* Mesh, uint8 MovementMode, uint8 Gait, double Speed)
+    {
+        Output.SetObject(TEXT("Capsule_21_D1F3797D47A5FB49C3DFAE8FAB15AFCC"), Capsule);
+        Output.SetObject(TEXT("Mesh_15_D47797BD4F40417B966E3BB7E0AC62D3"), Mesh);
+        Output.SetObject(TEXT("MotionWarping_18_C9F4AD1440C92128F649A7BA8B49094B"),
+            ReadPawnObject(Pawn, TEXT("MotionWarping")));
+        Output.SetEnum(TEXT("MovementMode_22_F39395024EEBA400FBE9FB8AE0EF7350"), MovementMode);
+        Output.SetEnum(TEXT("Gait_12_9093F6E14192D37D2F0223B94E64FF71"), Gait);
+        Output.Set(TEXT("Speed_26_C6C3500C4C3030A343948F80DFD60AEE"), Speed);
+    }
+
+    void SampleCharacterProperties(const FBlueprintStructure& Output, const APawn* Pawn)
+    {
+        if (const auto* Cmc = Cast<ASampleCmcCharacter>(Pawn))
+        {
+            const auto* Movement = Cmc->GetCharacterMovement();
+            const EMovementMode Mode = Movement ? Movement->MovementMode.GetValue() : MOVE_None;
+            // These are the serialized OnGround and InAir values of the authored enum.
+            constexpr uint8 OnGround = 0;
+            constexpr uint8 InAir = 1;
+            const bool bGroundMode = Mode == MOVE_None || Mode == MOVE_Walking || Mode == MOVE_NavWalking;
+            WriteCharacterProperties(Output, *Cmc, Cmc->GetCapsuleComponent(), Cmc->GetMesh(),
+                bGroundMode ? OnGround : InAir, Cmc->GetTraversalGaitValue(), Movement ? Movement->Velocity.Size2D() : 0.0);
+        }
+        else if (const auto* Mover = Cast<ASampleMoverCharacter>(Pawn))
+        {
+            const auto* Movement = Cast<UCharacterMoverComponent>(ReadPawnObject(*Mover, TEXT("CharacterMover")));
+            if (IsValid(Movement))
+            {
+                WriteCharacterProperties(Output, *Mover, ReadPawnObject(*Mover, TEXT("Capsule")),
+                    ReadPawnObject(*Mover, TEXT("SkeletalMesh")), Mover->ResolveMovementModeValue(),
+                    Mover->GetTraversalGaitValue(), Movement->GetVelocity().Size2D());
+            }
+        }
+    }
 
     void WriteApproach(const FBlueprintStructure& Output, const FSampleTraversalApproach& Approach)
     {
@@ -157,6 +226,26 @@ DEFINE_FUNCTION(USampleTraversalComponent::execBuildImportedTraversalInputs)
                 WriteApproach(Output, Approach);
             }
         }
+    }
+    P_NATIVE_END;
+}
+
+void USampleTraversalComponent::BuildImportedTraversalProperties(const APawn*, int32&)
+{
+    checkNoEntry();
+}
+
+DEFINE_FUNCTION(USampleTraversalComponent::execBuildImportedTraversalProperties)
+{
+    P_GET_OBJECT(APawn, Pawn);
+    const FBlueprintStructure Output = FBlueprintStructure::Read(Stack);
+    P_FINISH;
+
+    P_NATIVE_BEGIN;
+    if (Output.Data && Output.Type && Output.Type->GetFName() == TEXT("S_CharacterPropertiesForTraversal"))
+    {
+        Output.Type->ClearScriptStruct(Output.Data);
+        SampleCharacterProperties(Output, Pawn);
     }
     P_NATIVE_END;
 }
