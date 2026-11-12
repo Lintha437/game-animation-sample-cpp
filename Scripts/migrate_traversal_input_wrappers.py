@@ -13,7 +13,8 @@ PAWNS = {
 NATIVE = "/Script/GameAnimationSampleCpp"
 
 
-def migrate():
+def migrate(graph_name="GetTraversalCheckInputs", forward="forward_traversal_check_inputs",
+            backup_group="TraversalInputWrappers"):
     project = Path(unreal.Paths.get_project_file_path()).resolve()
     if project.name != "GameAnimSampleCpp.uproject":
         raise RuntimeError("Run this migration in the native sample project.")
@@ -33,13 +34,13 @@ def migrate():
         if not parent or parent.get_path_name() != f"{NATIVE}.{native_parent}" or asset_path in dirty_packages():
             raise RuntimeError(f"Load a clean migrated pawn: {asset_path}")
         graph = next((item for item in editor.list_graphs(asset)
-                      if item.get_name() == "GetTraversalCheckInputs"), None)
+                      if item.get_name() == graph_name), None)
         migration = unreal.SampleBlueprintMigrationLibrary
-        if not graph or not migration.forward_traversal_check_inputs(asset, graph, library):
+        if not graph or not getattr(migration, forward)(asset, graph, library):
             raise RuntimeError(f"Could not forward the traversal query on {name}. Discard unsaved changes.")
         if asset_path in dirty_packages():
             package = project.parent / f"Content/Blueprints/{name}.uasset"
-            backup = project.parent / "Saved/BlueprintMigration/TraversalInputWrappers" / package.name
+            backup = project.parent / "Saved/BlueprintMigration" / backup_group / package.name
             if backup.exists() and backup.read_bytes() != package.read_bytes():
                 raise RuntimeError(f"Traversal query backup differs from the current package: {backup}")
             pending.append((asset, package, backup))

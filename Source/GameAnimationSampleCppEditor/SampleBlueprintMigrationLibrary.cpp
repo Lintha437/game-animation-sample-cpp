@@ -1208,19 +1208,19 @@ bool USampleBlueprintMigrationLibrary::ReplaceTraversalGeometry(UBlueprint* Blue
         Schema->TryCreateConnection(Branch->GetElsePin(), Rejection->FindPin(UEdGraphSchema_K2::PN_Execute, EGPD_Input));
 }
 
-bool USampleBlueprintMigrationLibrary::ForwardTraversalCheckInputs(UBlueprint* Blueprint, UEdGraph* Graph, UClass* Library)
+static bool ForwardTraversalPawnQuery(UBlueprint* Blueprint, UEdGraph* Graph, UClass* Library, FName GraphName,
+    FName NativeName, FName StructName, FName ParameterName, int32 ResultCount)
 {
-    if (!Blueprint || !Graph || Graph->GetOuter() != Blueprint || Graph->GetFName() != TEXT("GetTraversalCheckInputs"))
+    if (!Blueprint || !Graph || Graph->GetOuter() != Blueprint || Graph->GetFName() != GraphName)
     {
         return false;
     }
-    const FName NativeName(TEXT("BuildImportedTraversalInputs"));
     const UFunction* Native = Library ? Library->FindFunctionByName(NativeName) : nullptr;
     TArray<UK2Node_FunctionEntry*> Entries;
     TArray<UK2Node_FunctionResult*> Results;
     Graph->GetNodesOfClass(Entries);
     Graph->GetNodesOfClass(Results);
-    if (!Native || Entries.Num() != 1 || Results.IsEmpty() || Results.Num() > 2)
+    if (!Native || Entries.Num() != 1 || Results.IsEmpty() || Results.Num() > ResultCount)
     {
         return false;
     }
@@ -1231,16 +1231,16 @@ bool USampleBlueprintMigrationLibrary::ForwardTraversalCheckInputs(UBlueprint* B
     UEdGraphPin* Then = Entry->FindPin(UEdGraphSchema_K2::PN_Then, EGPD_Output);
     if (!Output || !Exec || !Then || Output->PinType.PinCategory != UEdGraphSchema_K2::PC_Struct ||
         !Output->PinType.PinSubCategoryObject.IsValid() ||
-        Output->PinType.PinSubCategoryObject->GetFName() != TEXT("S_TraversalCheckInputs"))
+        Output->PinType.PinSubCategoryObject->GetFName() != StructName)
     {
         return false;
     }
     if (const auto* Call = FindUniqueCall(*Graph, NativeName))
     {
-        return Results.Num() == 1 && GetOnlyPeer(Then) == Call &&
+        return Call->GetTargetFunction() == Native && Results.Num() == 1 && GetOnlyPeer(Then) == Call &&
             GetOnlyPeer(Exec) == Call && GetOnlyPeer(Output) == Call;
     }
-    if (Results.Num() != 2 || Output->SubPins.Num() != 6)
+    if (Results.Num() != ResultCount || Output->SubPins.Num() != 6)
     {
         return false;
     }
@@ -1272,8 +1272,20 @@ bool USampleBlueprintMigrationLibrary::ForwardTraversalCheckInputs(UBlueprint* B
     Result->NodePosY = Entry->NodePosY;
     return Schema->TryCreateConnection(Then, Call->GetExecPin()) &&
         Schema->TryCreateConnection(Self->FindPin(UEdGraphSchema_K2::PN_Self, EGPD_Output), Call->FindPin(TEXT("Pawn"), EGPD_Input)) &&
-        Schema->TryCreateConnection(Call->FindPin(TEXT("Inputs"), EGPD_Output), Output) &&
+        Schema->TryCreateConnection(Call->FindPin(ParameterName, EGPD_Output), Output) &&
         Schema->TryCreateConnection(Call->GetThenPin(), Exec);
+}
+
+bool USampleBlueprintMigrationLibrary::ForwardTraversalCheckInputs(UBlueprint* Blueprint, UEdGraph* Graph, UClass* Library)
+{
+    return ForwardTraversalPawnQuery(Blueprint, Graph, Library, TEXT("GetTraversalCheckInputs"),
+        TEXT("BuildImportedTraversalInputs"), TEXT("S_TraversalCheckInputs"), TEXT("Inputs"), 2);
+}
+
+bool USampleBlueprintMigrationLibrary::ForwardTraversalProperties(UBlueprint* Blueprint, UEdGraph* Graph, UClass* Library)
+{
+    return ForwardTraversalPawnQuery(Blueprint, Graph, Library, TEXT("Get_PropertiesForTraversal"),
+        TEXT("BuildImportedTraversalProperties"), TEXT("S_CharacterPropertiesForTraversal"), TEXT("Properties"), 1);
 }
 
 bool USampleBlueprintMigrationLibrary::ReplaceTraversalCollision(UBlueprint* Blueprint, UEdGraph* Graph)
