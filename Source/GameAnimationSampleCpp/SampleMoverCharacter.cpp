@@ -136,13 +136,18 @@ namespace
         return Inner && Inner->PropertyClass == AActor::StaticClass() ? Array : nullptr;
     }
 
-    int64 GetPreSimRotationMode(const ASampleMoverCharacter& Pawn)
+    int64 GetSnapshotRotationMode(const ASampleMoverCharacter& Pawn, FName Snapshot)
     {
-        const FStructProperty* Custom = FindSnapshot(Pawn, TEXT("MoverCustomInputs_PreSim"));
+        const FStructProperty* Custom = FindSnapshot(Pawn, Snapshot);
         const FProperty* Rotation = Custom ? Custom->Struct->FindPropertyByName(
             TEXT("RotationMode_11_A4BE1D7943913AA41D3A5BB9A6A7B0A9")) : nullptr;
         return Rotation ? ReadEnum(*Rotation, Rotation->ContainerPtrToValuePtr<void>(
             Custom->ContainerPtrToValuePtr<void>(&Pawn))) : FaceMovement;
+    }
+
+    int64 GetPreSimRotationMode(const ASampleMoverCharacter& Pawn)
+    {
+        return GetSnapshotRotationMode(Pawn, TEXT("MoverCustomInputs_PreSim"));
     }
 
     void WriteVector(ASampleMoverCharacter& Pawn, FName Name, const FVector& Value)
@@ -654,12 +659,23 @@ bool ASampleMoverCharacter::CanStartMoverTraversal() const
     return !Anim || !Anim->IsSlotActive(TEXT("DefaultSlot"));
 }
 
-uint8 ASampleMoverCharacter::GetTraversalGaitValue() const
+uint8 ASampleMoverCharacter::GetAuthoredGaitValue() const
 {
     const auto* Snapshot = FindSnapshot(*this, TEXT("MoverCustomInputs_PostSim"));
     const auto* Gait = Snapshot ? Snapshot->Struct->FindPropertyByName(MoverGaitField) : nullptr;
     return Gait ? static_cast<uint8>(ReadEnum(*Gait, Gait->ContainerPtrToValuePtr<void>(
         Snapshot->ContainerPtrToValuePtr<void>(this)))) : MoverGaitWalk;
+}
+
+uint8 ASampleMoverCharacter::GetAuthoredCameraModeValue() const
+{
+    constexpr uint8 TwinStickCamera = 3;
+    if (IsMoverTwinStick(*this))
+    {
+        return TwinStickCamera;
+    }
+    const int64 Rotation = GetSnapshotRotationMode(*this, TEXT("MoverCustomInputs_PostSim"));
+    return Rotation >= FaceMovement && Rotation <= AimRotationMode ? static_cast<uint8>(Rotation) : FaceMovement;
 }
 
 bool ASampleMoverCharacter::TryBuildTraversalApproach(FSampleTraversalApproach& Approach) const

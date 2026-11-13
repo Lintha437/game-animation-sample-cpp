@@ -24,8 +24,11 @@ public:
      */
     bool TryBuildTraversalApproach(FSampleTraversalApproach& Approach) const;
 
-    /** Returns the gait from the finalized Mover input snapshot used by traversal. */
-    uint8 GetTraversalGaitValue() const;
+    /** Returns the finalized Mover gait for the traversal chooser and the camera interface. */
+    uint8 GetAuthoredGaitValue() const;
+
+    /** Converts finalized facing to the authored camera mode, with twin-stick taking precedence. */
+    uint8 GetAuthoredCameraModeValue() const;
 
     /** Installs the sandbox input context for the current local controller. */
     UFUNCTION(BlueprintCallable, Category = "Sample|Possession")

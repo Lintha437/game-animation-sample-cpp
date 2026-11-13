@@ -47,8 +47,14 @@ public:
     /** Builds the world-space approach used by jump input and the authored traversal query interface. */
     FSampleTraversalApproach BuildTraversalApproach() const;
 
-    /** Returns the current authored gait used by the traversal chooser. */
-    uint8 GetTraversalGaitValue() const;
+    /** Returns the current gait for the traversal chooser and the camera interface. */
+    uint8 GetAuthoredGaitValue() const;
+
+    /** Returns the authored camera mode, with aim taking precedence over strafe. */
+    uint8 GetAuthoredCameraModeValue() const;
+
+    /** Reads the current camera style from the imported pawn's instance state. */
+    uint8 GetAuthoredCameraStyleValue() const;
 
     /** Installs the sandbox input context for the current local controller. */
     UFUNCTION(BlueprintCallable, Category = "Sample|Possession")

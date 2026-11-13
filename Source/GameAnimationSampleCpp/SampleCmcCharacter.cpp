@@ -342,9 +342,23 @@ void ASampleCmcCharacter::OnWalkingOffLedge_Implementation(const FVector& Previo
     UnCrouch();
 }
 
-uint8 ASampleCmcCharacter::GetTraversalGaitValue() const
+uint8 ASampleCmcCharacter::GetAuthoredGaitValue() const
 {
     return static_cast<uint8>(ReadEnumValue(*this, GaitName, WalkGait));
+}
+
+uint8 ASampleCmcCharacter::GetAuthoredCameraModeValue() const
+{
+    if (ReadInputIntent(*this, AimIntent))
+    {
+        return 2;
+    }
+    return ReadInputIntent(*this, StrafeIntent) ? 1 : 0;
+}
+
+uint8 ASampleCmcCharacter::GetAuthoredCameraStyleValue() const
+{
+    return static_cast<uint8>(ReadEnumValue(*this, TEXT("CameraStyle"), 0));
 }
 
 FSampleTraversalApproach ASampleCmcCharacter::BuildTraversalApproach() const

@@ -169,6 +169,16 @@ public:
     static bool ForwardTraversalProperties(UBlueprint* Blueprint, UEdGraph* Graph, UClass* Library);
 
     /**
+     * Forwards the pawn's existing camera state query while preserving its camera rig interface.
+     * @param Blueprint Pawn asset that owns the graph.
+     * @param Graph Existing Get_PropertiesForCamera graph.
+     * @param Library Class exposing the native camera state adapter.
+     * @return True when the wrapper is wired or already installed.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
+    static bool ForwardCameraProperties(UBlueprint* Blueprint, UEdGraph* Graph, UClass* Library);
+
+    /**
      * Rewires the collision and activity nodes at the four traversal callback sites.
      * Preserves the authored montage, warp target, and movement mode nodes.
      * @param Blueprint Traversal component owning the event graph.
