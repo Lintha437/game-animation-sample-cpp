@@ -21,6 +21,7 @@
 #include "K2Node_Self.h"
 #include "K2Node_SpawnActorFromClass.h"
 #include "K2Node_VariableGet.h"
+#include "K2Node_MakeStruct.h"
 #include "K2Node_VariableSet.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 
@@ -1208,8 +1209,8 @@ bool USampleBlueprintMigrationLibrary::ReplaceTraversalGeometry(UBlueprint* Blue
         Schema->TryCreateConnection(Branch->GetElsePin(), Rejection->FindPin(UEdGraphSchema_K2::PN_Execute, EGPD_Input));
 }
 
-static bool ForwardTraversalPawnQuery(UBlueprint* Blueprint, UEdGraph* Graph, UClass* Library, FName GraphName,
-    FName NativeName, FName StructName, FName ParameterName, int32 ResultCount)
+static bool ForwardPawnStructQuery(UBlueprint* Blueprint, UEdGraph* Graph, UClass* Library, FName GraphName,
+    FName NativeName, FName StructName, FName ParameterName, int32 ResultCount, int32 SplitFieldCount)
 {
     if (!Blueprint || !Graph || Graph->GetOuter() != Blueprint || Graph->GetFName() != GraphName)
     {
@@ -1240,7 +1241,8 @@ static bool ForwardTraversalPawnQuery(UBlueprint* Blueprint, UEdGraph* Graph, UC
         return Call->GetTargetFunction() == Native && Results.Num() == 1 && GetOnlyPeer(Then) == Call &&
             GetOnlyPeer(Exec) == Call && GetOnlyPeer(Output) == Call;
     }
-    if (Results.Num() != ResultCount || Output->SubPins.Num() != 6)
+    if (Results.Num() != ResultCount || Output->SubPins.Num() != SplitFieldCount ||
+        (SplitFieldCount == 0 && !Cast<UK2Node_MakeStruct>(GetOnlyPeer(Output))))
     {
         return false;
     }
@@ -1255,7 +1257,10 @@ static bool ForwardTraversalPawnQuery(UBlueprint* Blueprint, UEdGraph* Graph, UC
     }
     RemoveNodes(*Blueprint, *Graph, OldBody);
     const UEdGraphSchema* Schema = Graph->GetSchema();
-    Schema->RecombinePin(Output->SubPins[0]);
+    if (SplitFieldCount > 0)
+    {
+        Schema->RecombinePin(Output->SubPins[0]);
+    }
 
     FGraphNodeCreator<UK2Node_CallFunction> CreateCall(*Graph);
     auto* Call = CreateCall.CreateNode();
@@ -1278,14 +1283,20 @@ static bool ForwardTraversalPawnQuery(UBlueprint* Blueprint, UEdGraph* Graph, UC
 
 bool USampleBlueprintMigrationLibrary::ForwardTraversalCheckInputs(UBlueprint* Blueprint, UEdGraph* Graph, UClass* Library)
 {
-    return ForwardTraversalPawnQuery(Blueprint, Graph, Library, TEXT("GetTraversalCheckInputs"),
-        TEXT("BuildImportedTraversalInputs"), TEXT("S_TraversalCheckInputs"), TEXT("Inputs"), 2);
+    return ForwardPawnStructQuery(Blueprint, Graph, Library, TEXT("GetTraversalCheckInputs"),
+        TEXT("BuildImportedTraversalInputs"), TEXT("S_TraversalCheckInputs"), TEXT("Inputs"), 2, 6);
 }
 
 bool USampleBlueprintMigrationLibrary::ForwardTraversalProperties(UBlueprint* Blueprint, UEdGraph* Graph, UClass* Library)
 {
-    return ForwardTraversalPawnQuery(Blueprint, Graph, Library, TEXT("Get_PropertiesForTraversal"),
-        TEXT("BuildImportedTraversalProperties"), TEXT("S_CharacterPropertiesForTraversal"), TEXT("Properties"), 1);
+    return ForwardPawnStructQuery(Blueprint, Graph, Library, TEXT("Get_PropertiesForTraversal"),
+        TEXT("BuildImportedTraversalProperties"), TEXT("S_CharacterPropertiesForTraversal"), TEXT("Properties"), 1, 6);
+}
+
+bool USampleBlueprintMigrationLibrary::ForwardCameraProperties(UBlueprint* Blueprint, UEdGraph* Graph, UClass* Library)
+{
+    return ForwardPawnStructQuery(Blueprint, Graph, Library, TEXT("Get_PropertiesForCamera"),
+        TEXT("BuildImportedCameraProperties"), TEXT("S_CharacterPropertiesForCamera"), TEXT("Properties"), 1, 0);
 }
 
 bool USampleBlueprintMigrationLibrary::ReplaceTraversalCollision(UBlueprint* Blueprint, UEdGraph* Graph)

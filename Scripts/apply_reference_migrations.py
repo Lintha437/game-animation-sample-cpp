@@ -76,6 +76,7 @@ MIGRATIONS = (
     "multiplayer_spawn_game_mode",
     "traversal_input_wrappers",
     "traversal_character_state",
+    "camera_character_state",
 )
 
 
