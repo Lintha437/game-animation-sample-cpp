@@ -119,7 +119,7 @@ namespace
             constexpr uint8 InAir = 1;
             const bool bGroundMode = Mode == MOVE_None || Mode == MOVE_Walking || Mode == MOVE_NavWalking;
             WriteCharacterProperties(Output, *Cmc, Cmc->GetCapsuleComponent(), Cmc->GetMesh(),
-                bGroundMode ? OnGround : InAir, Cmc->GetTraversalGaitValue(), Movement ? Movement->Velocity.Size2D() : 0.0);
+                bGroundMode ? OnGround : InAir, Cmc->GetAuthoredGaitValue(), Movement ? Movement->Velocity.Size2D() : 0.0);
         }
         else if (const auto* Mover = Cast<ASampleMoverCharacter>(Pawn))
         {
@@ -128,7 +128,7 @@ namespace
             {
                 WriteCharacterProperties(Output, *Mover, ReadPawnObject(*Mover, TEXT("Capsule")),
                     ReadPawnObject(*Mover, TEXT("SkeletalMesh")), Mover->ResolveMovementModeValue(),
-                    Mover->GetTraversalGaitValue(), Movement->GetVelocity().Size2D());
+                    Mover->GetAuthoredGaitValue(), Movement->GetVelocity().Size2D());
             }
         }
     }
