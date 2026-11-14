@@ -46,6 +46,26 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Mover")
     void UpdateMoverRuntime();
 
+    /**
+     * Submits the authored movement overlays for a locally controlled pawn when enabled.
+     * Uses the pawn's capsule, mesh and Mover state at the end of the regular pawn update.
+     * The origin and Visual Logger drawer are local to this update.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Debug")
+    void DrawMoverMovementDebug();
+
+    /**
+     * Fills the imported threshold query's struct from the pre-simulation rotation and sector.
+     * @param Pawn Pawn whose input snapshot supplies the current style and direction.
+     * @param Thresholds Caller-owned S_MovementDirectionThresholds output. No references are retained.
+     */
+    UFUNCTION(BlueprintCallable, CustomThunk, Category = "Sample|Mover",
+        meta = (CustomStructureParam = "Thresholds", BlueprintInternalUseOnly = "true"))
+    static void BuildImportedDirectionThresholds(const ASampleMoverCharacter* Pawn, int32& Thresholds);
+
+    /** Resolves the wildcard output and writes only the imported movement threshold struct. */
+    DECLARE_FUNCTION(execBuildImportedDirectionThresholds);
+
     /** Clears crouch intent after the slide audio fades if sprint is requested. */
     UFUNCTION(BlueprintCallable, Category = "Sample|Mover")
     void ClearSlideCrouchForSprint();
