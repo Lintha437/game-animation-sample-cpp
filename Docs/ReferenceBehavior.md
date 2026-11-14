@@ -35,7 +35,7 @@ SHA-256 comparison matched all 3,899 files under the installed sample's `Content
 
 ### Remaining runtime graph audit
 
-The five maps' Blueprint dependency inventory still includes the sandbox input display (`WB_SimpleController`), Blueprint debug helpers (`BFL_HelpfulFunctions` and the pawn and AI debug graphs), and Look At POI demonstration presentation and level-script setup. These paths need individual caller and runtime checks before counting them as migrated. Full runtime graph migration and rendered parity remain open.
+The remaining Blueprint audit includes the sandbox input display (`WB_SimpleController`), animation and AI debug paths, and Look At POI presentation and level-script setup. The local Asset Registry found no game-package referencer for `WB_SimpleController`. That result leaves dynamic widget creation open. Both primary Animation Blueprints reference `BFL_HelpfulFunctions`. Their debug calls include the direction thresholds and multiline histories. Full runtime graph migration and rendered parity remain open.
 
 ## Blueprint migration acceptance
 
@@ -784,3 +784,9 @@ An unattended Editor comparison called both Blueprint functions before and after
 `Scripts/migrate_sandbox_fixtures.py` gives `StillCam` a native parent that updates its tracking transform. The asset retains its camera component and existing fields. The native tick aims before following and records the target's current location even with follow disabled, so enabling follow uses the next movement delta. A missing target leaves the camera and its last location alone.
 
 The Win64 Development Editor built, the fixture migration compiled the asset, and its second run saved no package. `GameAnimationSampleCpp.Migration.StillCamera` passed with the migrated generated class. It covered look-only, simultaneous look and follow, and loss of the target. Switching through the sandbox widget and checking the rendered camera view are **Not run**.
+
+### Mover movement debug overlay
+
+`Scripts/migrate_mover_debug_draw.py` replaces the sandbox Mover's `DebugDraws` and `Get_MovementDirectionThresholds` bodies with native calls. The regular pawn update submits debug shapes after updating analog deflection. The overlay uses the local-control and `DDCvar.DrawCharacterDebugShapes` gates, the capsule base, root facing, target orientation, rotation offset and current movement intent. It submits the same shapes to the scene and Visual Logger. The signed thresholds remain available through the existing struct interface. The native rotation sector calculation and debug pass share the style and sector limits.
+
+`GameAnimationSampleCpp.Migration.MoverDebugDraw` passed with the original graphs and the migrated pawn. It checked the control and CVar gates and all four signed fields for 54 combinations of rotation mode, style and sector. An ordered line-buffer comparison matched all eight geometry samples, including segment endpoints rounded to 0.001 cm, colors, thickness and depth priority. The fixtures recorded 63 segments at idle, 116 with movement intent and 223 for each of six strafe sectors. The full migration filter passed all 19 tests. The asset compiled and a second migration run made no edits. The five maps and two primary Animation Blueprints matched the source by SHA-256. Win64 Development Game and Editor builds, Doxygen and Visual Studio solution generation passed. Interactive rendering and Visual Logger recording capture are **Not run**.

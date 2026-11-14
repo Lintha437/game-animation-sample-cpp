@@ -77,6 +77,7 @@ MIGRATIONS = (
     "traversal_input_wrappers",
     "traversal_character_state",
     "camera_character_state",
+    "mover_debug_draw",
 )
 
 

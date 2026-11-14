@@ -1299,6 +1299,13 @@ bool USampleBlueprintMigrationLibrary::ForwardCameraProperties(UBlueprint* Bluep
         TEXT("BuildImportedCameraProperties"), TEXT("S_CharacterPropertiesForCamera"), TEXT("Properties"), 1, 0);
 }
 
+bool USampleBlueprintMigrationLibrary::ForwardMoverDirectionThresholds(UBlueprint* Blueprint, UEdGraph* Graph)
+{
+    return ForwardPawnStructQuery(Blueprint, Graph, Blueprint ? Blueprint->ParentClass.Get() : nullptr,
+        TEXT("Get_MovementDirectionThresholds"), TEXT("BuildImportedDirectionThresholds"),
+        TEXT("S_MovementDirectionThresholds"), TEXT("Thresholds"), 5, 4);
+}
+
 bool USampleBlueprintMigrationLibrary::ReplaceTraversalCollision(UBlueprint* Blueprint, UEdGraph* Graph)
 {
     if (!Blueprint || !Blueprint->ParentClass || !Graph || Graph->GetOuter() != Blueprint ||
