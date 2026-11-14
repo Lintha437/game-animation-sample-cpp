@@ -78,6 +78,8 @@ Bind the host's Enhanced Input actions during local possession. Sample the bound
 
 Keep targeting registration and facing intent on the owning pawn. The sample's overlap actors use a stable interface to register candidates. The native pawn updates the nearest valid target and exposes it to the same camera and animation readers. When porting twin-stick input, retain the stick axis convention, dead zone, and control-rotation reset. Preserve the analog deflection's faster rise and slower decay when feeding gait.
 
+Use the same pre-simulation direction limits for sector selection and the Mover debug overlay. The signed limits define where the overlay starts each arc. Keep the draw pass at the end of the pawn update and preserve both the local-control check and `DDCvar.DrawCharacterDebugShapes`. Verify the overlay against the capsule origin, root-bone facing, target orientation and simulated movement intent.
+
 For paired interactions, rebuild the candidate list before the animation chooser runs. Filter for eligible pawns within the overlap radius, vertical tolerance, and facing arc. Sweep the host's character collision profile between the two pawns to reject obstructed candidates. Keep the role assignments, pose search, and montage selection in the animation assets. Map the sample's object query and collision profile to named settings in the destination project.
 
 Bind each paired action once in the owning pawn. Pass the requested action name and current candidates to the authored chooser. The sample uses the same keys for demonstration tools while aiming. Port those tool callbacks separately if the destination needs them.

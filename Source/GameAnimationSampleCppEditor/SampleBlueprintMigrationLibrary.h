@@ -179,6 +179,15 @@ public:
     static bool ForwardCameraProperties(UBlueprint* Blueprint, UEdGraph* Graph, UClass* Library);
 
     /**
+     * Forwards the Mover pawn's existing threshold query while preserving its signed output struct.
+     * @param Blueprint Mover pawn asset that owns the threshold query.
+     * @param Graph Existing Get_MovementDirectionThresholds function graph.
+     * @return True when the wrapper is wired or already installed.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
+    static bool ForwardMoverDirectionThresholds(UBlueprint* Blueprint, UEdGraph* Graph);
+
+    /**
      * Rewires the collision and activity nodes at the four traversal callback sites.
      * Preserves the authored montage, warp target, and movement mode nodes.
      * @param Blueprint Traversal component owning the event graph.

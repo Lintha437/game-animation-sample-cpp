@@ -82,6 +82,31 @@ namespace
         Right = 4,
     };
 
+    struct FMovementDirectionLimits
+    {
+        double Forward = 0.0;
+        double Backward = 0.0;
+    };
+
+    FMovementDirectionLimits ResolveDirectionLimits(int64 Rotation, EAuthoredMovementSector Sector)
+    {
+        const int32 Style = UKismetSystemLibrary::GetConsoleVariableIntValue(
+            Rotation == AimRotationMode ? TEXT("DDCvar.AimStyle") : TEXT("DDCvar.StrafeStyle"));
+        switch (Style)
+        {
+        case 0:
+            return Sector == EAuthoredMovementSector::Forward || Sector == EAuthoredMovementSector::Backward
+                ? FMovementDirectionLimits{60.0, 120.0} : FMovementDirectionLimits{40.0, 140.0};
+        case 1:
+            return Sector == EAuthoredMovementSector::Backward
+                ? FMovementDirectionLimits{120.0, 120.0} : FMovementDirectionLimits{140.0, 140.0};
+        case 2:
+            return {180.0, 180.0};
+        default:
+            return {};
+        }
+    }
+
     int64 ReadEnum(const FProperty& Property, const void* Value)
     {
         if (const auto* Enum = CastField<FEnumProperty>(&Property))
@@ -148,6 +173,13 @@ namespace
     int64 GetPreSimRotationMode(const ASampleMoverCharacter& Pawn)
     {
         return GetSnapshotRotationMode(Pawn, TEXT("MoverCustomInputs_PreSim"));
+    }
+
+    EAuthoredMovementSector ReadDirectionSector(const UScriptStruct* Type, const void* Data)
+    {
+        const auto* Field = Type ? Type->FindPropertyByName(MovementSectorField) : nullptr;
+        return Field ? static_cast<EAuthoredMovementSector>(ReadEnum(*Field, Field->ContainerPtrToValuePtr<void>(Data)))
+            : EAuthoredMovementSector::Forward;
     }
 
     void WriteVector(ASampleMoverCharacter& Pawn, FName Name, const FVector& Value)
@@ -356,7 +388,125 @@ void ASampleMoverCharacter::UpdateMoverRuntime()
     UpdateMoverTarget();
     UpdateMoverTwinStick();
     UpdateMoverAnalogDeflection();
-    Present(TEXT("DebugDraws"));
+    DrawMoverMovementDebug();
+}
+
+void ASampleMoverCharacter::DrawMoverMovementDebug()
+{
+#if ENABLE_DRAW_DEBUG
+    if (!IsLocallyControlled() || !UKismetSystemLibrary::GetConsoleVariableBoolValue(TEXT("DDCvar.DrawCharacterDebugShapes")))
+    {
+        return;
+    }
+    const auto* Capsule = GetRagdollCapsule(*this);
+    if (!Capsule)
+    {
+        return;
+    }
+
+    constexpr float Thickness = 0.6f;
+    const FVector Origin = Capsule->GetComponentLocation() - FVector(0, 0, Capsule->GetUnscaledCapsuleHalfHeight());
+    const FRotator CapsuleRotation = Capsule->GetComponentRotation();
+    const FDebugDrawer Drawer = UDrawDebugLibrary::MakeVisualLoggerDebugDrawer(this, TEXT("Draw Debug Library"));
+    const auto* Mover = FindComponentByClass<UCharacterMoverComponent>();
+    const auto* Mesh = GetRagdollMesh(*this);
+    const auto* Snapshot = FindSnapshot(*this, TEXT("MoverCustomInputs_PreSim"));
+    const auto* Type = Snapshot ? Snapshot->Struct.Get() : nullptr;
+    const void* Data = Snapshot ? Snapshot->ContainerPtrToValuePtr<void>(this) : nullptr;
+    const FRotator Target = Mover ? Mover->GetTargetOrientation() : FRotator::ZeroRotator;
+    const FRotator Root = Mesh ? Mesh->GetBoneTransform(TEXT("root"), RTS_World).Rotator() : FRotator::ZeroRotator;
+    const FRotator RootArrow = UKismetMathLibrary::ComposeRotators(FRotator(0, 90, 0), Root);
+    const FDrawDebugLineStyle Black(FLinearColor::Black, Thickness);
+    const FDrawDebugLineStyle Magenta(FLinearColor(1, 0, 1), Thickness);
+    const FDrawDebugLineStyle Orange(FLinearColor(1, 0.5f, 0), Thickness);
+    const FVector IntentLayer = Origin + FVector(0, 0, 1.2);
+
+    UDrawDebugLibrary::DrawDebugCircle(Drawer, Origin, CapsuleRotation, Black, true, 30, 50);
+    UDrawDebugLibrary::DrawDebugFlatArrow(Drawer, Origin - RootArrow.Vector() * 5, RootArrow, Black, true, 20, 20);
+    UDrawDebugLibrary::DrawDebugCircleArrow(Drawer, Origin, CapsuleRotation, 0, Black, true, 35, 10);
+    UDrawDebugLibrary::DrawDebugCircleArrow(Drawer, Origin + FVector(0, 0, 0.6), Target, 0, Magenta, true, 50, 30);
+
+    const double Offset = Type ? ReadNumber(Type, Data, DirectionalOffsetField) : 0.0;
+    if (Offset != 0.0)
+    {
+        UDrawDebugLibrary::DrawDebugCircleArrow(Drawer, Origin, Target, static_cast<float>(Offset),
+            FDrawDebugLineStyle(FLinearColor(0.75f, 0, 0.75f), Thickness), true, 50, 30);
+        UDrawDebugLibrary::DrawDebugArc(Drawer, Origin, Target, static_cast<float>(Offset), Magenta, true, 60, 50);
+    }
+
+    const FVector Intent = Mover ? Mover->GetMovementIntent() : FVector::ZeroVector;
+    if (UKismetMathLibrary::NotEqual_VectorVector(Intent, FVector::ZeroVector))
+    {
+        UDrawDebugLibrary::DrawDebugCircleArrow(Drawer, IntentLayer, Intent.Rotation(), 0, Orange, true, 50, 30);
+        const float Angle = static_cast<float>(ReadNumber(GetClass(), this, TEXT("DebugAngle")));
+        UDrawDebugLibrary::DrawDebugArc(Drawer, IntentLayer, Target, Angle, Orange, true, 50, 50);
+    }
+
+    const int64 Rotation = GetPreSimRotationMode(*this);
+    if (Rotation != FaceMovement)
+    {
+        const EAuthoredMovementSector Sector = ReadDirectionSector(Type, Data);
+        const FMovementDirectionLimits Limits = ResolveDirectionLimits(Rotation, Sector);
+        const float Forward = static_cast<float>(Limits.Forward);
+        const float Backward = static_cast<float>(Limits.Backward);
+        const float Ticks[] = {-Forward, Forward, -Backward, Backward};
+        UDrawDebugLibrary::DrawDebugCircleTicksArrayView(Drawer, IntentLayer, Target, Ticks, Magenta, true, 80, 5);
+
+        // The backward arc crosses -180 degrees. Its signed width matches the direction of the authored overlay.
+        float Start = -Forward;
+        float Width = 2 * Forward;
+        if (Sector == EAuthoredMovementSector::Backward)
+        {
+            Start = -Backward;
+            Width = 2 * Backward - 360;
+        }
+        else if (Sector >= EAuthoredMovementSector::Right)
+        {
+            Start = Forward;
+            Width = FMath::Abs(Backward - Forward);
+        }
+        else if (Sector >= EAuthoredMovementSector::Left)
+        {
+            Start = -Backward;
+            Width = FMath::Abs(Backward - Forward);
+        }
+        const FRotator ArcRotation(Target.Pitch, Target.Yaw + Start, Target.Roll);
+        UDrawDebugLibrary::DrawDebugArc(Drawer, IntentLayer, ArcRotation, Width,
+            FDrawDebugLineStyle(FLinearColor::Green, Thickness), true, 80, 50);
+    }
+#endif
+}
+
+void ASampleMoverCharacter::BuildImportedDirectionThresholds(const ASampleMoverCharacter*, int32&)
+{
+    checkNoEntry();
+}
+
+DEFINE_FUNCTION(ASampleMoverCharacter::execBuildImportedDirectionThresholds)
+{
+    P_GET_OBJECT(ASampleMoverCharacter, Pawn);
+    Stack.MostRecentProperty = nullptr;
+    Stack.MostRecentPropertyAddress = nullptr;
+    Stack.StepCompiledIn<FStructProperty>(nullptr);
+    const auto* Property = CastField<FStructProperty>(Stack.MostRecentProperty);
+    void* Output = Stack.MostRecentPropertyAddress;
+    P_FINISH;
+
+    P_NATIVE_BEGIN;
+    const auto* Struct = Property ? Cast<UUserDefinedStruct>(Property->Struct.Get()) : nullptr;
+    if (Output && Struct && Struct->GetFName() == TEXT("S_MovementDirectionThresholds"))
+    {
+        const auto* Snapshot = Pawn ? FindSnapshot(*Pawn, TEXT("MoverCustomInputs_PreSim")) : nullptr;
+        const auto Sector = Snapshot ? ReadDirectionSector(Snapshot->Struct, Snapshot->ContainerPtrToValuePtr<void>(Pawn))
+            : EAuthoredMovementSector::Forward;
+        const FMovementDirectionLimits Limits = Pawn ? ResolveDirectionLimits(GetPreSimRotationMode(*Pawn), Sector)
+            : FMovementDirectionLimits{};
+        WriteNumber(Struct, Output, TEXT("FL_3_747C69604F939E7EFF347D97BBD8A811"), -Limits.Forward);
+        WriteNumber(Struct, Output, TEXT("FR_5_790F2C4742CB53A5585DBFAF660F9CF0"), Limits.Forward);
+        WriteNumber(Struct, Output, TEXT("BL_7_630ADC5A4B6C3AF9DA182E816EDB311B"), -Limits.Backward);
+        WriteNumber(Struct, Output, TEXT("BR_9_67DF35F84900050330F770A709E84CF7"), Limits.Backward);
+    }
+    P_NATIVE_END;
 }
 
 void ASampleMoverCharacter::InitializeRagdollRuntime()
@@ -900,9 +1050,7 @@ bool ASampleMoverCharacter::PrepareMoverDirectionalOffset(double& Angle, uint8& 
 
     const UScriptStruct* Type = Snapshot->Struct;
     const void* Data = Snapshot->ContainerPtrToValuePtr<void>(this);
-    const auto* PreviousField = Type->FindPropertyByName(MovementSectorField);
-    const auto Previous = static_cast<EAuthoredMovementSector>(PreviousField
-        ? ReadEnum(*PreviousField, PreviousField->ContainerPtrToValuePtr<void>(Data)) : 0);
+    const auto Previous = ReadDirectionSector(Type, Data);
     const double IntentYaw = Defaults->OrientationIntent.Rotation().Yaw;
     Angle = FRotator::NormalizeAxis(Direction.Rotation().Yaw - IntentYaw);
     if (Previous == EAuthoredMovementSector::Forward)
@@ -920,36 +1068,14 @@ bool ASampleMoverCharacter::PrepareMoverDirectionalOffset(double& Angle, uint8& 
     }
     WriteNumber(GetClass(), this, TEXT("DebugAngle"), Angle);
 
-    const int32 Style = UKismetSystemLibrary::GetConsoleVariableIntValue(
-        Rotation == AimRotationMode ? TEXT("DDCvar.AimStyle") : TEXT("DDCvar.StrafeStyle"));
-    double ForwardLimit = 0.0;
-    double BackwardLimit = 0.0;
-    switch (Style)
-    {
-    case 0:
-    {
-        const bool bPreviouslyAxial = Previous == EAuthoredMovementSector::Forward || Previous == EAuthoredMovementSector::Backward;
-        ForwardLimit = bPreviouslyAxial ? 60.0 : 40.0;
-        BackwardLimit = bPreviouslyAxial ? 120.0 : 140.0;
-        break;
-    }
-    case 1:
-        ForwardLimit = BackwardLimit = Previous == EAuthoredMovementSector::Backward ? 120.0 : 140.0;
-        break;
-    case 2:
-        ForwardLimit = BackwardLimit = 180.0;
-        break;
-    default:
-        break;
-    }
-
+    const FMovementDirectionLimits Limits = ResolveDirectionLimits(Rotation, Previous);
     const auto* Gait = Type->FindPropertyByName(MoverGaitField);
     if ((Gait && ReadEnum(*Gait, Gait->ContainerPtrToValuePtr<void>(Data)) == MoverGaitSprint) ||
-        FMath::Abs(Angle) <= ForwardLimit)
+        FMath::Abs(Angle) <= Limits.Forward)
     {
         return true;
     }
-    const auto Selected = FMath::Abs(Angle) > BackwardLimit ? EAuthoredMovementSector::Backward
+    const auto Selected = FMath::Abs(Angle) > Limits.Backward ? EAuthoredMovementSector::Backward
         : (Angle < 0.0 ? EAuthoredMovementSector::Left : EAuthoredMovementSector::Right);
     Sector = static_cast<uint8>(Selected);
     return true;
