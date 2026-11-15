@@ -22,6 +22,7 @@
 #include "K2Node_SpawnActorFromClass.h"
 #include "K2Node_VariableGet.h"
 #include "K2Node_MakeStruct.h"
+#include "K2Node_CallArrayFunction.h"
 #include "K2Node_VariableSet.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 
@@ -1072,8 +1073,36 @@ bool USampleBlueprintMigrationLibrary::ReplaceVoidFunctionBody(
         }
     }
 
+    const auto FindInput = [Function](const UEdGraphPin& Output, UK2Node_CallFunction& Call)
+    {
+        if (Output.PinType.PinCategory == UEdGraphSchema_K2::PC_Exec)
+        {
+            return Call.GetExecPin();
+        }
+        const FString Name = Output.PinName == TEXT("__WorldContext")
+            ? Function->GetMetaData(TEXT("WorldContext"))
+            : Output.PinName.ToString().Replace(TEXT(" "), TEXT(""));
+        return Name.IsEmpty() ? nullptr : Call.FindPin(FName(*Name), EGPD_Input);
+    };
+    if (auto* Existing = FindUniqueCall(*Graph, FunctionName))
+    {
+        return OldBody.Num() == 1 && Existing->GetTargetFunction() == Function &&
+            !Entry->Pins.ContainsByPredicate([&](const UEdGraphPin* Output)
+            {
+                if (Output->Direction != EGPD_Output ||
+                    (Output->PinName == TEXT("__WorldContext") && !Function->HasMetaData(TEXT("WorldContext"))))
+                {
+                    return false;
+                }
+                const UEdGraphPin* Input = FindInput(*Output, *Existing);
+                return !Input || Output->LinkedTo.Num() != 1 || Output->LinkedTo[0] != Input;
+            });
+    }
+
     FGraphNodeCreator<UK2Node_CallFunction> Creator(*Graph);
-    UK2Node_CallFunction* Call = Creator.CreateNode();
+    UClass* CallClass = Function->HasMetaData(TEXT("ArrayParm"))
+        ? UK2Node_CallArrayFunction::StaticClass() : UK2Node_CallFunction::StaticClass();
+    UK2Node_CallFunction* Call = Creator.CreateNode(true, CallClass);
     Call->SetFromFunction(Function);
     Call->NodePosX = Entry->NodePosX + 400;
     Call->NodePosY = Entry->NodePosY;
@@ -1087,10 +1116,11 @@ bool USampleBlueprintMigrationLibrary::ReplaceVoidFunctionBody(
     {
         if (Output->Direction == EGPD_Output)
         {
-            const FName InputName = Output->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec
-                ? UEdGraphSchema_K2::PN_Execute
-                : Output->PinName;
-            UEdGraphPin* Input = Call->FindPin(InputName, EGPD_Input);
+            UEdGraphPin* Input = FindInput(*Output, *Call);
+            if (!Input && Output->PinName == TEXT("__WorldContext") && !Function->HasMetaData(TEXT("WorldContext")))
+            {
+                continue;
+            }
             if (!Input || !Schema->TryCreateConnection(Output, Input))
             {
                 return false;

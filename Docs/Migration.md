@@ -80,6 +80,8 @@ Keep targeting registration and facing intent on the owning pawn. The sample's o
 
 Use the same pre-simulation direction limits for sector selection and the Mover debug overlay. The signed limits define where the overlay starts each arc. Keep the draw pass at the end of the pawn update and preserve both the local-control check and `DDCvar.DrawCharacterDebugShapes`. Verify the overlay against the capsule origin, root-bone facing, target orientation and simulated movement intent.
 
+Keep the animation graphs' diagnostic calls connected to the imported debug library when moving the drawing into C++. Forward the caller's world context for scene and Visual Logger submissions. Preserve the authored line-series struct and read it without modifying the caller's array. Check the submitted lines and their order for the axes, series, legend, status text and history text.
+
 For paired interactions, rebuild the candidate list before the animation chooser runs. Filter for eligible pawns within the overlap radius, vertical tolerance, and facing arc. Sweep the host's character collision profile between the two pawns to reject obstructed candidates. Keep the role assignments, pose search, and montage selection in the animation assets. Map the sample's object query and collision profile to named settings in the destination project.
 
 Bind each paired action once in the owning pawn. Pass the requested action name and current candidates to the authored chooser. The sample uses the same keys for demonstration tools while aiming. Port those tool callbacks separately if the destination needs them.
