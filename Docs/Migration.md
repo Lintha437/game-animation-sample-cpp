@@ -16,6 +16,22 @@ Use Unreal Engine 5.9 and a C++ project built with the associated toolchain. Sta
 4. Regenerate the Visual Studio projects from the destination `.uproject` or with the [project generation script](../README.md#develop-in-visual-studio). Verify both game and both AutomationTool solution formats. Build Development Editor for PIE and Development for the standalone Win64 Game target.
 5. Open `DefaultLevel`, `LocomotorLevel`, `LookAtPOI_Level`, `NPCLevel`, and `RagdollLevel`. Use the [reference behavior inventory](ReferenceBehavior.md) to choose matching inputs, starting state, camera, movement system, and network role. Record both the completed action and its cleanup, including interruption.
 
+## Compare a Win64 release candidate
+
+Build the candidate in your existing native checkout. If running the acquired sample would write generated files, execute it from a local reference copy. Record the candidate revision, sample descriptor SHA-256, installed engine build, MSVC toolchain, and Windows SDK. Start both projects with matching map, input bindings, simulation settings, and player roles. Reuse each running Editor between compatible tests and return its Play settings and console variables to their original values when finished.
+
+| Map | Behavior to compare |
+| --- | --- |
+| `DefaultLevel` | Test the CMC and Mover pawns independently. Compare digital and analog input, gait, camera style and aiming, traversal success and rejection, and the movement state after landing. Repeat a movement or traversal case with authority, owner and observer recorded. |
+| `NPCLevel` | Compare NPC startup and patrol, player and NPC Smart Object eligibility, claim contention, interruption, and slot reuse. Observe state on the owning client and authority when testing with clients. |
+| `RagdollLevel` | Compare ragdoll entry, contact and recovery at matching positions and velocities. Record movement and collision state on return to locomotion. |
+| `LookAtPOI_Level` | Start in the authored mode. Use the interface and world selection controls to compare possession, selection and deselection, the About panel, the three page changes, and media playback controls. Repeat with the intended network mode. Capture both the selected media source and frames presented by the player. |
+| `LocomotorLevel` | Compare movement and camera input, mouse and gamepad mapping, spawn and the return transition. |
+
+Record state samples and event order at the same entry points on each side. For camera and UI, capture rendered frames after equivalent input and identify the input device. For diagnostic parity, record a Visual Logger session with the applicable debug control enabled and inspect the entries for the same actor, category, and event or geometry. Repeat with the control disabled. A headless map load, an injected input and a captured frame each establish different parts of the behavior.
+
+Build Win64 Development Game and Editor, run the migration Automation suite, then cook, stage, package, and launch the reference and candidate. The imported sample configuration lists only `DefaultLevel` under `MapsToCook`. Include all five maps explicitly in the Win64 comparison. With AutomationTool `BuildCookRun`, pass `-MapsToCook=/Game/Levels/DefaultLevel+/Game/Levels/LocomotorLevel+/Game/Levels/LookAtPOI_Level+/Game/Levels/NPCLevel+/Game/Levels/RagdollLevel`. Repeat the input and playback cases that depend on cooked assets. Record the exact commands, process exit codes, packaged launch results, and any checks marked **Not run**. Generate the API reference with `doxygen Doxyfile` and follow the [Visual Studio handoff](../README.md#develop-in-visual-studio) from the candidate's `.uproject`.
+
 ## Preserve serialized and animation boundaries
 
 | Boundary | What to preserve during integration |
@@ -67,6 +83,8 @@ Bind movement and look on the pawn's local input component during possession. Ke
 When adapting the sample's input intent for networking, keep one authoritative state and feed the same state to camera and animation consumers. Inspect both the press and release rules on each action. The reference CMC pawn applies intent locally, sends an unreliable snapshot to the server, and replicates the shared state to observers. In the destination, verify press and release under latency and packet loss, especially the final release. Select a delivery rule that matches the destination's movement prediction and correction requirements.
 
 ### Read Mover state at the simulation boundary
+
+The reference uses Network Prediction's `Independent` ticking policy and `Interpolated` simulated-proxy LOD. The project declares both values in `Config/DefaultNetworkPrediction.ini` so they are available during startup. Match the effective policy in the host before comparing Mover trajectories. At a 60 Hz engine cap, Fixed mode can advance simulation by a truncated 16 ms per frame while Independent mode commonly alternates between 16 and 17 ms.
 
 For a Mover-based pawn, take horizontal speed and the current mode name from `UCharacterMoverComponent`. Translate mode names to the destination's state type before supplying them to animation and camera consumers. Preserve the exact snapshot used for gait. The sample reads pre-simulation move input and orientation intent, gives sprint priority over the walk toggle, and caps sprint in aim mode. Test the directional dot product and analog deflection at the original thresholds.
 
@@ -216,6 +234,10 @@ If you move the Look At POI example, let the controller own the local interface 
 
 Bind the possession buttons once when the widget initializes. After each controller request, show the opposite action and collapse the action just used. The patrol reset reads the currently selected animation instance to find its pawn and restores the authored patrol transform. Carry the layout's three button names and its selection fields over when reusing the sample widget parent.
 
+In the About panel, bind About and Close during widget initialization. Keep the authored gesture options in order and apply the network-specific visibility and switcher defaults during construction. Preserve each page's localized FText and File Media Source. A zone page change updates the title and switcher before storing the source and opening it. About toggles the panel and calls Play. Close collapses the panel, calls Pause, and calls Rewind.
+
+Keep the Look At POI level's BeginPlay and Destroyed entries in its existing Level Blueprint. Each forwards once to the native diagnostic helper, which executes `a.AnimNode.ControlRig.Debug` before `ControlRig.EnableDrawInterfaceInGame`. The installer classifies the event graph and verifies a backup of the original map before saving any migration. Use `migrate_look_at_level_runtime.py` as the final step in the ordered runner.
+
 Publish zone selection on the controller before notifying the animation instance and widget. Cache the zone type, assigned pawn, animation instance and optional gizmo. Reject unsupported pawn types before replacing the active selection or dispatching the authored look-at and widget callbacks.
 
 Let one zone own the current selection and its target gizmo. Deselect the previous zone before handing the selected pawn and target to animation. Use the current world actors so zones created after startup can participate. Retain the host interface delegate and keep gizmo appearance on its asset.
@@ -223,6 +245,20 @@ Let one zone own the current selection and its target gizmo. Deselect the previo
 Bind pointer events to the zone's authored hit components after they are initialized. Apply hover and selected colors through its dynamic materials and update an active gizmo from the assigned pawn's world position plus the authored offset.
 
 For gizmo manipulation, sample the local cursor and wheel. Start Shift control on hover and keep it active until Shift is released. Apply cursor deltas to the target's rotation and clamp wheel scaling to the intended manipulation range. Keep the target's appearance and tooltip settings on the asset.
+
+## Migrate native diagnostics and input displays
+
+Apply `migrate_shared_draw_rotation.py` before `migrate_mover_animation_diagnostics.py`. Both stages target the CMC and Mover Animation Blueprints at their existing diagnostic call sites. The shared rotation samples player controller index zero from the current animation instance's world and uses zero rotation when the controller is absent. Keep each local-pawn and CVar gate in place. The state formatter consumes the authored enum display strings in movement mode, stance, gait and direction order. The diagnostic rows retain their original string conversion, source, array slot, and draw setup. CMC and Mover keep their authored differences in the state and Motion Matching panels.
+
+`migrate_controller_input_display.py` updates `WB_SimpleController` in place. The editor utility still creates and removes it in PIE. The runtime sampler uses the widget's stored player controller and preserves the key order, local accumulator precision and mouse smoothing. It combines each gamepad stick with its authored keyboard or mouse contribution, keeping the strict opacity threshold and the original position clamping and translation signs. Retain the existing widget tree so the native sampler drives the same on-screen controls.
+
+`migrate_npc_controller_debug.py` keeps the callable `Debug` function on `AIC_NPC_SmartObject` and forwards its development-only draw to the native controller. The arrow starts at the controlled pawn and follows its control rotation for 50 cm. Preserve the scene and Visual Logger draw settings and the existing StateTree schedule. During verification, invoke `Debug` on a possessed NPC with different actor and control rotations, then repeat with no pawn to check the default origin and direction.
+
+`migrate_look_at_zone_routing.py` keeps the controller's existing zone-selection event and routes successful capture through its native implementation. The controller sets its enable flag before dispatching to the asset's authored animation-target function. Compare accepted and rejected pawns, mismatched animation instances, and the widget callback order through the real zone-selection entry point.
+
+The installer also updates the gizmo branch of the target function. A valid gizmo contributes its location plus its right vector scaled by `50 × Scale.X`. Missing or destroyed gizmos resolve to the zero vector. The player branch still reads the authored `head` socket. When upgrading an already routed controller, the installer backs up the current package separately and keeps the original backup. Verify the nonlocal authority path with no gizmo or widget and check the PIE log for null dereferences.
+
+The installers classify the original and installed graphs before writing package backups. Keep the original package and recorded backup together until the candidate asset is compiled, saved and verified. Rerun each installer after a successful install and confirm that its package bytes remain stable.
 
 ## Verify in the destination
 

@@ -58,7 +58,7 @@ python Scripts/apply_reference_migrations.py $project --engine-root $ue
 if ($LASTEXITCODE -ne 0) { throw 'Reference asset migration failed. Check the log reported by the script.' }
 ```
 
-The importer preserves package paths, copies project settings into local Unreal configuration overrides, and protects the copied files from accidental staging through local Git excludes. To try the migration in an independent workspace, omit `--install-here` and use the printed descriptor as `$project` while running the same commands from the checkout. For Windows builds, choose a short absolute path with `--workspace-root`, such as `D:\GAS`. UnrealBuildTool's generated paths can exceed its path limit in a nested checkout. Keep the acquired source assets under their applicable license. [Fab license terms](https://www.fab.com/eula)
+The importer preserves package paths, copies project settings into local Unreal configuration overrides, and protects the copied files from accidental staging through local Git excludes. To try the migration in an independent workspace, omit `--install-here` and use the printed descriptor as `$project` while running the same commands from the checkout. For Windows builds, pass a short absolute path under the project directory to `--workspace-root`. Deeply nested paths can exceed UnrealBuildTool's path limit. Keep the acquired source assets under their applicable license. [Fab license terms](https://www.fab.com/eula)
 
 The runner writes per-process logs under the destination project's `Saved/Logs/ReferenceMigration-*/`. Each asset stage stores its backup under `Saved/BlueprintMigration/`. On a failed stage, review that stage's log and package before retrying.
 
@@ -69,6 +69,8 @@ See [reference behavior](Docs/ReferenceBehavior.md) for the current parity crite
 ## Development
 
 Start work from `develop` and submit focused branches to `develop`. Releases merge into `main` and back into `develop`. Hotfixes start from `main` and merge back into `main`, `develop`, and any active release branch. Retain merge ancestry when back-merging.
+
+After migration and release-readiness checks pass, submit the acceptance report and proposed `develop` revision for maintainer approval before creating a `release/*` branch. Retain release branches permanently after their merges into `main` and `develop`.
 
 Run `python Scripts/validate_repository.py --project GameAnimSampleCpp` against the Git index and `git lfs fsck --pointers HEAD` against the committed tree. If the remote supports Git LFS locking, coordinate binary edits with `git lfs lock <path>`, inspect locks with `git lfs locks`, and release them with `git lfs unlock <path>`.
 

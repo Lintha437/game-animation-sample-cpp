@@ -68,6 +68,7 @@ MIGRATIONS = (
     "look_at_gameplay_buttons",
     "traversal_ledge_setup",
     "look_at_selection_state",
+    "look_at_about_panel",
     "smart_object_approach",
     "traversal_startup",
     "traversal_dispatch",
@@ -79,6 +80,12 @@ MIGRATIONS = (
     "camera_character_state",
     "mover_debug_draw",
     "shared_debug_drawing",
+    "shared_draw_rotation",
+    "mover_animation_diagnostics",
+    "controller_input_display",
+    "npc_controller_debug",
+    "look_at_zone_routing",
+    "look_at_level_runtime",
 )
 
 
@@ -122,7 +129,7 @@ def apply(project, engine_root):
     logs = Path(tempfile.mkdtemp(prefix="ReferenceMigration-", dir=log_root))
     runner = Path(__file__).resolve()
 
-    with tempfile.TemporaryDirectory(prefix="SampleMigration-") as temp:
+    with tempfile.TemporaryDirectory(prefix="SampleMigration-", dir=log_root) as temp:
         driver = Path(temp) / "run_batch.py"
         checkpoint = Path(temp) / "checkpoint.txt"
         completed = 0
