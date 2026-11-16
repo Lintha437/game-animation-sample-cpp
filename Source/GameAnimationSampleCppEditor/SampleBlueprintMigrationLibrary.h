@@ -126,6 +126,23 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
     static bool ForwardIsolatedEventOverride(UBlueprint* Blueprint, UEdGraph* Graph, FName EventName, FName FunctionName);
 
+    /**
+     * Replaces the three Look At media page setup tails using their existing localized titles and media sources.
+     * @param Blueprint Widget asset that owns the page setup.
+     * @param Graph Existing widget event graph.
+     * @return Whether all three native calls are installed.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
+    static bool ForwardLookAtAboutPages(UBlueprint* Blueprint, UEdGraph* Graph);
+
+    /** Verifies all three authored native page calls and the absence of the obsolete UMG handlers. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
+    static bool IsLookAtAboutPanelMigrated(UBlueprint* Blueprint, UEdGraph* Graph);
+
+    /** Removes the original About/Close button-bound handlers after native binding takes ownership. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
+    static bool RemoveLookAtAboutEvents(UBlueprint* Blueprint, UEdGraph* Graph);
+
     /** Removes a declared Blueprint member before its value is moved to a native property. */
     UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
     static bool RemoveDeclaredVariable(UBlueprint* Blueprint, FName VariableName);

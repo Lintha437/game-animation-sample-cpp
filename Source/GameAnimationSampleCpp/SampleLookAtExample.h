@@ -6,15 +6,42 @@
 #include "SampleLookAtExample.generated.h"
 
 class ASpectatorPawn;
+class UAnimInstance;
+class UMediaSource;
 
-/** Routes the isolated Look At interface's possession and patrol reset buttons. */
+/** Routes possession, patrol reset and information-panel behavior in the isolated Look At interface. */
 UCLASS(Blueprintable)
 class GAMEANIMATIONSAMPLECPP_API USampleLookAtInterface : public UUserWidget
 {
     GENERATED_BODY()
 
+public:
+    /** Seeds gesture options from the widget map and applies its original network startup presentation. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Look At", meta = (BlueprintInternalUseOnly = "true"))
+    void InitializeLookAtPresentation();
+
+    /** Toggles the information panel and forwards Play to its authored media player. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Look At", meta = (BlueprintInternalUseOnly = "true"))
+    void ToggleLookAtAbout();
+
+    /** Collapses the information panel, then pauses and rewinds its authored media player. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Look At", meta = (BlueprintInternalUseOnly = "true"))
+    void CloseLookAtAbout();
+
+    /**
+     * Updates the selected page in the order used by the imported widget and opens its authored media.
+     * @param Title Localized label for the About button.
+     * @param PageIndex Slot in the existing widget switcher.
+     * @param Source Media source selected by the authored zone. The widget retains it in its existing field.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Look At", meta = (BlueprintInternalUseOnly = "true"))
+    void ApplyLookAtAboutPage(FText Title, int32 PageIndex, UMediaSource* Source);
+
 protected:
-    /** Binds the three authored buttons once per initialized widget instance. */
+    /** Restores the authored presentation whenever the widget is constructed. */
+    virtual void NativeConstruct() override;
+
+    /** Binds the authored About and Close buttons once when the widget is initialized. */
     virtual void NativeOnInitialized() override;
 
 private:
@@ -61,7 +88,34 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Look At")
     bool CaptureLookAtZoneSelection(APawn* SelectedPawn, const FString& ZoneType, AActor* Gizmo);
 
+    /**
+     * Handles the authored zone event. Always captures the requested zone type.
+     * For an accepted pawn, enables controller look-at before dispatching the authored continuation.
+     * @param SelectedPawn Pawn supplied by the zone event.
+     * @param ZoneType Authored zone type.
+     * @param Gizmo Optional target actor supplied by the zone event.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Look At", meta = (BlueprintInternalUseOnly = "true"))
+    void RouteLookAtZoneSelection(APawn* SelectedPawn, const FString& ZoneType, AActor* Gizmo);
+
+    /** Resolves the authored gizmo offset, including the zero target when the optional gizmo is absent. */
+    UFUNCTION(BlueprintPure, Category = "Sample|Look At", meta = (BlueprintInternalUseOnly = "true"))
+    FVector ResolveLookAtGizmoTarget(AActor* Gizmo) const;
+
+    /**
+     * Notifies the authored Widget after the Blueprint's fixed animation cast and enable write.
+     * @param Widget The controller's authored Level Widget receiver.
+     * @param ZoneType The stored selected zone type.
+     * @param AnimInstance The exact animation instance accepted by the authored cast.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Look At", meta = (BlueprintInternalUseOnly = "true"))
+    void NotifyLookAtZoneSelected(UUserWidget* Widget, const FString& ZoneType, UAnimInstance* AnimInstance);
+
 protected:
+    /** Runs the asset-owned target, animation cast and widget presentation after controller state is published. */
+    UFUNCTION(BlueprintImplementableEvent, Category = "Sample|Look At")
+    void ApplyLookAtZoneSelection();
+
     /** Applies the scene camera FOV and creates the authored interface for the owning player. */
     virtual void BeginPlay() override;
 

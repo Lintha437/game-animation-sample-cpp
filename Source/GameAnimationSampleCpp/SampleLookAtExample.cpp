@@ -3,16 +3,24 @@
 #include "Animation/AnimInstance.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Components/Button.h"
+#include "Components/ComboBoxString.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/TextBlock.h"
+#include "Components/WidgetSwitcher.h"
 #include "DrawDebugLibrary.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/SpectatorPawn.h"
 #include "InputCoreTypes.h"
 #include "Kismet/GameplayStatics.h"
+#include "Kismet/KismetMathLibrary.h"
+#include "Kismet/KismetSystemLibrary.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "MediaPlayer.h"
+#include "MediaSource.h"
 #include "UObject/StructOnScope.h"
+#include "UObject/Stack.h"
 #include "UObject/UnrealType.h"
 
 namespace
@@ -22,10 +30,15 @@ namespace
 
     const FName DemoPlayerProperty(TEXT("Player Pawn"));
 
-    AActor* ReadLookAtActor(const UObject& Owner, FName Name)
+    UObject* ReadLookAtObject(const UObject& Owner, FName Name)
     {
         const auto* Field = FindFProperty<FObjectPropertyBase>(Owner.GetClass(), Name);
-        return Field ? Cast<AActor>(Field->GetObjectPropertyValue_InContainer(&Owner)) : nullptr;
+        return Field ? Field->GetObjectPropertyValue_InContainer(&Owner) : nullptr;
+    }
+
+    AActor* ReadLookAtActor(const UObject& Owner, FName Name)
+    {
+        return Cast<AActor>(ReadLookAtObject(Owner, Name));
     }
 
     void WriteLookAtObject(UObject& Owner, FName Name, UObject* Value)
@@ -83,6 +96,95 @@ namespace
     }
 }
 
+void USampleLookAtInterface::InitializeLookAtPresentation()
+{
+    const auto* Gestures = FindFProperty<FMapProperty>(GetClass(), TEXT("Available Gestures"));
+    const auto* Key = Gestures ? CastField<FStrProperty>(Gestures->KeyProp) : nullptr;
+    if (Key)
+    {
+        const FScriptMapHelper Map(Gestures, Gestures->ContainerPtrToValuePtr<void>(this));
+        TArray<FString> Options;
+        Options.Reserve(Map.Num());
+        for (FScriptMapHelper::FIterator Item(Map); Item; ++Item)
+        {
+            Options.Add(Key->GetPropertyValue(Map.GetKeyPtr(Item)));
+        }
+        auto* Combo = Cast<UComboBoxString>(GetWidgetFromName(TEXT("SelectGestureComboBox")));
+        for (const FString& Option : Options)
+        {
+            if (Combo)
+            {
+                Combo->AddOption(Option);
+                Combo->SetSelectedOption(Option);
+            }
+            if (!UKismetSystemLibrary::IsStandalone(this))
+            {
+                if (auto* Close = GetWidgetFromName(TEXT("Button_CloseAbout")))
+                {
+                    Close->SetVisibility(ESlateVisibility::Collapsed);
+                }
+                if (auto* Panel = GetWidgetFromName(TEXT("BorderAbout")))
+                {
+                    Panel->SetVisibility(ESlateVisibility::Visible);
+                }
+                if (auto* Switcher = Cast<UWidgetSwitcher>(GetWidgetFromName(TEXT("WidgetSwitcher"))))
+                {
+                    Switcher->SetActiveWidgetIndex(0);
+                }
+            }
+        }
+    }
+    WriteLookAtObject(*this, TEXT("Patrol Montage Current"), ReadLookAtObject(*this, TEXT("Patrol Montage 1")));
+}
+
+void USampleLookAtInterface::ToggleLookAtAbout()
+{
+    if (auto* Panel = GetWidgetFromName(TEXT("BorderAbout")))
+    {
+        Panel->SetVisibility(Panel->IsVisible() ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+    }
+    if (auto* Player = Cast<UMediaPlayer>(ReadLookAtObject(*this, TEXT("Media Player"))))
+    {
+        Player->Play();
+    }
+}
+
+void USampleLookAtInterface::CloseLookAtAbout()
+{
+    if (auto* Panel = GetWidgetFromName(TEXT("BorderAbout")))
+    {
+        Panel->SetVisibility(ESlateVisibility::Collapsed);
+    }
+    if (auto* Player = Cast<UMediaPlayer>(ReadLookAtObject(*this, TEXT("Media Player"))))
+    {
+        Player->Pause();
+        Player->Rewind();
+    }
+}
+
+void USampleLookAtInterface::ApplyLookAtAboutPage(FText Title, int32 PageIndex, UMediaSource* Source)
+{
+    if (auto* Label = Cast<UTextBlock>(GetWidgetFromName(TEXT("TextButtonAbout"))))
+    {
+        Label->SetText(Title);
+    }
+    if (auto* Switcher = Cast<UWidgetSwitcher>(GetWidgetFromName(TEXT("WidgetSwitcher"))))
+    {
+        Switcher->SetActiveWidgetIndex(PageIndex);
+    }
+    WriteLookAtObject(*this, TEXT("Media Source"), Source);
+    if (auto* Player = Cast<UMediaPlayer>(ReadLookAtObject(*this, TEXT("Media Player"))); Player && Source)
+    {
+        Player->OpenSource(Source);
+    }
+}
+
+void USampleLookAtInterface::NativeConstruct()
+{
+    Super::NativeConstruct();
+    InitializeLookAtPresentation();
+}
+
 void USampleLookAtInterface::NativeOnInitialized()
 {
     Super::NativeOnInitialized();
@@ -97,6 +199,14 @@ void USampleLookAtInterface::NativeOnInitialized()
     if (auto* Button = Cast<UButton>(GetWidgetFromName(TEXT("Button_Teleport"))))
     {
         Button->OnClicked.AddUniqueDynamic(this, &USampleLookAtInterface::ResetPatrolPawn);
+    }
+    if (auto* Button = Cast<UButton>(GetWidgetFromName(TEXT("Button_About"))))
+    {
+        Button->OnClicked.AddUniqueDynamic(this, &USampleLookAtInterface::ToggleLookAtAbout);
+    }
+    if (auto* Button = Cast<UButton>(GetWidgetFromName(TEXT("Button_CloseAbout"))))
+    {
+        Button->OnClicked.AddUniqueDynamic(this, &USampleLookAtInterface::CloseLookAtAbout);
     }
 }
 
@@ -271,6 +381,73 @@ bool ASampleLookAtController::CaptureLookAtZoneSelection(APawn* SelectedPawn, co
     const auto* Mesh = SelectedPawn->FindComponentByClass<USkeletalMeshComponent>();
     WriteLookAtObject(*this, TEXT("AnimInstance"), Mesh ? Mesh->GetAnimInstance() : nullptr);
     return true;
+}
+
+void ASampleLookAtController::RouteLookAtZoneSelection(APawn* SelectedPawn, const FString& ZoneType, AActor* Gizmo)
+{
+    if (CaptureLookAtZoneSelection(SelectedPawn, ZoneType, Gizmo))
+    {
+        WriteLookAtFlag(*this, TEXT("Look At Enabled"), true);
+        ApplyLookAtZoneSelection();
+    }
+}
+
+FVector ASampleLookAtController::ResolveLookAtGizmoTarget(AActor* Gizmo) const
+{
+    if (!IsValid(Gizmo))
+    {
+        return FVector::ZeroVector;
+    }
+
+    const FVector Location = Gizmo->GetActorLocation();
+    const FVector Right = UKismetMathLibrary::GetRightVector(Gizmo->GetActorRotation());
+    const double Offset = Gizmo->GetActorScale3D().X * 50.0;
+    return Location + Right * Offset;
+}
+
+void ASampleLookAtController::NotifyLookAtZoneSelected(
+    UUserWidget* Widget, const FString& ZoneType, UAnimInstance* AnimInstance)
+{
+    if (!IsValid(Widget))
+    {
+        if (!IsLocalController())
+        {
+            return;
+        }
+        FFrame::KismetExecutionMessage(
+            TEXT("Accessed None reading Level Widget while dispatching Zone Selected"), ELogVerbosity::Warning);
+        return;
+    }
+
+    constexpr TCHAR WidgetPath[] =
+        TEXT("/Game/IsolatedExamples/LookAtPOI/TestLevelContent/Widget/WB_LookAtPOI__GUI.WB_LookAtPOI__GUI_C");
+    constexpr TCHAR AnimPath[] =
+        TEXT("/Game/IsolatedExamples/LookAtPOI/TestLevelContent/Characters/ABP_LookAtPOI_Char.ABP_LookAtPOI_Char_C");
+    UFunction* Function = Widget->FindFunction(TEXT("Zone Selected"));
+    const auto* Type = Function ? FindFProperty<FStrProperty>(Function, TEXT("Zone Type")) : nullptr;
+    const auto* Anim = Function ? FindFProperty<FObjectProperty>(Function, TEXT("Anim Instance")) : nullptr;
+    const auto IsInput = [](const FProperty* Property)
+    {
+        return Property && Property->ArrayDim == 1 && Property->HasAnyPropertyFlags(CPF_Parm) &&
+            !Property->HasAnyPropertyFlags(CPF_OutParm | CPF_ReturnParm | CPF_ReferenceParm | CPF_ConstParm);
+    };
+    if (!Function || GetPathNameSafe(Function->GetOwnerClass()) != WidgetPath || Function->NumParms != 2 ||
+        !Function->HasAnyFunctionFlags(FUNC_BlueprintEvent) ||
+        Function->HasAnyFunctionFlags(FUNC_Static | FUNC_Net | FUNC_Delegate | FUNC_MulticastDelegate) ||
+        !IsInput(Type) || !IsInput(Anim) || GetPathNameSafe(Anim->PropertyClass) != AnimPath ||
+        !IsValid(AnimInstance) || !AnimInstance->IsA(Anim->PropertyClass))
+    {
+        FFrame::KismetExecutionMessage(
+            TEXT("Incompatible Widget function or animation instance while dispatching Zone Selected"),
+            ELogVerbosity::Warning);
+        return;
+    }
+
+    FStructOnScope Arguments(Function);
+    void* Data = Arguments.GetStructMemory();
+    Type->SetPropertyValue_InContainer(Data, ZoneType);
+    Anim->SetObjectPropertyValue_InContainer(Data, AnimInstance);
+    Widget->ProcessEvent(Function, Data);
 }
 
 ASampleLookAtZone::ASampleLookAtZone()

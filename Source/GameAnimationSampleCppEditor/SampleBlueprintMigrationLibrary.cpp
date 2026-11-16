@@ -4,6 +4,7 @@
 #include "EdGraphSchema_K2.h"
 #include "Engine/Blueprint.h"
 #include "InputAction.h"
+#include "Internationalization/Text.h"
 #include "K2Node_CallFunction.h"
 #include "K2Node_CallParentFunction.h"
 #include "K2Node_CastByteToEnum.h"
@@ -442,6 +443,37 @@ bool USampleBlueprintMigrationLibrary::RemoveLookAtGameplayButtons(UBlueprint* B
         return false;
     }
     const TSet<FName> Expected{TEXT("Button_Spawn"), TEXT("Button_DeSpawn"), TEXT("Button_Teleport")};
+    TSet<FName> Found;
+    TSet<UEdGraphNode*> Remove;
+    for (UEdGraphNode* Node : Graph->Nodes)
+    {
+        const auto* Event = Cast<UK2Node_ComponentBoundEvent>(Node);
+        if (!Event || !Expected.Contains(Event->GetComponentPropertyName()))
+        {
+            continue;
+        }
+        if (Event->DelegatePropertyName != TEXT("OnClicked") || Found.Contains(Event->GetComponentPropertyName()) ||
+            !CollectIsolatedChain(Node, Remove))
+        {
+            return false;
+        }
+        Found.Add(Event->GetComponentPropertyName());
+    }
+    if (Found.Num() != Expected.Num())
+    {
+        return false;
+    }
+    RemoveNodes(*Blueprint, *Graph, Remove);
+    return true;
+}
+
+bool USampleBlueprintMigrationLibrary::RemoveLookAtAboutEvents(UBlueprint* Blueprint, UEdGraph* Graph)
+{
+    if (!Blueprint || !Graph || Graph->GetOuter() != Blueprint || Graph->GetFName() != TEXT("EventGraph"))
+    {
+        return false;
+    }
+    const TSet<FName> Expected{TEXT("Button_About"), TEXT("Button_CloseAbout")};
     TSet<FName> Found;
     TSet<UEdGraphNode*> Remove;
     for (UEdGraphNode* Node : Graph->Nodes)
@@ -979,6 +1011,11 @@ bool USampleBlueprintMigrationLibrary::ForwardIsolatedEventOverride(UBlueprint* 
     Graph->GetNodesOfClass(Events);
     const auto* Match = Events.FindByPredicate([&](const UK2Node_Event* Event)
     {
+        if (const auto* Bound = Cast<UK2Node_ComponentBoundEvent>(Event);
+            Bound && Bound->DelegatePropertyName == TEXT("OnClicked") && Bound->GetComponentPropertyName() == EventName)
+        {
+            return true;
+        }
         if (const auto* CustomEvent = Cast<UK2Node_CustomEvent>(Event))
         {
             return CustomEvent->CustomFunctionName == EventName;
@@ -1025,6 +1062,225 @@ bool USampleBlueprintMigrationLibrary::ForwardIsolatedEventOverride(UBlueprint* 
     }
     RemoveNodes(*Blueprint, *Graph, Remove);
     return Schema->TryCreateConnection(Then, Call->GetExecPin());
+}
+
+namespace
+{
+    struct FLookAtAboutPage
+    {
+        const TCHAR* Title;
+        const TCHAR* Key;
+        const TCHAR* MediaPath;
+    };
+
+    constexpr TCHAR LookAtAboutNamespace[] = TEXT("[C3312407F085B3CB731BB701ACD1CCCD]");
+    constexpr FLookAtAboutPage LookAtAboutPages[] = {
+        {TEXT("About Loops Sample"), TEXT("12222BC5450898303932208EC0E05D57"),
+            TEXT("/Game/IsolatedExamples/LookAtPOI/TestLevelContent/Widget/Videos/FMS_LookAtPOI__LoopsInfo.FMS_LookAtPOI__LoopsInfo")},
+        {TEXT("About Gestures Sample"), TEXT("D43CF15A47D7502E7C5A47BD906037C2"),
+            TEXT("/Game/IsolatedExamples/LookAtPOI/TestLevelContent/Widget/Videos/FMS_LookAtPOI__GesturesInfo.FMS_LookAtPOI__GesturesInfo")},
+        {TEXT("About Patrol Sample"), TEXT("B150114E411EA074C1F29E8DA4132F8B"),
+            TEXT("/Game/IsolatedExamples/LookAtPOI/TestLevelContent/Widget/Videos/FMS_LookAtPOI__PatrolInfo.FMS_LookAtPOI__PatrolInfo")},
+    };
+
+    bool MatchesLookAtAboutPage(const FText& Title, const FString& Index, const UObject* Source)
+    {
+        const int32 Number = FCString::Atoi(*Index);
+        if (Number < 1 || Number > UE_ARRAY_COUNT(LookAtAboutPages) ||
+            Index != FString::FromInt(Number) || !Source)
+        {
+            return false;
+        }
+        const FLookAtAboutPage& Expected = LookAtAboutPages[Number - 1];
+        const TOptional<FString> Namespace = FTextInspector::GetNamespace(Title);
+        const TOptional<FString> Key = FTextInspector::GetKey(Title);
+        const FString* SourceString = FTextInspector::GetSourceString(Title);
+        return Namespace.IsSet() && Namespace.GetValue() == LookAtAboutNamespace &&
+            Key.IsSet() && Key.GetValue() == Expected.Key && SourceString && *SourceString == Expected.Title &&
+            Source->GetPathName() == Expected.MediaPath;
+    }
+}
+
+bool USampleBlueprintMigrationLibrary::IsLookAtAboutPanelMigrated(UBlueprint* Blueprint, UEdGraph* Graph)
+{
+    if (!Blueprint || !Blueprint->ParentClass || !Graph || Graph->GetOuter() != Blueprint ||
+        Graph->GetFName() != TEXT("EventGraph"))
+    {
+        return false;
+    }
+    const UFunction* Function = Blueprint->ParentClass->FindFunctionByName(TEXT("ApplyLookAtAboutPage"));
+    if (!Function)
+    {
+        return false;
+    }
+
+    TSet<FString> Indices;
+    int32 Count = 0;
+    for (UEdGraphNode* Node : Graph->Nodes)
+    {
+        if (const auto* Event = Cast<UK2Node_ComponentBoundEvent>(Node);
+            Event && (Event->GetComponentPropertyName() == TEXT("Button_About") ||
+                Event->GetComponentPropertyName() == TEXT("Button_CloseAbout")))
+        {
+            return false;
+        }
+        if (const auto* Event = Cast<UK2Node_Event>(Node);
+            Event && Event->EventReference.GetMemberName() == TEXT("Construct"))
+        {
+            return false;
+        }
+        const auto* Call = Cast<UK2Node_CallFunction>(Node);
+        if (!Call)
+        {
+            continue;
+        }
+        if (Call->FunctionReference.GetMemberName() == TEXT("OpenSource"))
+        {
+            return false;
+        }
+        if (Call->GetTargetFunction() != Function)
+        {
+            continue;
+        }
+
+        const UEdGraphPin* Index = Call->FindPin(TEXT("PageIndex"), EGPD_Input);
+        const UEdGraphPin* Title = Call->FindPin(TEXT("Title"), EGPD_Input);
+        const UEdGraphPin* Source = Call->FindPin(TEXT("Source"), EGPD_Input);
+        if (!Index || !Title || !Source || !Index->LinkedTo.IsEmpty() ||
+            !Title->LinkedTo.IsEmpty() || !Source->LinkedTo.IsEmpty() ||
+            !Call->GetExecPin() || Call->GetExecPin()->LinkedTo.Num() != 1 ||
+            !Call->GetThenPin() || !Call->GetThenPin()->LinkedTo.IsEmpty() ||
+            !MatchesLookAtAboutPage(Title->DefaultTextValue, Index->DefaultValue, Source->DefaultObject) ||
+            Indices.Contains(Index->DefaultValue))
+        {
+            return false;
+        }
+        Indices.Add(Index->DefaultValue);
+        ++Count;
+    }
+    return Count == 3 && Indices.Contains(TEXT("1")) &&
+        Indices.Contains(TEXT("2")) && Indices.Contains(TEXT("3"));
+}
+
+bool USampleBlueprintMigrationLibrary::ForwardLookAtAboutPages(UBlueprint* Blueprint, UEdGraph* Graph)
+{
+    if (!Blueprint || !Graph || Graph->GetOuter() != Blueprint || Graph->GetFName() != TEXT("EventGraph"))
+    {
+        return false;
+    }
+    const FName FunctionName(TEXT("ApplyLookAtAboutPage"));
+    const UFunction* Function = Blueprint->ParentClass ? Blueprint->ParentClass->FindFunctionByName(FunctionName) : nullptr;
+    if (!Function)
+    {
+        return false;
+    }
+    auto* Open = FindUniqueCall(*Graph, TEXT("OpenSource"));
+    if (!Open)
+    {
+        return IsLookAtAboutPanelMigrated(Blueprint, Graph);
+    }
+    const UEdGraphPin* OpenInput = Open->GetExecPin();
+    if (!OpenInput || OpenInput->LinkedTo.Num() != 3 || !Open->GetThenPin()->LinkedTo.IsEmpty() ||
+        !Open->GetReturnValuePin()->LinkedTo.IsEmpty())
+    {
+        return false;
+    }
+
+    struct FAboutPage
+    {
+        UEdGraphPin* Previous;
+        UEdGraphPin* OldExec;
+        int32 NodeX;
+        int32 NodeY;
+        FText Title;
+        FString Index;
+        UObject* Media;
+    };
+    TArray<FAboutPage> Pages;
+    TSet<UEdGraphNode*> Remove{Open};
+    TSet<FString> Indices;
+    for (const UEdGraphPin* Link : OpenInput->LinkedTo)
+    {
+        auto* SetSource = Cast<UK2Node_VariableSet>(Link->GetOwningNode());
+        const auto* Source = SetSource ? SetSource->FindPin(SetSource->GetVarName(), EGPD_Input) : nullptr;
+        auto* Switch = Cast<UK2Node_CallFunction>(GetOnlyPeer(SetSource ? SetSource->GetExecPin() : nullptr));
+        const auto* Index = Switch ? Switch->FindPin(TEXT("Index"), EGPD_Input) : nullptr;
+        auto* Label = Cast<UK2Node_CallFunction>(GetOnlyPeer(Switch ? Switch->GetExecPin() : nullptr));
+        const auto* Title = Label ? Label->FindPin(TEXT("InText"), EGPD_Input) : nullptr;
+        const auto* Input = Label ? Label->GetExecPin() : nullptr;
+        if (!Source || !Source->DefaultObject || !Source->LinkedTo.IsEmpty() ||
+            SetSource->GetVarName() != TEXT("Media Source") ||
+            !Index || !Index->LinkedTo.IsEmpty() || Switch->FunctionReference.GetMemberName() != TEXT("SetActiveWidgetIndex") ||
+            !Title || !Title->LinkedTo.IsEmpty() || Label->FunctionReference.GetMemberName() != TEXT("SetText") ||
+            !Input || Input->LinkedTo.Num() != 1 || GetOnlyPeer(Label->GetThenPin()) != Switch ||
+            GetOnlyPeer(Switch->GetThenPin()) != SetSource || GetOnlyPeer(SetSource->GetThenPin()) != Open ||
+            !MatchesLookAtAboutPage(Title->DefaultTextValue, Index->DefaultValue, Source->DefaultObject) ||
+            Indices.Contains(Index->DefaultValue))
+        {
+            return false;
+        }
+        Indices.Add(Index->DefaultValue);
+        Pages.Add({Input->LinkedTo[0], const_cast<UEdGraphPin*>(Input), Label->NodePosX, Label->NodePosY,
+            Title->DefaultTextValue, Index->DefaultValue, Source->DefaultObject});
+        Remove.Append({Label, Switch, SetSource});
+    }
+    if (Pages.Num() != 3 || !Indices.Contains(TEXT("1")) || !Indices.Contains(TEXT("2")) ||
+        !Indices.Contains(TEXT("3")) || Remove.Num() != 10)
+    {
+        return false;
+    }
+
+    const UEdGraphSchema* Schema = Graph->GetSchema();
+    TArray<UK2Node_CallFunction*> NewCalls;
+    const auto RollbackStagedCalls = [&]() -> bool
+    {
+        for (UK2Node_CallFunction* Call : NewCalls)
+        {
+            Call->DestroyNode();
+        }
+        for (const FAboutPage& Page : Pages)
+        {
+            if (!Page.Previous->LinkedTo.Contains(Page.OldExec))
+            {
+                Page.Previous->MakeLinkTo(Page.OldExec);
+            }
+        }
+        return false;
+    };
+    for (const FAboutPage& Page : Pages)
+    {
+        FGraphNodeCreator<UK2Node_CallFunction> Creator(*Graph);
+        auto* Call = Creator.CreateNode();
+        Call->SetFromFunction(Function);
+        Call->NodePosX = Page.NodeX;
+        Call->NodePosY = Page.NodeY;
+        Creator.Finalize();
+        NewCalls.Add(Call);
+        if (!Call->FindPin(TEXT("Title"), EGPD_Input) || !Call->FindPin(TEXT("PageIndex"), EGPD_Input) ||
+            !Call->FindPin(TEXT("Source"), EGPD_Input) || !Call->GetExecPin() || !Call->GetThenPin())
+        {
+            return RollbackStagedCalls();
+        }
+        Schema->TrySetDefaultText(*Call->FindPinChecked(TEXT("Title")), Page.Title);
+        Schema->TrySetDefaultValue(*Call->FindPinChecked(TEXT("PageIndex")), Page.Index);
+        Schema->TrySetDefaultObject(*Call->FindPinChecked(TEXT("Source")), Page.Media);
+        if (!Call->FindPinChecked(TEXT("Title"))->DefaultTextValue.IdenticalTo(Page.Title) ||
+            Call->FindPinChecked(TEXT("PageIndex"))->DefaultValue != Page.Index ||
+            Call->FindPinChecked(TEXT("Source"))->DefaultObject != Page.Media)
+        {
+            return RollbackStagedCalls();
+        }
+    }
+    for (int32 I = 0; I < Pages.Num(); ++I)
+    {
+        if (!Schema->MovePinLinks(*Pages[I].OldExec, *NewCalls[I]->GetExecPin()).CanSafeConnect())
+        {
+            return RollbackStagedCalls();
+        }
+    }
+    CollectUnusedInputs(Remove, nullptr);
+    RemoveNodes(*Blueprint, *Graph, Remove);
+    return true;
 }
 
 bool USampleBlueprintMigrationLibrary::RemoveDeclaredVariable(UBlueprint* Blueprint, FName VariableName)
