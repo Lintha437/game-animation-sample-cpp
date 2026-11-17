@@ -156,16 +156,25 @@ namespace
             Character->ContainerPtrToValuePtr<void>(&Component))) : nullptr;
     }
 
+    void ResetGeometry(const FBlueprintStructure& Output)
+    {
+        Output.SetObject(TEXT("HitComponent_68_EBCBFE6F45F585869177C0B80CF2CBF3"), nullptr);
+        Output.Set(TEXT("HasFrontLedge_34_6C547E244F41599C4D38E1909503CCBA"), false);
+        Output.Set(TEXT("HasBackLedge_41_8550E97541A4EDBCA44DB0B16F1B51C4"), false);
+        Output.Set(TEXT("HasBackFloor_25_AC42C42F4DD2BFF32A30BDAB394529DE"), false);
+        Output.Set(TEXT("FrontLedgeLocation_50_52B8B8A84F10B0E0A9F287972F2C54D8"), FVector::ZeroVector);
+        Output.Set(TEXT("FrontLedgeNormal_51_3C4F46204EAF10E382D4D9A8E26ACB5A"), FVector::ZeroVector);
+        Output.Set(TEXT("BackLedgeLocation_55_EB7453EF477E18645DAD9F8950BCF44F"), FVector::ZeroVector);
+        Output.Set(TEXT("BackLedgeNormal_56_F05B9B4A4046704A49754F80A8C7BCE3"), FVector::ZeroVector);
+        Output.Set(TEXT("BackFloorLocation_58_0BB660F246B00F3211984E9AC5FE310D"), FVector::ZeroVector);
+        Output.Set(TEXT("ObstacleHeight_63_0A6EB46D4C92C5D9173661B88701D23F"), 0.0);
+        Output.Set(TEXT("ObstacleDepth_17_34DBDE1142FC8B90DA8440A77C6664CB"), 0.0);
+        Output.Set(TEXT("BackLedgeHeight_64_FA78930E475E1B89F0CCC5BC6F6043A3"), 0.0);
+    }
+
     void WriteResult(const FBlueprintStructure& Output, const FSampleTraversalClearance& Result)
     {
-        if (Result.Obstacle.IsValid())
-        {
-            if (const auto* Hit = FindFProperty<FObjectPropertyBase>(Output.Type,
-                TEXT("HitComponent_68_EBCBFE6F45F585869177C0B80CF2CBF3")))
-            {
-                Hit->SetObjectPropertyValue_InContainer(Output.Data, Result.Obstacle.Get());
-            }
-        }
+        Output.SetObject(TEXT("HitComponent_68_EBCBFE6F45F585869177C0B80CF2CBF3"), Result.Obstacle.Get());
         Output.Set(TEXT("HasFrontLedge_34_6C547E244F41599C4D38E1909503CCBA"), Result.bCanReachFront);
         if (Result.Ledges.Front)
         {
@@ -274,8 +283,10 @@ bool USampleTraversalComponent::TryAuthoredTraversal(const FSampleTraversalAppro
         DebugEnum->GetUnderlyingProperty()->SetIntPropertyValue(DebugEnum->ContainerPtrToValuePtr<void>(Data),
             static_cast<uint64>(DebugType));
     }
+    const uint64 PreviousDispatch = TraversalDispatchSerial;
     ProcessEvent(Function, Data);
-    return !CheckFailed->GetPropertyValue_InContainer(Data) && !MontageFailed->GetPropertyValue_InContainer(Data);
+    return !CheckFailed->GetPropertyValue_InContainer(Data) && !MontageFailed->GetPropertyValue_InContainer(Data) &&
+        TraversalDispatchSerial != PreviousDispatch;
 }
 
 DEFINE_FUNCTION(USampleTraversalComponent::execEvaluateTraversalClearance)
@@ -288,10 +299,16 @@ DEFINE_FUNCTION(USampleTraversalComponent::execEvaluateTraversalClearance)
     P_NATIVE_BEGIN;
     bool& bAccepted = *static_cast<bool*>(RESULT_PARAM);
     bAccepted = false;
+    const bool bValidOutput = Output.Data && Output.Type &&
+        Output.Type->GetFName() == TEXT("S_TraversalCheckResult");
+    if (bValidOutput)
+    {
+        ResetGeometry(Output);
+    }
     AActor* Pawn = P_THIS->GetOwner();
     const UCapsuleComponent* Capsule = GetTraversalCapsule(*P_THIS);
     if (Pawn && IsValid(Capsule) && Input.Data && Input.Type && Input.Type->GetFName() == TEXT("S_TraversalCheckInputs") &&
-        Output.Data && Output.Type && Output.Type->GetFName() == TEXT("S_TraversalCheckResult"))
+        bValidOutput)
     {
         FSampleTraversalApproach Approach;
         Approach.Direction = Input.Vector(TEXT("TraceForwardDirection_5_84E06003419F502C44036B9424B39047"));
@@ -300,11 +317,13 @@ DEFINE_FUNCTION(USampleTraversalComponent::execEvaluateTraversalClearance)
         Approach.Distance = Input.Number(TEXT("TraceForwardDistance_2_07F489F3465D510BFC123689985564DC"));
         Approach.Radius = Input.Number(TEXT("TraceRadius_10_FF044CA546FFD12BAA4D4E93460A273A"));
         Approach.HalfHeight = Input.Number(TEXT("TraceHalfHeight_12_019A16DE47BB8535C3C0CF8AA6E355EB"));
+        int32 DebugLevel;
+        float DebugDuration;
+        P_THIS->ReadTraversalDebugSettings(DebugLevel, DebugDuration);
         const FSampleTraversalClearance Result = FSampleTraversalClearanceQuery::Query(*Pawn, Approach,
             Capsule->GetUnscaledCapsuleRadius(), Capsule->GetUnscaledCapsuleHalfHeight(),
             static_cast<EDrawDebugTrace::Type>(DebugType),
-            UKismetSystemLibrary::GetConsoleVariableIntValue(TEXT("DDCvar.Traversal.DrawDebugLevel")),
-            UKismetSystemLibrary::GetConsoleVariableFloatValue(TEXT("DDCvar.Traversal.DrawDebugDuration")));
+            DebugLevel, DebugDuration);
         WriteResult(Output, Result);
         bAccepted = Result.bCanReachFront;
     }

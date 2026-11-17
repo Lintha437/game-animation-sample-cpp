@@ -9,6 +9,7 @@
 class UPrimitiveComponent;
 class UMoverComponent;
 class APawn;
+class FStructProperty;
 struct FSampleTraversalApproach;
 
 /**
@@ -95,6 +96,36 @@ public:
     /** Reads the imported Blueprint structures from the VM and forwards them to the native query. */
     DECLARE_FUNCTION(execEvaluateTraversalClearance);
 
+    /** Reads the reference traversal debug settings for the current attempt. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Traversal")
+    static void ReadTraversalDebugSettings(int32& Level, float& Duration);
+
+    /** Prints the authored diagnostic only when its supplied level threshold is met. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Traversal")
+    void PrintTraversalDiagnostic(int32 Level, int32 Threshold, const FString& Message,
+        bool bPrintToScreen, bool bPrintToLog, FLinearColor Color, float Duration, FName Key);
+
+    /**
+     * Resolves the floor warp point using the difference between the two authored
+     * animation curve samples. Failure leaves Location unchanged.
+     */
+    UFUNCTION(BlueprintPure, Category = "Sample|Traversal")
+    static bool ResolveTraversalBackFloorLocation(FVector BackLedge, FVector BackNormal,
+        FVector BackFloor, double AnimatedLedgeDistance, double AnimatedFloorDistance, FVector& Location);
+
+    /**
+     * Updates the reserved traversal warp targets on the owner's Motion Warping component.
+     * The authored graph supplies action/window predicates, curve samples, offset and rotations.
+     * Disabled or invalid optional targets are removed; invalid front geometry removes all three.
+     * @return Whether the requested targets were all resolved and updated.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Traversal")
+    bool UpdateTraversalWarpTargets(UActorComponent* MotionWarping, FVector FrontLedge,
+        FVector FrontNormal, FVector FrontOffset, bool bUseBackLedge, FVector BackLedge,
+        FRotator BackLedgeRotation, bool bUseBackFloor, FVector BackNormal, FVector BackFloor,
+        bool bHasDistanceSamples, double AnimatedLedgeDistance, double AnimatedFloorDistance,
+        FRotator BackFloorRotation);
+
     /**
      * Updates the traversal activity field exposed by the imported component.
      * The original montage callbacks own when the activity starts and ends.
@@ -110,7 +141,7 @@ public:
      * Sends a native approach to the imported chooser and playback graph.
      * @param Approach World-space sweep direction, offsets, and capsule dimensions.
      * @param DebugType Visualization mode for this input attempt.
-     * @return True once geometry and montage selection both succeed.
+     * @return True once geometry, montage selection and native dispatch all succeed.
      */
     bool TryAuthoredTraversal(const FSampleTraversalApproach& Approach, EDrawDebugTrace::Type DebugType);
 
@@ -160,6 +191,18 @@ public:
     void FinishMoverTraversalMode();
 
     /**
+     * Acquires collision and movement state after the authored montage start and warp setup.
+     * The caller supplies the same components as the reference start path.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Traversal")
+    void BeginTraversalGameplay(bool bMover, UPrimitiveComponent* Capsule, UPrimitiveComponent* Obstacle,
+        UPrimitiveComponent* Mesh, UMoverComponent* Mover);
+
+    /** Releases the state acquired by BeginTraversalGameplay once per action. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Traversal")
+    void FinishTraversalGameplay();
+
+    /**
      * Receives the reference multiplayer traversal result on authority and proxies.
      * The locally controlled pawn has already started the chosen action. Other
      * copies record the payload before invoking the authored playback event.
@@ -183,6 +226,17 @@ public:
     /** Reads the authored traversal result struct directly from the Blueprint VM. */
     DECLARE_FUNCTION(execPublishTraversalAction);
 
+    /**
+     * Accepts a typed selection only when the authored action predicate and montage are valid.
+     * @return Whether local playback and the typed server request were dispatched.
+     */
+    UFUNCTION(BlueprintCallable, CustomThunk, Category = "Sample|Traversal",
+        meta = (CustomStructureParam = "TraversalResult"))
+    bool TryPublishTraversalSelection(bool bActionAllowed, UPARAM(ref) int32& TraversalResult);
+
+    /** Reads the action predicate and typed result from the Blueprint VM before dispatching. */
+    DECLARE_FUNCTION(execTryPublishTraversalSelection);
+
     /** @return Whether this copy needs traversal replay from the multicast. */
     bool ShouldReceiveTraversalReplay() const;
 
@@ -193,6 +247,10 @@ protected:
 private:
     void CompleteCmcCorrection(bool bWaitForClientExit, double Deadline);
     void RestoreCmcCorrection();
+    bool DispatchTraversalSelection(const FStructProperty* Incoming, const void* Data);
+    uint64 TraversalDispatchSerial = 0;
+    bool bGameplayAcquired = false;
+    bool bGameplayUsesMover = false;
 
     TWeakObjectPtr<UPrimitiveComponent> TraversalCapsule;
     TWeakObjectPtr<UPrimitiveComponent> TraversalObstacle;

@@ -15,6 +15,38 @@
 #include "MoverDataModelTypes.h"
 #include "UObject/StructOnScope.h"
 #include "UObject/UnrealType.h"
+#include <limits>
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FSampleTraversalWarpGeometryTest,
+    "GameAnimationSampleCpp.Migration.TraversalWarpGeometry",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FSampleTraversalWarpGeometryTest::RunTest(const FString& Parameters)
+{
+    const FVector BackLedge(100.0, 200.0, 300.0);
+    const FVector BackNormal(0.6, 0.8, 0.0);
+    const FVector BackFloor(40.0, 50.0, 60.0);
+    const FVector Expected(130.0, 240.0, 60.0);
+    FVector Location = FVector::ZeroVector;
+    TestTrue(TEXT("Valid animation distances resolve the floor target"),
+        USampleTraversalComponent::ResolveTraversalBackFloorLocation(
+            BackLedge, BackNormal, BackFloor, 70.0, 120.0, Location));
+    TestTrue(TEXT("The ledge and curve delta determine XY and the floor determines Z"), Location.Equals(Expected));
+    TestTrue(TEXT("Reversed curve distance order produces the same target"),
+        USampleTraversalComponent::ResolveTraversalBackFloorLocation(
+            BackLedge, BackNormal, BackFloor, 120.0, 70.0, Location) && Location.Equals(Expected));
+    TestFalse(TEXT("Non-finite samples are rejected"),
+        USampleTraversalComponent::ResolveTraversalBackFloorLocation(
+            BackLedge, BackNormal, BackFloor, std::numeric_limits<double>::infinity(), 70.0, Location));
+    TestTrue(TEXT("A failed query leaves its output unchanged"), Location.Equals(Expected));
+    const double MaxDistance = std::numeric_limits<double>::max();
+    TestFalse(TEXT("Overflowing sample deltas are rejected"),
+        USampleTraversalComponent::ResolveTraversalBackFloorLocation(
+            BackLedge, BackNormal, BackFloor, MaxDistance, -MaxDistance, Location));
+    TestTrue(TEXT("Overflow leaves the previous output unchanged"), Location.Equals(Expected));
+    return true;
+}
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
     FSampleTraversalMovementMigrationTest,

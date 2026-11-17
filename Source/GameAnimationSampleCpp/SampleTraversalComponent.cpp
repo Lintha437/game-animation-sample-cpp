@@ -1,5 +1,6 @@
 #include "SampleTraversalComponent.h"
 
+#include "Animation/AnimMontage.h"
 #include "Components/PrimitiveComponent.h"
 #include "DefaultMovementSet/CharacterMoverComponent.h"
 #include "Engine/World.h"
@@ -7,6 +8,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "MoverComponent.h"
 #include "MoverTypes.h"
+#include "Math/RotationMatrix.h"
 #include "UObject/StructOnScope.h"
 #include "UObject/UnrealType.h"
 
@@ -17,6 +19,85 @@ namespace
     const FName MoverFlag(TEXT("IsMoverCharacter"));
     constexpr float CorrectionGracePeriod = 0.2f;
     constexpr float MaxRemoteExitWait = 2.0f;
+    const FName FrontLedgeTarget(TEXT("FrontLedge"));
+    const FName BackLedgeTarget(TEXT("BackLedge"));
+    const FName BackFloorTarget(TEXT("BackFloor"));
+
+    bool IsFiniteVector(const FVector& Value)
+    {
+        return FMath::IsFinite(Value.X) && FMath::IsFinite(Value.Y) && FMath::IsFinite(Value.Z);
+    }
+
+    UFunction* FindTraversalPlayback(USampleTraversalComponent& Component)
+    {
+        const auto* IsMover = FindFProperty<FBoolProperty>(Component.GetClass(), MoverFlag);
+        if (!IsMover)
+        {
+            return nullptr;
+        }
+        UFunction* Play = Component.FindFunction(IsMover->GetPropertyValue_InContainer(&Component)
+            ? TEXT("PerformTraversalAction_Mover") : TEXT("PerformTraversalAction_CMC"));
+        return Play && Play->NumParms == 0 ? Play : nullptr;
+    }
+
+    bool HasChosenMontage(const FStructProperty& Result, const void* Data)
+    {
+        const auto* Montage = FindFProperty<FObjectPropertyBase>(Result.Struct,
+            TEXT("ChosenMontage_71_7693BD7146A29E9A85C28DB52F45F7FD"));
+        return Montage && IsValid(Cast<UAnimMontage>(Montage->GetObjectPropertyValue_InContainer(Data)));
+    }
+
+    // Motion Warping is an authored component. Verify its loaded API before invoking it
+    // without introducing a runtime module dependency.
+    struct FTraversalWarpFunctions
+    {
+        UFunction* Update = nullptr;
+        UFunction* Remove = nullptr;
+        const FNameProperty* UpdateName = nullptr;
+        const FStructProperty* UpdateLocation = nullptr;
+        const FStructProperty* UpdateRotation = nullptr;
+        const FNameProperty* RemoveName = nullptr;
+
+        bool Resolve(UActorComponent& Component)
+        {
+            const UClass* WarpClass = FindObject<UClass>(nullptr, TEXT("/Script/MotionWarping.MotionWarpingComponent"));
+            if (!WarpClass || !Component.IsA(WarpClass))
+            {
+                return false;
+            }
+            Update = Component.FindFunction(TEXT("AddOrUpdateWarpTargetFromLocationAndRotation"));
+            Remove = Component.FindFunction(TEXT("RemoveWarpTarget"));
+            if (!Update || Update->NumParms != 3 || !Remove || Remove->NumParms != 2 ||
+                !CastField<FIntProperty>(Remove->GetReturnProperty()))
+            {
+                return false;
+            }
+            UpdateName = FindFProperty<FNameProperty>(Update, TEXT("WarpTargetName"));
+            UpdateLocation = FindFProperty<FStructProperty>(Update, TEXT("TargetLocation"));
+            UpdateRotation = FindFProperty<FStructProperty>(Update, TEXT("TargetRotation"));
+            RemoveName = FindFProperty<FNameProperty>(Remove, TEXT("WarpTargetName"));
+            return UpdateName && RemoveName && UpdateLocation && UpdateRotation &&
+                UpdateLocation->Struct == TBaseStructure<FVector>::Get() &&
+                UpdateRotation->Struct == TBaseStructure<FRotator>::Get();
+        }
+
+        void Set(UActorComponent& Component, FName Name, const FVector& Location, const FRotator& Rotation) const
+        {
+            FStructOnScope Parameters(Update);
+            void* Data = Parameters.GetStructMemory();
+            UpdateName->SetPropertyValue_InContainer(Data, Name);
+            *UpdateLocation->ContainerPtrToValuePtr<FVector>(Data) = Location;
+            *UpdateRotation->ContainerPtrToValuePtr<FRotator>(Data) = Rotation;
+            Component.ProcessEvent(Update, Data);
+        }
+
+        void Clear(UActorComponent& Component, FName Name) const
+        {
+            FStructOnScope Parameters(Remove);
+            RemoveName->SetPropertyValue_InContainer(Parameters.GetStructMemory(), Name);
+            Component.ProcessEvent(Remove, Parameters.GetStructMemory());
+        }
+    };
 
     bool ReceivesAutonomousMoves(const AActor* Owner)
     {
@@ -54,6 +135,90 @@ namespace
         }
         return false;
     }
+}
+
+void USampleTraversalComponent::ReadTraversalDebugSettings(int32& Level, float& Duration)
+{
+    Level = UKismetSystemLibrary::GetConsoleVariableIntValue(TEXT("DDCvar.Traversal.DrawDebugLevel"));
+    Duration = UKismetSystemLibrary::GetConsoleVariableFloatValue(TEXT("DDCvar.Traversal.DrawDebugDuration"));
+}
+
+void USampleTraversalComponent::PrintTraversalDiagnostic(int32 Level, int32 Threshold, const FString& Message,
+    bool bPrintToScreen, bool bPrintToLog, FLinearColor Color, float Duration, FName Key)
+{
+    if (Level >= Threshold)
+    {
+        UKismetSystemLibrary::PrintString(this, Message, bPrintToScreen, bPrintToLog, Color, Duration, Key);
+    }
+}
+
+bool USampleTraversalComponent::ResolveTraversalBackFloorLocation(FVector BackLedge, FVector BackNormal,
+    FVector BackFloor, double AnimatedLedgeDistance, double AnimatedFloorDistance, FVector& Location)
+{
+    if (!IsFiniteVector(BackLedge) || !IsFiniteVector(BackNormal) || !IsFiniteVector(BackFloor) ||
+        !FMath::IsFinite(AnimatedLedgeDistance) || !FMath::IsFinite(AnimatedFloorDistance))
+    {
+        return false;
+    }
+    const double Distance = FMath::Abs(AnimatedLedgeDistance - AnimatedFloorDistance);
+    const double X = BackLedge.X + BackNormal.X * Distance;
+    const double Y = BackLedge.Y + BackNormal.Y * Distance;
+    if (!FMath::IsFinite(Distance) || !FMath::IsFinite(X) || !FMath::IsFinite(Y))
+    {
+        return false;
+    }
+    Location = FVector(X, Y, BackFloor.Z);
+    return true;
+}
+
+bool USampleTraversalComponent::UpdateTraversalWarpTargets(UActorComponent* MotionWarping, FVector FrontLedge,
+    FVector FrontNormal, FVector FrontOffset, bool bUseBackLedge, FVector BackLedge,
+    FRotator BackLedgeRotation, bool bUseBackFloor, FVector BackNormal, FVector BackFloor,
+    bool bHasDistanceSamples, double AnimatedLedgeDistance, double AnimatedFloorDistance, FRotator BackFloorRotation)
+{
+    FTraversalWarpFunctions Functions;
+    if (!IsValid(MotionWarping) || !GetOwner() || MotionWarping->GetOwner() != GetOwner() ||
+        !Functions.Resolve(*MotionWarping))
+    {
+        return false;
+    }
+    const double FrontX = FrontLedge.X + FrontOffset.X;
+    const double FrontY = FrontLedge.Y + FrontOffset.Y;
+    const double FrontZ = FrontLedge.Z + FrontOffset.Z;
+    if (!FMath::IsFinite(FrontX) || !FMath::IsFinite(FrontY) || !FMath::IsFinite(FrontZ) ||
+        !IsFiniteVector(FrontNormal) || FrontNormal.IsNearlyZero() || !FMath::IsFinite(FrontNormal.SizeSquared()))
+    {
+        Functions.Clear(*MotionWarping, FrontLedgeTarget);
+        Functions.Clear(*MotionWarping, BackLedgeTarget);
+        Functions.Clear(*MotionWarping, BackFloorTarget);
+        return false;
+    }
+    Functions.Set(*MotionWarping, FrontLedgeTarget, FVector(FrontX, FrontY, FrontZ),
+        FRotationMatrix::MakeFromX(-FrontNormal).Rotator());
+
+    const bool bBackLedgeValid = IsFiniteVector(BackLedge) && !BackLedgeRotation.ContainsNaN();
+    if (bUseBackLedge && bBackLedgeValid)
+    {
+        Functions.Set(*MotionWarping, BackLedgeTarget, BackLedge, BackLedgeRotation);
+    }
+    else
+    {
+        Functions.Clear(*MotionWarping, BackLedgeTarget);
+    }
+
+    FVector FloorLocation;
+    const bool bFloorValid = bUseBackFloor && bHasDistanceSamples && !BackFloorRotation.ContainsNaN() &&
+        ResolveTraversalBackFloorLocation(BackLedge, BackNormal, BackFloor, AnimatedLedgeDistance,
+            AnimatedFloorDistance, FloorLocation);
+    if (bFloorValid)
+    {
+        Functions.Set(*MotionWarping, BackFloorTarget, FloorLocation, BackFloorRotation);
+    }
+    else
+    {
+        Functions.Clear(*MotionWarping, BackFloorTarget);
+    }
+    return (!bUseBackLedge || bBackLedgeValid) && (!bUseBackFloor || bFloorValid);
 }
 
 void USampleTraversalComponent::InitializeTraversalRuntime()
@@ -177,6 +342,7 @@ void USampleTraversalComponent::EndTraversalCollision()
 
 void USampleTraversalComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+    bGameplayAcquired = false;
     EndTraversalCollision();
     SetTraversalActionActive(false);
     FinishMoverTraversalMode();
@@ -186,6 +352,45 @@ void USampleTraversalComponent::EndPlay(const EEndPlayReason::Type EndPlayReason
     }
     RestoreCmcCorrection();
     Super::EndPlay(EndPlayReason);
+}
+
+void USampleTraversalComponent::BeginTraversalGameplay(bool bMover, UPrimitiveComponent* Capsule,
+    UPrimitiveComponent* Obstacle, UPrimitiveComponent* Mesh, UMoverComponent* Mover)
+{
+    if (bGameplayAcquired)
+    {
+        return;
+    }
+    bGameplayUsesMover = bMover;
+    bGameplayAcquired = true;
+    BeginTraversalCollision(Capsule, Obstacle, bMover ? Mesh : nullptr);
+    if (bMover)
+    {
+        BeginMoverTraversalMode(Mover);
+    }
+    else
+    {
+        BeginCmcTraversalMode();
+    }
+}
+
+void USampleTraversalComponent::FinishTraversalGameplay()
+{
+    if (!bGameplayAcquired)
+    {
+        return;
+    }
+    bGameplayAcquired = false;
+    SetTraversalActionActive(false);
+    EndTraversalCollision();
+    if (bGameplayUsesMover)
+    {
+        FinishMoverTraversalMode();
+    }
+    else
+    {
+        FinishCmcTraversalMode();
+    }
 }
 
 void USampleTraversalComponent::BeginCmcTraversalMode()
@@ -308,6 +513,41 @@ void USampleTraversalComponent::PublishTraversalAction(int32&)
     checkNoEntry();
 }
 
+bool USampleTraversalComponent::TryPublishTraversalSelection(bool, int32&)
+{
+    checkNoEntry();
+    return false;
+}
+
+bool USampleTraversalComponent::DispatchTraversalSelection(const FStructProperty* Incoming, const void* Data)
+{
+    const FName ResultName(TEXT("TraversalResult"));
+    const auto* Stored = FindFProperty<FStructProperty>(GetClass(), ResultName);
+    if (!Stored || !Incoming || !Data || !Stored->SameType(Incoming) || !HasChosenMontage(*Incoming, Data))
+    {
+        return false;
+    }
+    UFunction* Play = FindTraversalPlayback(*this);
+    UFunction* Server = FindFunction(TEXT("PerformTraversalAction_Server"));
+    const auto* Parameter = Server ? FindFProperty<FStructProperty>(Server, ResultName) : nullptr;
+    if (!Play || !Parameter || !Parameter->SameType(Stored) || Server->NumParms != 1 ||
+        !Server->HasAllFunctionFlags(FUNC_Net | FUNC_NetServer))
+    {
+        return false;
+    }
+    FStructOnScope Params(Server);
+    Parameter->CopyCompleteValue(Parameter->ContainerPtrToValuePtr<void>(Params.GetStructMemory()), Data);
+    void* Cached = Stored->ContainerPtrToValuePtr<void>(this);
+    if (Cached != Data)
+    {
+        Stored->CopyCompleteValue(Cached, Data);
+    }
+    ProcessEvent(Play, nullptr);
+    ProcessEvent(Server, Params.GetStructMemory());
+    ++TraversalDispatchSerial;
+    return true;
+}
+
 DEFINE_FUNCTION(USampleTraversalComponent::execPublishTraversalAction)
 {
     Stack.StepCompiledIn<FStructProperty>(nullptr);
@@ -316,27 +556,22 @@ DEFINE_FUNCTION(USampleTraversalComponent::execPublishTraversalAction)
     P_FINISH;
 
     P_NATIVE_BEGIN;
-    const FName ResultName(TEXT("TraversalResult"));
-    const auto* Stored = FindFProperty<FStructProperty>(P_THIS->GetClass(), ResultName);
-    if (Stored && Incoming && Data && Stored->SameType(Incoming))
-    {
-        void* CachedResult = Stored->ContainerPtrToValuePtr<void>(P_THIS);
-        Stored->CopyCompleteValue(CachedResult, Data);
-        if (UFunction* Play = P_THIS->FindFunction(TEXT("PerformTraversalAction")); Play && Play->NumParms == 0)
-        {
-            P_THIS->ProcessEvent(Play, nullptr);
-        }
+    P_THIS->DispatchTraversalSelection(Incoming, Data);
+    P_NATIVE_END;
+}
 
-        UFunction* Server = P_THIS->FindFunction(TEXT("PerformTraversalAction_Server"));
-        const auto* Parameter = Server ? FindFProperty<FStructProperty>(Server, ResultName) : nullptr;
-        if (Parameter && Parameter->SameType(Stored) && Server->NumParms == 1 &&
-            Server->HasAllFunctionFlags(FUNC_Net | FUNC_NetServer))
-        {
-            FStructOnScope Params(Server);
-            Parameter->CopyCompleteValue(Parameter->ContainerPtrToValuePtr<void>(Params.GetStructMemory()), CachedResult);
-            P_THIS->ProcessEvent(Server, Params.GetStructMemory());
-        }
-    }
+DEFINE_FUNCTION(USampleTraversalComponent::execTryPublishTraversalSelection)
+{
+    P_GET_UBOOL(bActionAllowed);
+    Stack.MostRecentProperty = nullptr;
+    Stack.MostRecentPropertyAddress = nullptr;
+    Stack.StepCompiledIn<FStructProperty>(nullptr);
+    const auto* Incoming = CastField<FStructProperty>(Stack.MostRecentProperty);
+    const void* Data = Stack.MostRecentPropertyAddress;
+    P_FINISH;
+
+    P_NATIVE_BEGIN;
+    *static_cast<bool*>(RESULT_PARAM) = bActionAllowed && P_THIS->DispatchTraversalSelection(Incoming, Data);
     P_NATIVE_END;
 }
 
@@ -355,10 +590,14 @@ DEFINE_FUNCTION(USampleTraversalComponent::execApplyTraversalReplay)
         {
             if (P_THIS->ShouldReceiveTraversalReplay())
             {
-                UFunction* Play = P_THIS->FindFunction(TEXT("PerformTraversalAction"));
-                if (Play && Play->ParmsSize == 0)
+                UFunction* Play = FindTraversalPlayback(*P_THIS);
+                if (Play && HasChosenMontage(*Incoming, Data))
                 {
-                    Stored->Struct->CopyScriptStruct(Stored->ContainerPtrToValuePtr<void>(P_THIS), Data);
+                    void* Cached = Stored->ContainerPtrToValuePtr<void>(P_THIS);
+                    if (Cached != Data)
+                    {
+                        Stored->Struct->CopyScriptStruct(Cached, Data);
+                    }
                     P_THIS->ProcessEvent(Play, nullptr);
                 }
             }
