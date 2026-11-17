@@ -16,15 +16,10 @@ void USampleCameraShakeAnimNotify::Notify(USkeletalMeshComponent* MeshComp,
         return;
     }
 
-    static const FName ShakePropertyName(TEXT("Shake"));
-    const FClassProperty* Property = FindFProperty<FClassProperty>(GetClass(), ShakePropertyName);
-    if (!ensureMsgf(Property && Property->MetaClass->IsChildOf(UCameraShakeBase::StaticClass()),
-        TEXT("%s requires a camera shake class property named Shake"), *GetClass()->GetPathName()))
-    {
-        return;
-    }
-
-    const TSubclassOf<UCameraShakeBase> Shake = Cast<UClass>(Property->GetObjectPropertyValue_InContainer(this));
+    // Transitional support for the imported child until its animation events are converted.
+    const FClassProperty* Legacy = FindFProperty<FClassProperty>(GetClass(), TEXT("Shake"));
+    const TSubclassOf<UCameraShakeBase> Shake = Legacy && Legacy->MetaClass->IsChildOf(UCameraShakeBase::StaticClass())
+        ? TSubclassOf<UCameraShakeBase>(Cast<UClass>(Legacy->GetObjectPropertyValue_InContainer(this))) : ShakeClass;
     if (Shake)
     {
         APlayerCameraManager::PlayWorldCameraShake(World, Shake, Owner->GetActorLocation(),

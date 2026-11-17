@@ -779,6 +779,10 @@ In two-player listen-server PIE in `DefaultLevel`, the owning CMC client started
 
 The Win64 Development Editor built, and `GameAnimationSampleCpp.Migration.TraversalMovement` passed. It verifies that authority holds Flying and accepts the owner's move after finishing the local montage. The timeout fallback, packet loss, dedicated server and other vault approaches are **Not run**.
 
+### Native animation notify retirement
+
+The camera shake, movement-mode override and capsule-collision override Blueprint packages were retired after converting 50 event instances across 28 animations. A fresh Editor loaded all 50 native instances with matching timing, filters and authored settings. The three old packages had zero registry referencers and were moved to the migration recovery directory with their original bytes. The repeat validation saved zero animations. All 30 project and locomotion Automation tests passed after reopening. Complete and interrupted montage playback in the Win64 archive remains pending.
+
 ### Native traversal gameplay installation
 
 `AC_TraversalLogic` retains its `TryTraversalAction`, `SetWarpTargets`, and `EventGraph` entry points. The source graph export confirmed that each inspected `GetArrayItem` warp lookup used the disconnected integer input `Dimension 1` with default `0`. The installer verified the source graph, compiled and saved the native forwarding calls, and preserved the parent class and all seven checked function flags, including the server and multicast flags. The installed package and recovery backup kept their SHA-256 values across repeat installation and a fresh Editor process. The `SandboxCharacter_Mover_Ragdoll` movement-mode transition wrapper also passed its compiled-call and package checks after reopening.

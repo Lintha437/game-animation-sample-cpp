@@ -19,19 +19,15 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FSampleCameraShakeNotifyMigrationTest::RunTest(const FString& Parameters)
 {
-    UClass* Class = LoadClass<USampleCameraShakeAnimNotify>(nullptr,
-        TEXT("/Game/Blueprints/AnimNotifies/BP_AnimNotify_SimpleCameraShake.BP_AnimNotify_SimpleCameraShake_C"));
-    if (!TestNotNull(TEXT("Migrated notify class"), Class))
+    UClass* Shake = LoadClass<UCameraShakeBase>(nullptr,
+        TEXT("/Game/Blueprints/Cameras/CameraShake_Basic.CameraShake_Basic_C"));
+    if (!TestNotNull(TEXT("Authored shake class"), Shake))
     {
         return false;
     }
 
-    for (const FName FunctionName : {FName(TEXT("GetNotifyName")), FName(TEXT("Received_Notify"))})
-    {
-        const UFunction* Function = Class->FindFunctionByName(FunctionName);
-        TestTrue(*FunctionName.ToString(), Function && Function->Script.IsEmpty());
-    }
-    USampleCameraShakeAnimNotify* Notify = NewObject<USampleCameraShakeAnimNotify>(GetTransientPackage(), Class);
+    USampleCameraShakeAnimNotify* Notify = NewObject<USampleCameraShakeAnimNotify>();
+    Notify->ShakeClass = Shake;
     TestEqual(TEXT("Native track label"), Notify->GetNotifyName(), FString(TEXT("CameraShake")));
 
     UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);

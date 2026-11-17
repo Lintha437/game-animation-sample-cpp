@@ -12,7 +12,6 @@
 #include "Misc/AutomationTest.h"
 #include "Misc/ScopeExit.h"
 #include "MoverDataModelTypes.h"
-#include "UObject/EnumProperty.h"
 #include "UObject/UnrealType.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -22,55 +21,9 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FSampleGameplayAnimNotifyStateMigrationTest::RunTest(const FString& Parameters)
 {
-    UClass* MovementClass = LoadClass<USampleOverrideMovementModeAnimNotifyState>(nullptr,
-        TEXT("/Game/Blueprints/AnimNotifies/BP_NotifyState_OverrideMovementMode.BP_NotifyState_OverrideMovementMode_C"));
-    UClass* CollisionClass = LoadClass<USampleOverrideCapsuleCollisionAnimNotifyState>(nullptr,
-        TEXT("/Game/Blueprints/AnimNotifies/BP_NotifyState_OverrideCapsuleCollision.BP_NotifyState_OverrideCapsuleCollision_C"));
-    if (!TestNotNull(TEXT("Migrated movement notify"), MovementClass) ||
-        !TestNotNull(TEXT("Migrated collision notify"), CollisionClass))
-    {
-        return false;
-    }
-
-    for (UClass* Class : {MovementClass, CollisionClass})
-    {
-        for (const FName Name : {FName(TEXT("Received_NotifyBegin")), FName(TEXT("Received_NotifyEnd"))})
-        {
-            const UFunction* Function = Class->FindFunctionByName(Name);
-            TestTrue(Name.ToString(), Function && Function->Script.IsEmpty());
-        }
-    }
-    const auto* OverrideMode = FindFProperty<FNameProperty>(MovementClass, TEXT("OverrideMovementMode"));
-    const auto* EndingMode = FindFProperty<FNameProperty>(MovementClass, TEXT("EndingMovementMode"));
-    if (!TestNotNull(TEXT("Authored override mode"), OverrideMode) ||
-        !TestNotNull(TEXT("Authored ending mode"), EndingMode))
-    {
-        return false;
-    }
-
-    const auto* ResponseProperty = FindFProperty<FProperty>(CollisionClass, TEXT("New Response"));
-    const auto* Reset = FindFProperty<FBoolProperty>(CollisionClass, TEXT("ResetOnEnd"));
-    if (!TestNotNull(TEXT("Authored collision response"), ResponseProperty) ||
-        !TestNotNull(TEXT("Authored reset flag"), Reset))
-    {
-        return false;
-    }
-
-    auto* Movement = NewObject<USampleOverrideMovementModeAnimNotifyState>(GetTransientPackage(), MovementClass);
-    auto* Collision = NewObject<USampleOverrideCapsuleCollisionAnimNotifyState>(GetTransientPackage(), CollisionClass);
-    if (const auto* Byte = CastField<FByteProperty>(ResponseProperty); Byte && Byte->Enum == StaticEnum<ECollisionResponse>())
-    {
-        Byte->SetPropertyValue_InContainer(Collision, ECR_Overlap);
-    }
-    else if (const auto* Enum = CastField<FEnumProperty>(ResponseProperty); Enum && Enum->GetEnum() == StaticEnum<ECollisionResponse>())
-    {
-        Enum->GetUnderlyingProperty()->SetIntPropertyValue(Enum->ContainerPtrToValuePtr<void>(Collision), int64{ECR_Overlap});
-    }
-    else
-    {
-        AddError(TEXT("New Response must retain its ECollisionResponse type."));
-        return false;
-    }
+    auto* Movement = NewObject<USampleOverrideMovementModeAnimNotifyState>();
+    auto* Collision = NewObject<USampleOverrideCapsuleCollisionAnimNotifyState>();
+    Collision->Response = ECR_Overlap;
 
     UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
     if (!TestNotNull(TEXT("Transient game world"), World))
@@ -95,13 +48,13 @@ bool FSampleGameplayAnimNotifyStateMigrationTest::RunTest(const FString& Paramet
     const FCollisionResponseContainer Overlap(ECR_Overlap);
     const FAnimNotifyEventReference EventReference;
 
-    Reset->SetPropertyValue_InContainer(Collision, false);
+    Collision->bRestoreCapsuleProfile = false;
     Collision->NotifyBegin(Mesh, nullptr, 1.0f, EventReference);
     TestTrue(TEXT("Begin applies the instance response to every root channel"), Root->GetCollisionResponseToChannels() == Overlap);
     Collision->NotifyEnd(Mesh, nullptr, EventReference);
     TestTrue(TEXT("Reset disabled preserves the override"), Root->GetCollisionResponseToChannels() == Overlap);
 
-    Reset->SetPropertyValue_InContainer(Collision, true);
+    Collision->bRestoreCapsuleProfile = true;
     Collision->NotifyEnd(Mesh, nullptr, EventReference);
     TestEqual(TEXT("Reset restores the authored profile"), Root->GetCollisionProfileName(), Profile);
     TestTrue(TEXT("Reset restores profile responses"), Root->GetCollisionResponseToChannels() == Original);
@@ -157,8 +110,8 @@ bool FSampleGameplayAnimNotifyStateMigrationTest::RunTest(const FString& Paramet
             return false;
         }
     }
-    OverrideMode->SetPropertyValue_InContainer(Movement, Flying);
-    EndingMode->SetPropertyValue_InContainer(Movement, Walking);
+    Movement->ModeOnBegin = Flying;
+    Movement->ModeOnEnd = Walking;
 
     // Seed the cached simulation result explicitly, as in the Mover state test.
     // This leaves the backend's real queued-mode path observable without ticking the world.

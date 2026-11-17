@@ -3,18 +3,23 @@
 #include "Animation/AnimNotifies/AnimNotify.h"
 #include "SampleCameraShakeAnimNotify.generated.h"
 
+class UCameraShakeBase;
+
 /**
  * Emits the sandbox's positional camera shake when an animation reaches this notify.
  *
- * The existing notify subclass retains its authored Shake class and serialized
- * animation references. One native dispatch uses the skeletal mesh owner's position.
+ * The animation event owns its shake class. One native dispatch uses the skeletal mesh owner's position.
  */
-UCLASS(Abstract, Blueprintable)
+UCLASS(Blueprintable, meta=(DisplayName="Camera Shake"))
 class GAMEANIMATIONSAMPLECPP_API USampleCameraShakeAnimNotify : public UAnimNotify
 {
     GENERATED_BODY()
 
 public:
+    /** Shake asset to play. An empty setting produces no effect. */
+    UPROPERTY(EditAnywhere, Category="Camera")
+    TSubclassOf<UCameraShakeBase> ShakeClass;
+
     /**
      * Starts the configured shake in the owner's world.
      * @param MeshComp Skeletal mesh firing this notify. Missing owners produce no shake.

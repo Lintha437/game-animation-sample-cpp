@@ -254,7 +254,9 @@ For gizmo manipulation, sample the local cursor and wheel. Start Shift control o
 
 ## Migrate native diagnostics and input displays
 
-`migrate_gameplay_anim_notify_states.py` reparents the two gameplay notify states that override Mover movement mode and capsule collision. Retain the authored Blueprint variables and montage instance values, and remove only the two migrated lifecycle callbacks. The movement state queues its ending mode only if the simulation still reports the override mode. The collision state restores the `CharacterCapsule` profile on exit only when `ResetOnEnd` is enabled. Verify montage completion and interruption in addition to the direct native callbacks.
+`migrate_gameplay_anim_notify_states.py` validates the movement-mode and collision callbacks before installing their native parents. The final `migrate_native_animation_notify_instances.py` stage replaces the imported camera shake, movement-mode and collision notify instances with concrete native instances. The stage copies the authored settings and preserves timing, links, filters and track indices by replacing the object within its existing event. The movement state queues its ending mode only if the simulation still reports the override mode. The collision state restores `CharacterCapsule` only when `bRestoreCapsuleProfile` is enabled. Verify montage completion and interruption in addition to the direct native callbacks.
+
+Run the ordered migration with the project Editor closed. After the commandlet saves and validates the animations and finds no remaining package references, the runner verifies the saved files and moves the three legacy Blueprint packages to `Saved/BlueprintMigration/NativeAnimationNotifies/Retired/`. The same recovery root contains copies of the original animations and notify packages. Reopen the project and validate the native instances before cooking.
 
 `migrate_shared_object_names.py` preserves the existing shared library's typed `GetObjectNames` signature and routes its body through C++. Preserve ordering, duplicates and null entries.
 

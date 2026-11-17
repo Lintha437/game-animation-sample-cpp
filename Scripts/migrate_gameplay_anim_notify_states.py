@@ -81,9 +81,12 @@ def migrate():
 
     editor = unreal.BlueprintEditorLibrary
     assets = unreal.get_editor_subsystem(unreal.EditorAssetSubsystem)
+    retirement = descriptor.parent / "Saved/BlueprintMigration/NativeAnimationNotifies/conversion.json"
     pending = []
     for name, parent_name, shape, fields, calls in NOTIFIES:
         asset = f"/Game/Blueprints/AnimNotifies/{name}"
+        if retirement.is_file() and not assets.does_asset_exist(asset):
+            continue
         blueprint = unreal.load_asset(asset)
         parent = unreal.load_class(None, f"/Script/GameAnimationSampleCpp.{parent_name}")
         if not blueprint or not parent:
