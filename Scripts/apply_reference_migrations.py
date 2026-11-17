@@ -86,6 +86,13 @@ MIGRATIONS = (
     "npc_controller_debug",
     "look_at_zone_routing",
     "look_at_level_runtime",
+    "gameplay_anim_notify_states",
+    "shared_object_names",
+    "camera_director_selection",
+    "mover_mode_transitions",
+    "mover_ragdoll_mode_transitions",
+    "traversal_native_gameplay",
+    "cmc_foley_volume",
 )
 
 

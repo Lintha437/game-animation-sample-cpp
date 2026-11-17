@@ -128,6 +128,8 @@ For Flying, keep Mover's stock flight solver and apply the sample's linear and f
 
 Resolve orientation before finalizing each input command. Preserve stationary aim thresholds, the last facing on a moving base, and the precedence given to root motion. Cache floor contact from the same Mover component used for simulation. Dispatch presentation callbacks only when the finalized mode changes.
 
+Apply `migrate_mover_mode_transitions.py` before `migrate_mover_ragdoll_mode_transitions.py`. The base pawn forwards jump, landing and slide decisions and crouch cleanup to C++. It retains the Foley callbacks and the existing fallback graph. The ragdoll child forwards capsule collision on mode entry and retains its authored exit animation callback. Its installer verifies the base pawn's compiled forwarding path first.
+
 When adapting a sandbox teleport or reset, update orientation intent alongside the actor transform. Let the host assign the next movement mode through Mover's simulation queue. Verify absolute teleports, relative orientation offsets, and the reset transform independently. Keep the host's authority and prediction policy for any replicated teleport.
 
 For a physics-driven ragdoll, derive the command's capsule transform from the simulated pelvis and spine. Include that transform only while Mover is about to simulate the ragdoll mode. Keep the custom command type and its consumers in sync when moving this path to the host. Identify the host skeleton's pelvis and spine bones before adapting the calculation. Carry the measured center-of-mass and spine velocities separately, since the former is used for rolling direction and the latter comes directly from physics. Preserve the host's fall-speed threshold and Physics Control modifier settings when porting the gravity limit.
@@ -148,6 +150,8 @@ Configure the leg body groups with the host Physics Asset's body names. The samp
 
 The CMC ragdoll hooks stop character movement, disable capsule collision, and simulate the pelvis and its descendants. Recovery restores the sample's pawn mesh and capsule collision settings before normal falling and landing resume. A host with different channel or capsule settings should restore its own policy at this boundary. The CMC ledge callback also clears crouch when leaving walkable ground.
 
+`migrate_cmc_foley_volume.py` routes jump and landing gain through the native CMC pawn and retains the existing Foley event calls. Jump gain maps ground speed from 0–500 cm/s to 0.5–1.0. Landing gain maps vertical velocity from −500 to −900 cm/s to 0.5–1.5. Both mappings clamp outside their authored intervals.
+
 ### Integrate pawn selection with the host GameMode
 
 The sandbox uses `DDCvar.PawnClass` to switch demonstration pawns for everyone in the active world. Keep the production game's existing login, spawn, and restart policies. If the host needs a pawn switch, resolve the permitted class on the authority before restarting the player. Check the spawn location and restore view rotation after possession. Keep any client-facing selection UI separate from the authoritative validation and restart.
@@ -155,6 +159,8 @@ The sandbox uses `DDCvar.PawnClass` to switch demonstration pawns for everyone i
 The reference controller's gaze teleport is a local sandbox navigation command. For an online gameplay teleport in a host project, have the authority establish the destination and validate collisions, occupancy, and player permissions. Preserve the intended movement mode and test correction on an owning client for each movement component.
 
 ### Connect traversal playback to movement
+
+Apply `migrate_traversal_native_gameplay.py` through the ordered runner after the earlier traversal migrations. It moves selection publishing, replay setup, warp target geometry, and movement and collision lifecycle into `USampleTraversalComponent`. The existing component retains its Chooser, montage calls and callbacks, and server and multicast events. Use `--verify-only` to check the saved package and its backup against the installation receipt after reopening the Editor.
 
 At component startup, cache the owner's authored capsule and mesh interface. For the Mover path, resolve the owning pawn's Character Mover Component before binding playback. Rebuild the cache when the host replaces the traversal owner.
 
@@ -236,7 +242,7 @@ Bind the possession buttons once when the widget initializes. After each control
 
 In the About panel, bind About and Close during widget initialization. Keep the authored gesture options in order and apply the network-specific visibility and switcher defaults during construction. Preserve each page's localized FText and File Media Source. A zone page change updates the title and switcher before storing the source and opening it. About toggles the panel and calls Play. Close collapses the panel, calls Pause, and calls Rewind.
 
-Keep the Look At POI level's BeginPlay and Destroyed entries in its existing Level Blueprint. Each forwards once to the native diagnostic helper, which executes `a.AnimNode.ControlRig.Debug` before `ControlRig.EnableDrawInterfaceInGame`. The installer classifies the event graph and verifies a backup of the original map before saving any migration. Use `migrate_look_at_level_runtime.py` as the final step in the ordered runner.
+Keep the Look At POI level's BeginPlay and Destroyed entries in its existing Level Blueprint. Each forwards once to the native diagnostic helper, which executes `a.AnimNode.ControlRig.Debug` before `ControlRig.EnableDrawInterfaceInGame`. The installer classifies the event graph and verifies a backup of the original map before saving any migration. Apply `migrate_look_at_level_runtime.py` through the ordered runner.
 
 Publish zone selection on the controller before notifying the animation instance and widget. Cache the zone type, assigned pawn, animation instance and optional gizmo. Reject unsupported pawn types before replacing the active selection or dispatching the authored look-at and widget callbacks.
 
@@ -247,6 +253,12 @@ Bind pointer events to the zone's authored hit components after they are initial
 For gizmo manipulation, sample the local cursor and wheel. Start Shift control on hover and keep it active until Shift is released. Apply cursor deltas to the target's rotation and clamp wheel scaling to the intended manipulation range. Keep the target's appearance and tooltip settings on the asset.
 
 ## Migrate native diagnostics and input displays
+
+`migrate_gameplay_anim_notify_states.py` reparents the two gameplay notify states that override Mover movement mode and capsule collision. Retain the authored Blueprint variables and montage instance values, and remove only the two migrated lifecycle callbacks. The movement state queues its ending mode only if the simulation still reports the override mode. The collision state restores the `CharacterCapsule` profile on exit only when `ResetOnEnd` is enabled. Verify montage completion and interruption in addition to the direct native callbacks.
+
+`migrate_shared_object_names.py` preserves the existing shared library's typed `GetObjectNames` signature and routes its body through C++. Preserve ordering, duplicates and null entries.
+
+`migrate_camera_director_selection.py` forwards the camera director's camera-style and crouch-rig policy to C++. The authored Chooser, rig assets, activation sequence and cached camera properties remain in the director. Verify the Chooser input and crouch rig across the authored camera styles and stance transitions.
 
 Apply `migrate_shared_draw_rotation.py` before `migrate_mover_animation_diagnostics.py`. Both stages target the CMC and Mover Animation Blueprints at their existing diagnostic call sites. The shared rotation samples player controller index zero from the current animation instance's world and uses zero rotation when the controller is absent. Keep each local-pawn and CVar gate in place. The state formatter consumes the authored enum display strings in movement mode, stance, gait and direction order. The diagnostic rows retain their original string conversion, source, array slot, and draw setup. CMC and Mover keep their authored differences in the state and Motion Matching panels.
 
