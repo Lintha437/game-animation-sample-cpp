@@ -37,6 +37,8 @@ If you generated the files from File Explorer, run `./Scripts/GenerateVisualStud
 
 In the game solution, select **Development Editor** and **Win64**, set **GameAnimSampleCpp** as the startup project, and build it before launching the debugger with **F5**. From the same solution, select **Development** and **Win64** for the standalone Game target. Close Unreal Editor before a full rebuild when the Editor has the destination binaries open.
 
+Solution Explorer groups the runtime module by domain under `Source/GameAnimationSampleCpp/Public` and `Source/GameAnimationSampleCpp/Private`. Runtime Automation tests are under `Private/Tests`. Editor migration code uses domain folders under `Source/GameAnimationSampleCppEditor/Private`. Unreal Build Tool generates these filters from the source directory structure, and the generation script verifies them for both game solution formats.
+
 If Unreal Build Tool selects a broken or unsupported MSVC installation, use the Visual Studio Installer to install a supported toolset. The verified Win64 Editor build used MSVC `14.50.35739` and Windows SDK `10.0.26100.0`.
 
 ## Local reference workspace
