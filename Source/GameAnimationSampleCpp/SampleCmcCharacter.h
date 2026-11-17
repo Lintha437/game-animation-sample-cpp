@@ -83,6 +83,22 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Movement")
     void RecordLandingVelocity(FVector LandVelocity);
 
+    /**
+     * Evaluates the authored jump Foley volume from pre-jump horizontal speed.
+     * @param GroundSpeedBeforeJump Planar speed in centimeters per second.
+     * @return Dimensionless gain, clamped to [0.5, 1.0]. No audio or state is modified.
+     */
+    UFUNCTION(BlueprintPure, Category = "Sample|Movement|Foley")
+    double CalculateJumpFoleyVolume(double GroundSpeedBeforeJump) const;
+
+    /**
+     * Evaluates the authored landing Foley volume using the signed pre-impact Z velocity.
+     * @param LandingVelocityZ World-space vertical velocity in centimeters per second.
+     * @return Dimensionless gain, clamped to [0.5, 1.5]. No audio or state is modified.
+     */
+    UFUNCTION(BlueprintPure, Category = "Sample|Movement|Foley")
+    double CalculateLandingFoleyVolume(double LandingVelocityZ) const;
+
     /** Opens a 0.3-second landing window after foley dispatch. Repeated landings restart the window. */
     UFUNCTION(BlueprintCallable, Category = "Sample|Movement")
     void StartLandingWindow();

@@ -216,6 +216,16 @@ void ASampleCmcCharacter::StartLandingWindow()
     }
 }
 
+double ASampleCmcCharacter::CalculateJumpFoleyVolume(double GroundSpeedBeforeJump) const
+{
+    return UKismetMathLibrary::MapRangeClamped(GroundSpeedBeforeJump, 0.0, 500.0, 0.5, 1.0);
+}
+
+double ASampleCmcCharacter::CalculateLandingFoleyVolume(double LandingVelocityZ) const
+{
+    return UKismetMathLibrary::MapRangeClamped(LandingVelocityZ, -500.0, -900.0, 0.5, 1.5);
+}
+
 void ASampleCmcCharacter::ClearLandingWindow()
 {
     if (const auto* JustLanded = FindFProperty<FBoolProperty>(GetClass(), JustLandedName))
