@@ -7,6 +7,7 @@
 #include "Misc/AutomationTest.h"
 #include "Misc/ScopeExit.h"
 #include "MoverDataModelTypes.h"
+#include "../SampleCameraStateLibrary.h"
 #include "UObject/StructOnScope.h"
 #include "UObject/UnrealType.h"
 
@@ -134,6 +135,90 @@ bool FSampleCameraStateTest::RunTest(const FString& Parameters)
     Component->SetObjectPropertyValue_InContainer(Mover, nullptr);
     Verify(*Mover, 2, 0, 0, 0, TEXT("NewEnumerator4"));
     Component->SetObjectPropertyValue_InContainer(Mover, MovementReference);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+    FSampleCameraSelectionPolicyTest,
+    "GameAnimationSampleCpp.Migration.CameraSelectionPolicy",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FSampleCameraSelectionPolicyTest::RunTest(const FString& Parameters)
+{
+    UScriptStruct* Struct = LoadObject<UScriptStruct>(nullptr,
+        TEXT("/Game/Blueprints/Data/S_CharacterPropertiesForCamera.S_CharacterPropertiesForCamera"));
+    if (!TestNotNull(TEXT("Imported camera properties struct"), Struct))
+    {
+        return false;
+    }
+
+    const FName FieldNames[] = {
+        TEXT("CameraStyle_9_3AB8E4E240527073591DBC8A5CC26A59"),
+        TEXT("CameraMode_6_A59B5561435DC3553D7444B49C47015A"),
+        TEXT("Gait_23_479D639548BC1B9BF402EEAB5E71E3C3"),
+        TEXT("Stance_10_65A83BF64BE8EDFA2FA9FC817B1ECD53"),
+        TEXT("MovementMode_29_9179014C47EBE85BE880F78CB6E2E69D")
+    };
+    const uint8 InitialValues[] = {2, 3, 2, 1, 5};
+    const FByteProperty* Fields[UE_ARRAY_COUNT(FieldNames)] = {};
+    FStructOnScope Source(Struct);
+    FStructOnScope Selection(Struct);
+    void* SourceData = Source.GetStructMemory();
+    void* SelectionData = Selection.GetStructMemory();
+    for (int32 Index = 0; Index < UE_ARRAY_COUNT(FieldNames); ++Index)
+    {
+        Fields[Index] = FindFProperty<FByteProperty>(Struct, FieldNames[Index]);
+        if (!TestNotNull(FieldNames[Index].ToString(), Fields[Index]))
+        {
+            return false;
+        }
+        Fields[Index]->SetPropertyValue_InContainer(SourceData, InitialValues[Index]);
+    }
+    const UEnum* StyleEnum = Fields[0]->GetIntPropertyEnum();
+    if (!TestNotNull(TEXT("Imported camera style enum"), StyleEnum))
+    {
+        return false;
+    }
+
+    const int32 Styles[] = {MIN_int32, -257, -256, -1, 0, 1, 2, 3, 4, 5, 255, 256, 257, 259, MAX_int32};
+    for (const int32 Style : Styles)
+    {
+        const FString Context = FString::Printf(TEXT("Camera style %d: "), Style);
+        const uint8 Byte = static_cast<uint8>(Style);
+        const uint8 ExpectedStyle = StyleEnum->IsValidEnumValueOrBitfield(Byte) ? Byte :
+            static_cast<uint8>(StyleEnum->GetMaxEnumValue());
+        TestTrue(Context + TEXT("prepares selection"),
+            USampleCameraStateLibrary::BuildCameraSelection(*Struct, SourceData, SelectionData, Style));
+        for (int32 Index = 0; Index < UE_ARRAY_COUNT(FieldNames); ++Index)
+        {
+            TestEqual(Context + TEXT("cached state ") + FieldNames[Index].ToString(),
+                Fields[Index]->GetPropertyValue_InContainer(SourceData), InitialValues[Index]);
+            TestEqual(Context + TEXT("selection state ") + FieldNames[Index].ToString(),
+                Fields[Index]->GetPropertyValue_InContainer(SelectionData), Index == 0 ? ExpectedStyle : InitialValues[Index]);
+        }
+        TestEqual(Context + TEXT("crouch eligibility uses original integer"),
+            USampleCameraStateLibrary::IsCrouchRigEligible(Style, 1), Style != 3);
+        TestFalse(Context + TEXT("standing excludes crouch rig"),
+            USampleCameraStateLibrary::IsCrouchRigEligible(Style, 0));
+        TestFalse(Context + TEXT("unknown stance excludes crouch rig"),
+            USampleCameraStateLibrary::IsCrouchRigEligible(Style, 255));
+    }
+
+    TestFalse(TEXT("Missing source storage is rejected"),
+        USampleCameraStateLibrary::BuildCameraSelection(*Struct, nullptr, SelectionData, 0));
+    TestFalse(TEXT("Missing output storage is rejected"),
+        USampleCameraStateLibrary::BuildCameraSelection(*Struct, SourceData, nullptr, 0));
+    TestTrue(TEXT("Aliased initialized storage is supported"),
+        USampleCameraStateLibrary::BuildCameraSelection(*Struct, SourceData, SourceData, 1));
+    const uint8 ExpectedAliasStyle = StyleEnum->IsValidEnumValueOrBitfield(1) ? 1 :
+        static_cast<uint8>(StyleEnum->GetMaxEnumValue());
+    TestEqual(TEXT("Aliased storage receives selected style"),
+        Fields[0]->GetPropertyValue_InContainer(SourceData), ExpectedAliasStyle);
+    for (int32 Index = 1; Index < UE_ARRAY_COUNT(FieldNames); ++Index)
+    {
+        TestEqual(TEXT("Aliased non-style field ") + FieldNames[Index].ToString(),
+            Fields[Index]->GetPropertyValue_InContainer(SourceData), InitialValues[Index]);
+    }
     return true;
 }
 

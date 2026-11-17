@@ -175,6 +175,17 @@ void USampleDebugDrawing::DrawObjectNames(const UObject* WorldContextObject, FVe
         Rotation, FDrawDebugLineStyle(FLinearColor::Black, 0.5f), false, MakeRowSettings());
 }
 
+TArray<FString> USampleDebugDrawing::GetObjectNames(const TArray<UObject*>& Objects)
+{
+    TArray<FString> Names;
+    Names.Reserve(Objects.Num());
+    for (const UObject* Object : Objects)
+    {
+        Names.Add(UKismetSystemLibrary::GetDisplayName(Object));
+    }
+    return Names;
+}
+
 void USampleDebugDrawing::DrawHistoryGraph(const UObject*, FVector, FRotator, FVector, FVector2D, FVector2D,
     FVector2D, const FString&, const FString&, const TArray<int32>&)
 {

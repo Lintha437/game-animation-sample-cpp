@@ -1386,6 +1386,315 @@ bool USampleBlueprintMigrationLibrary::ReplaceVoidFunctionBody(
     return true;
 }
 
+bool USampleBlueprintMigrationLibrary::ForwardObjectNames(UBlueprint* Blueprint, UEdGraph* Graph, UClass* Library, bool bInstalledOnly)
+{
+    const FName FunctionName(TEXT("GetObjectNames"));
+    const UFunction* Function = Library ? Library->FindFunctionByName(FunctionName) : nullptr;
+    if (!Blueprint || !Graph || Graph->GetOuter() != Blueprint || Graph->GetFName() != FunctionName ||
+        !Function || !Function->HasAllFunctionFlags(FUNC_Static | FUNC_Native) || !Function->GetReturnProperty())
+    {
+        return false;
+    }
+
+    TArray<UK2Node_FunctionEntry*> Entries;
+    TArray<UK2Node_FunctionResult*> Results;
+    Graph->GetNodesOfClass(Entries);
+    Graph->GetNodesOfClass(Results);
+    if (Entries.Num() != 1 || Results.Num() != 1)
+    {
+        return false;
+    }
+    UK2Node_FunctionEntry* Entry = Entries[0];
+    UK2Node_FunctionResult* Result = Results[0];
+    UEdGraphPin* Start = Entry->FindPin(UEdGraphSchema_K2::PN_Then, EGPD_Output);
+    UEdGraphPin* Objects = Entry->FindPin(TEXT("Objects"), EGPD_Output);
+    UEdGraphPin* End = Result->FindPin(UEdGraphSchema_K2::PN_Execute, EGPD_Input);
+    UEdGraphPin* Names = Result->FindPin(UEdGraphSchema_K2::PN_ReturnValue, EGPD_Input);
+    if (!Start || !Objects || !End || !Names ||
+        Objects->PinType.ContainerType != EPinContainerType::Array ||
+        Objects->PinType.PinCategory != UEdGraphSchema_K2::PC_Object ||
+        Names->PinType.ContainerType != EPinContainerType::Array ||
+        Names->PinType.PinCategory != UEdGraphSchema_K2::PC_String)
+    {
+        return false;
+    }
+
+    TSet<UEdGraphNode*> Body;
+    for (UEdGraphNode* Node : Graph->Nodes)
+    {
+        if (Node != Entry && Node != Result && Node->GetClass()->GetFName() != TEXT("EdGraphNode_Comment"))
+        {
+            Body.Add(Node);
+        }
+    }
+    const auto ConnectedOnly = [](const UEdGraphPin* Pin, const UEdGraphPin* Peer)
+    {
+        return Pin && Peer && Pin->LinkedTo.Num() == 1 && Pin->LinkedTo[0] == Peer &&
+            Peer->LinkedTo.Num() == 1 && Peer->LinkedTo[0] == Pin;
+    };
+    const auto IsInstalled = [&](UK2Node_CallFunction* Call)
+    {
+        return Call && Call->GetTargetFunction() == Function && Body.Num() == 1 && Body.Contains(Call) &&
+            Entry->LocalVariables.IsEmpty() && ConnectedOnly(Start, Call->GetExecPin()) &&
+            ConnectedOnly(Objects, Call->FindPin(TEXT("Objects"), EGPD_Input)) &&
+            ConnectedOnly(Call->GetThenPin(), End) &&
+            ConnectedOnly(Call->FindPin(UEdGraphSchema_K2::PN_ReturnValue, EGPD_Output), Names);
+    };
+    if (UK2Node_CallFunction* Existing = FindUniqueCall(*Graph, FunctionName))
+    {
+        return IsInstalled(Existing);
+    }
+    if (bInstalledOnly)
+    {
+        return false;
+    }
+
+    const TSet<FName> ExpectedBody = {
+        TEXT("K2Node_MacroInstance_0"), TEXT("K2Node_CallFunction_0"),
+        TEXT("K2Node_VariableGet_0"), TEXT("K2Node_CallArrayFunction_0"), TEXT("K2Node_VariableGet_1")
+    };
+    if (Body.Num() != ExpectedBody.Num() ||
+        Entry->LocalVariables.Num() != 1 || Entry->LocalVariables[0].VarName != TEXT("Names") ||
+        !FindUniqueCall(*Graph, TEXT("GetDisplayName")))
+    {
+        return false;
+    }
+    for (const UEdGraphNode* Node : Body)
+    {
+        if (!ExpectedBody.Contains(Node->GetFName()))
+        {
+            return false;
+        }
+    }
+
+    const auto FindBodyNode = [&Body](FName Name) -> UEdGraphNode*
+    {
+        for (UEdGraphNode* Node : Body)
+        {
+            if (Node->GetFName() == Name)
+            {
+                return Node;
+            }
+        }
+        return nullptr;
+    };
+    const UEdGraphNode* Loop = FindBodyNode(TEXT("K2Node_MacroInstance_0"));
+    const UEdGraphNode* DisplayName = FindBodyNode(TEXT("K2Node_CallFunction_0"));
+    const UEdGraphNode* Array = FindBodyNode(TEXT("K2Node_CallArrayFunction_0"));
+    const auto* LoopNames = Cast<UK2Node_VariableGet>(FindBodyNode(TEXT("K2Node_VariableGet_0")));
+    const auto* ReturnNames = Cast<UK2Node_VariableGet>(FindBodyNode(TEXT("K2Node_VariableGet_1")));
+    if (!Loop || !DisplayName || !Array || !LoopNames || !ReturnNames ||
+        LoopNames->GetVarName() != TEXT("Names") || ReturnNames->GetVarName() != TEXT("Names") ||
+        !ConnectedOnly(Start, Loop->FindPin(TEXT("Exec"), EGPD_Input)) ||
+        !ConnectedOnly(Objects, Loop->FindPin(TEXT("Array"), EGPD_Input)) ||
+        !ConnectedOnly(Loop->FindPin(TEXT("LoopBody"), EGPD_Output), Array->FindPin(UEdGraphSchema_K2::PN_Execute, EGPD_Input)) ||
+        !ConnectedOnly(Loop->FindPin(TEXT("Array Element"), EGPD_Output), DisplayName->FindPin(TEXT("Object"), EGPD_Input)) ||
+        !ConnectedOnly(DisplayName->FindPin(UEdGraphSchema_K2::PN_ReturnValue, EGPD_Output), Array->FindPin(TEXT("NewItem"), EGPD_Input)) ||
+        !ConnectedOnly(LoopNames->FindPin(TEXT("Names"), EGPD_Output), Array->FindPin(TEXT("TargetArray"), EGPD_Input)) ||
+        !ConnectedOnly(Loop->FindPin(TEXT("Completed"), EGPD_Output), End) ||
+        !ConnectedOnly(ReturnNames->FindPin(TEXT("Names"), EGPD_Output), Names))
+    {
+        return false;
+    }
+
+    FGraphNodeCreator<UK2Node_CallFunction> Creator(*Graph);
+    UK2Node_CallFunction* Call = Creator.CreateNode();
+    Call->SetFromFunction(Function);
+    Call->NodePosX = Entry->NodePosX + 400;
+    Call->NodePosY = Entry->NodePosY;
+    Creator.Finalize();
+    UEdGraphPin* NativeObjects = Call->FindPin(TEXT("Objects"), EGPD_Input);
+    UEdGraphPin* NativeNames = Call->FindPin(UEdGraphSchema_K2::PN_ReturnValue, EGPD_Output);
+    if (!Call->GetExecPin() || !NativeObjects || !Call->GetThenPin() || !NativeNames)
+    {
+        FBlueprintEditorUtils::RemoveNode(Blueprint, Call, true);
+        return false;
+    }
+    RemoveNodes(*Blueprint, *Graph, Body);
+    Entry->Modify();
+    Entry->LocalVariables.Reset();
+    const UEdGraphSchema* Schema = Graph->GetSchema();
+    if (!Schema->TryCreateConnection(Start, Call->GetExecPin()) ||
+        !Schema->TryCreateConnection(Objects, NativeObjects) ||
+        !Schema->TryCreateConnection(Call->GetThenPin(), End) ||
+        !Schema->TryCreateConnection(NativeNames, Names))
+    {
+        return false;
+    }
+    Body.Reset();
+    Body.Add(Call);
+    return IsInstalled(Call);
+}
+
+bool USampleBlueprintMigrationLibrary::ForwardCameraDirectorSelection(UBlueprint* Blueprint, UEdGraph* Graph, UClass* Library, bool bInstalledOnly)
+{
+    const FName PrepareName(TEXT("PrepareImportedCameraSelection"));
+    const FName CrouchName(TEXT("ShouldActivateImportedCrouchRig"));
+    const UFunction* PrepareFunction = Library ? Library->FindFunctionByName(PrepareName) : nullptr;
+    const UFunction* CrouchFunction = Library ? Library->FindFunctionByName(CrouchName) : nullptr;
+    if (!Blueprint || !Graph || Graph->GetOuter() != Blueprint || Graph->GetFName() != TEXT("EventGraph") ||
+        Blueprint->GetFName() != TEXT("CameraDirector_SandboxCharacter") || !PrepareFunction || !CrouchFunction)
+    {
+        return false;
+    }
+    const auto FindNode = [Graph](FName Name) -> UEdGraphNode*
+    {
+        for (UEdGraphNode* Node : Graph->Nodes)
+        {
+            if (Node->GetFName() == Name)
+            {
+                return Node;
+            }
+        }
+        return nullptr;
+    };
+    auto* Sequence = Cast<UK2Node_ExecutionSequence>(FindNode(TEXT("K2Node_ExecutionSequence_0")));
+    auto* Branch = Cast<UK2Node_IfThenElse>(FindNode(TEXT("K2Node_IfThenElse_0")));
+    auto* Getter = Cast<UK2Node_VariableGet>(FindNode(TEXT("K2Node_VariableGet_0")));
+    auto* CrouchGetter = Cast<UK2Node_VariableGet>(FindNode(TEXT("K2Node_VariableGet_20")));
+    UEdGraphNode* Chooser = FindNode(TEXT("K2Node_EvaluateChooser2_0"));
+    auto* CrouchRig = Cast<UK2Node_CallFunction>(FindNode(TEXT("K2Node_CallFunction_8")));
+    if (!Sequence || !Branch || !Getter || !CrouchGetter || !Chooser || !CrouchRig ||
+        Getter->GetVarName() != TEXT("CharacterPropertiesForCamera") ||
+        CrouchGetter->GetVarName() != Getter->GetVarName() ||
+        CrouchRig->FunctionReference.GetMemberName() != TEXT("ActivateCameraRig"))
+    {
+        return false;
+    }
+    UEdGraphPin* SelectExec = Sequence->GetThenPinGivenIndex(0);
+    UEdGraphPin* CrouchExec = Sequence->GetThenPinGivenIndex(1);
+    UEdGraphPin* ChooserExec = Chooser->FindPin(UEdGraphSchema_K2::PN_Execute, EGPD_Input);
+    UEdGraphPin* ChooserState = Chooser->FindPin(TEXT("S_CharacterPropertiesForCamera"), EGPD_Input);
+    UEdGraphPin* CharacterState = Getter->FindPin(TEXT("CharacterPropertiesForCamera"), EGPD_Output);
+    UEdGraphPin* CrouchState = CrouchGetter->FindPin(TEXT("CharacterPropertiesForCamera"), EGPD_Output);
+    UEdGraphPin* BranchExec = Branch->GetExecPin();
+    UEdGraphPin* Condition = Branch->GetConditionPin();
+    UEdGraphPin* TrueExec = Branch->GetThenPin();
+    if (!SelectExec || !CrouchExec || !ChooserExec || !ChooserState || !CharacterState || !CrouchState ||
+        !BranchExec || !Condition || !TrueExec || !CrouchRig->GetExecPin() ||
+        CharacterState->PinType.PinCategory != UEdGraphSchema_K2::PC_Struct ||
+        !CharacterState->PinType.PinSubCategoryObject.IsValid() ||
+        CharacterState->PinType.PinSubCategoryObject->GetFName() != TEXT("S_CharacterPropertiesForCamera"))
+    {
+        return false;
+    }
+    const auto ConnectedOnly = [](const UEdGraphPin* Pin, const UEdGraphPin* Peer)
+    {
+        return Pin && Peer && Pin->LinkedTo.Num() == 1 && Pin->LinkedTo[0] == Peer &&
+            Peer->LinkedTo.Num() == 1 && Peer->LinkedTo[0] == Pin;
+    };
+    const auto IsInstalled = [&](UK2Node_CallFunction* Prepare, UK2Node_CallFunction* Crouch)
+    {
+        return Prepare && Crouch && Prepare->GetTargetFunction() == PrepareFunction &&
+            Crouch->GetTargetFunction() == CrouchFunction &&
+            ConnectedOnly(SelectExec, Prepare->GetExecPin()) &&
+            ConnectedOnly(CharacterState, Prepare->FindPin(TEXT("CharacterProperties"), EGPD_Input)) &&
+            ConnectedOnly(Prepare->GetThenPin(), ChooserExec) &&
+            ConnectedOnly(Prepare->FindPin(TEXT("SelectionProperties"), EGPD_Output), ChooserState) &&
+            ConnectedOnly(CrouchExec, Crouch->GetExecPin()) &&
+            ConnectedOnly(CrouchState, Crouch->FindPin(TEXT("CharacterProperties"), EGPD_Input)) &&
+            ConnectedOnly(Crouch->GetThenPin(), BranchExec) &&
+            ConnectedOnly(Crouch->FindPin(UEdGraphSchema_K2::PN_ReturnValue, EGPD_Output), Condition) &&
+            ConnectedOnly(TrueExec, CrouchRig->GetExecPin());
+    };
+    UK2Node_CallFunction* ExistingPrepare = FindUniqueCall(*Graph, PrepareName);
+    UK2Node_CallFunction* ExistingCrouch = FindUniqueCall(*Graph, CrouchName);
+    if (ExistingPrepare || ExistingCrouch)
+    {
+        return IsInstalled(ExistingPrepare, ExistingCrouch);
+    }
+    if (bInstalledOnly)
+    {
+        return false;
+    }
+
+    auto* SelectCVar = Cast<UK2Node_CallFunction>(FindNode(TEXT("K2Node_CallFunction_0")));
+    auto* CrouchCVar = Cast<UK2Node_CallFunction>(FindNode(TEXT("K2Node_CallFunction_3")));
+    UEdGraphNode* Compare = FindNode(TEXT("K2Node_PromotableOperator_0"));
+    UEdGraphNode* Make = FindNode(TEXT("K2Node_MakeStruct_1"));
+    UEdGraphNode* Switch = FindNode(TEXT("K2Node_SwitchEnum_1"));
+    const auto IsStyleRead = [](const UK2Node_CallFunction* Call)
+    {
+        const UEdGraphPin* Variable = Call ? Call->FindPin(TEXT("VariableName"), EGPD_Input) : nullptr;
+        return Call && Call->FunctionReference.GetMemberName() == TEXT("GetConsoleVariableIntValue") &&
+            Variable && Variable->LinkedTo.IsEmpty() && Variable->DefaultValue == TEXT("DDCvar.CameraStyle");
+    };
+    const UEdGraphPin* CompareValue = Compare ? Compare->FindPin(TEXT("B"), EGPD_Input) : nullptr;
+    if (!IsStyleRead(SelectCVar) || !IsStyleRead(CrouchCVar) || !CompareValue ||
+        !CompareValue->LinkedTo.IsEmpty() || CompareValue->DefaultValue != TEXT("3") ||
+        !ConnectedOnly(SelectExec, SelectCVar->GetExecPin()) ||
+        !ConnectedOnly(SelectCVar->GetThenPin(), ChooserExec) ||
+        !ConnectedOnly(CrouchExec, CrouchCVar->GetExecPin()) ||
+        !ConnectedOnly(CrouchCVar->GetThenPin(), BranchExec) ||
+        GetOnlyPeer(ChooserState) != Make || GetOnlyPeer(Condition) != Compare ||
+        GetOnlyPeer(TrueExec) != Switch || !Switch ||
+        GetOnlyPeer(CrouchRig->GetExecPin()) != Switch ||
+        GetOnlyPeer(CharacterState) != FindNode(TEXT("K2Node_BreakStruct_6")) ||
+        GetOnlyPeer(CrouchState) != FindNode(TEXT("K2Node_BreakStruct_10")))
+    {
+        return false;
+    }
+    TSet<UEdGraphNode*> Remove{
+        SelectCVar, CrouchCVar, Compare, Make, Switch,
+        FindNode(TEXT("K2Node_CallFunction_4")), FindNode(TEXT("K2Node_CastByteToEnum_0")),
+        FindNode(TEXT("K2Node_BreakStruct_6")), FindNode(TEXT("K2Node_BreakStruct_10"))
+    };
+    if (Remove.Contains(nullptr))
+    {
+        return false;
+    }
+    const TSet<const UEdGraphPin*> PreservedBoundary{
+        SelectExec, CrouchExec, ChooserExec, ChooserState, CharacterState, CrouchState,
+        BranchExec, Condition, TrueExec, CrouchRig->GetExecPin()
+    };
+    for (const UEdGraphNode* Node : Remove)
+    {
+        for (const UEdGraphPin* Pin : Node->Pins)
+        {
+            for (const UEdGraphPin* Peer : Pin->LinkedTo)
+            {
+                if (!Remove.Contains(Peer->GetOwningNode()) && !PreservedBoundary.Contains(Peer))
+                {
+                    return false;
+                }
+            }
+        }
+    }
+    const auto CreateCall = [Graph](const UFunction* Function, const UEdGraphNode* Position)
+    {
+        FGraphNodeCreator<UK2Node_CallFunction> Creator(*Graph);
+        auto* Call = Creator.CreateNode();
+        Call->SetFromFunction(Function);
+        Call->NodePosX = Position->NodePosX;
+        Call->NodePosY = Position->NodePosY;
+        Creator.Finalize();
+        return Call;
+    };
+    UK2Node_CallFunction* Prepare = CreateCall(PrepareFunction, SelectCVar);
+    UK2Node_CallFunction* Crouch = CreateCall(CrouchFunction, CrouchCVar);
+    UEdGraphPin* PrepareInput = Prepare->FindPin(TEXT("CharacterProperties"), EGPD_Input);
+    UEdGraphPin* PrepareOutput = Prepare->FindPin(TEXT("SelectionProperties"), EGPD_Output);
+    UEdGraphPin* CrouchInput = Crouch->FindPin(TEXT("CharacterProperties"), EGPD_Input);
+    UEdGraphPin* CrouchOutput = Crouch->FindPin(UEdGraphSchema_K2::PN_ReturnValue, EGPD_Output);
+    if (!PrepareInput || !PrepareOutput || !CrouchInput || !CrouchOutput ||
+        !Prepare->GetExecPin() || !Prepare->GetThenPin() || !Crouch->GetExecPin() || !Crouch->GetThenPin())
+    {
+        RemoveNodes(*Blueprint, *Graph, {Prepare, Crouch});
+        return false;
+    }
+    RemoveNodes(*Blueprint, *Graph, Remove);
+    const UEdGraphSchema* Schema = Graph->GetSchema();
+    return Schema->TryCreateConnection(SelectExec, Prepare->GetExecPin()) &&
+        Schema->TryCreateConnection(CharacterState, PrepareInput) &&
+        Schema->TryCreateConnection(Prepare->GetThenPin(), ChooserExec) &&
+        Schema->TryCreateConnection(PrepareOutput, ChooserState) &&
+        Schema->TryCreateConnection(CrouchExec, Crouch->GetExecPin()) &&
+        Schema->TryCreateConnection(CrouchState, CrouchInput) &&
+        Schema->TryCreateConnection(Crouch->GetThenPin(), BranchExec) &&
+        Schema->TryCreateConnection(CrouchOutput, Condition) &&
+        Schema->TryCreateConnection(TrueExec, CrouchRig->GetExecPin()) && IsInstalled(Prepare, Crouch);
+}
+
 bool USampleBlueprintMigrationLibrary::ReplaceTraversalGeometry(UBlueprint* Blueprint, UEdGraph* Graph)
 {
     static const FName FunctionName(TEXT("EvaluateTraversalClearance"));

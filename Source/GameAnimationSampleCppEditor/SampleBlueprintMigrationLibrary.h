@@ -155,6 +155,14 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
     static bool ReplaceVoidFunctionBody(UBlueprint* Blueprint, UEdGraph* Graph, UClass* Library, FName FunctionName);
 
+    /** Preserves the imported GetObjectNames function signature and replaces its loop with the native implementation. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
+    static bool ForwardObjectNames(UBlueprint* Blueprint, UEdGraph* Graph, UClass* Library, bool bInstalledOnly = false);
+
+    /** Replaces the camera director's selection policy while preserving the authored Chooser and camera rig activation. */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Migration")
+    static bool ForwardCameraDirectorSelection(UBlueprint* Blueprint, UEdGraph* Graph, UClass* Library, bool bInstalledOnly = false);
+
     /**
      * Replaces the two geometry stages of the reference traversal function
      * while preserving initialization, both Choosers, and event dispatch.

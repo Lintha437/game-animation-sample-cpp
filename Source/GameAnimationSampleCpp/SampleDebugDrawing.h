@@ -40,6 +40,13 @@ public:
         FVector Offset, const FString& ArrayLabel, const TArray<UObject*>& Objects);
 
     /**
+     * Returns the Blueprint display name of each object, in input order.
+     * Retains duplicates and empty strings for null entries. No object references are retained.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Debug")
+    static TArray<FString> GetObjectNames(const TArray<UObject*>& Objects);
+
+    /**
      * Draws axes, series and the legend using the imported S_DebugGraphLineProperties array.
      * @param WorldContextObject Owner for scene drawing and Visual Logger submissions.
      * @param Location World-space base of the plot.

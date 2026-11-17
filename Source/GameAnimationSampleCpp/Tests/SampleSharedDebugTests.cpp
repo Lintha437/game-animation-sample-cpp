@@ -1,11 +1,14 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "Components/LineBatchComponent.h"
+#include "Components/SceneComponent.h"
+#include "Curves/CurveFloat.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/ScopeExit.h"
 #include "Misc/SecureHash.h"
+#include "../SampleDebugDrawing.h"
 #include "UObject/StructOnScope.h"
 #include "UObject/UnrealType.h"
 
@@ -52,6 +55,34 @@ bool FSampleSharedDebugDrawingTest::RunTest(const FString& Parameters)
         return false;
     }
     UObject* Library = Class->GetDefaultObject();
+    UObject* Object = NewObject<UCurveFloat>();
+    USceneComponent* Component = NewObject<USceneComponent>(Owner);
+    const TArray<UObject*> Objects = {Object, nullptr, Owner, Component, Object, nullptr};
+    const TArray<FString> ExpectedNames = {
+        Object->GetName(), FString(), Owner->GetActorNameOrLabel(), Component->GetReadableName(),
+        Object->GetName(), FString()
+    };
+    TestTrue(TEXT("Native object names preserve display format, order, duplicates and null entries"),
+        USampleDebugDrawing::GetObjectNames(Objects) == ExpectedNames);
+    TestTrue(TEXT("Native empty object array yields no names"), USampleDebugDrawing::GetObjectNames({}).IsEmpty());
+
+    UFunction* ObjectNames = Library->FindFunction(TEXT("GetObjectNames"));
+    const auto* ObjectInput = ObjectNames ? FindFProperty<FArrayProperty>(ObjectNames, TEXT("Objects")) : nullptr;
+    const auto* NameReturn = ObjectNames ? CastField<FArrayProperty>(ObjectNames->GetReturnProperty()) : nullptr;
+    if (TestTrue(TEXT("Imported GetObjectNames preserves object array and string array signature"),
+        ObjectInput && CastField<FObjectPropertyBase>(ObjectInput->Inner) && NameReturn &&
+        CastField<FStrProperty>(NameReturn->Inner)))
+    {
+        FStructOnScope Args(ObjectNames);
+        DebugInput<TArray<UObject*>>(Args, TEXT("Objects")) = Objects;
+        Library->ProcessEvent(ObjectNames, Args.GetStructMemory());
+        const auto& Names = *NameReturn->ContainerPtrToValuePtr<TArray<FString>>(Args.GetStructMemory());
+        TestTrue(TEXT("Imported object names match native display semantics"), Names == ExpectedNames);
+        DebugInput<TArray<UObject*>>(Args, TEXT("Objects")).Reset();
+        Library->ProcessEvent(ObjectNames, Args.GetStructMemory());
+        TestTrue(TEXT("Imported empty object array yields no names"), Names.IsEmpty());
+    }
+
     const TArray<ULineBatchComponent*> Batches = {
         World->GetLineBatcher(UWorld::ELineBatcherType::World),
         World->GetLineBatcher(UWorld::ELineBatcherType::Foreground)
