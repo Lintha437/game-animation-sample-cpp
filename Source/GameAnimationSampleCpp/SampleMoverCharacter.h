@@ -1,10 +1,12 @@
 #pragma once
 
+#include "Animation/AnimMontage.h"
 #include "GameFramework/Pawn.h"
 #include "MoverSimulationTypes.h"
 #include "SampleMoverCharacter.generated.h"
 
 class UInputAction;
+class UAudioComponent;
 class USkeletalMeshComponent;
 struct FKey;
 struct FInputActionValue;
@@ -219,6 +221,22 @@ public:
     void NotifyMoverModeFinalized(const FMoverSyncState& SyncState, const FMoverAuxStateContext& AuxState);
 
     /**
+     * Routes the authored parent mode-change callback through native gameplay rules.
+     * Call from the existing Blueprint callback after implementing its presentation hooks.
+     * @return False before any effects if a required authored dependency is unavailable.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover")
+    bool TryHandleMoverModeTransition(FName PreviousMovementModeName, FName NewMovementModeName);
+
+    /**
+     * Runs the ragdoll-specific transition after the parent callback has completed.
+     * The exit hook retains pose capture, montage selection and the recovery continuation.
+     * @return False before any effects if the exit hook is required but unavailable.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Ragdoll")
+    bool TryHandleRagdollModeTransition(FName PreviousMovementModeName, FName NewMovementModeName);
+
+    /**
      * Adds a ragdoll transform snapshot and facing to the regular movement command.
      * The extra block is present only when Ragdoll is the next simulation mode.
      * @param SimTimeMs Time supplied by the Mover input producer interface.
@@ -323,6 +341,18 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Ragdoll")
     void BeginRagdollPhysics();
 
+    /**
+     * Runs the authored TriggerRagdoll event's gameplay sequence with its explicit inputs.
+     * @param bStopActiveMontages Whether to stop the requested montage(s) before ragdoll begins.
+     * @param MontageBlendOut Blend settings used when active montages are stopped.
+     * @param MontageToStop Montage from the authored stop node; null interrupts all active montages.
+     * @param InjuryState Value of the event's authored injury enum, converted to a byte by the caller.
+     * @return False without interruption or physics changes if the imported injury field is incompatible.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Ragdoll")
+    bool TryTriggerRagdoll(bool bStopActiveMontages, const FMontageBlendSettings& MontageBlendOut,
+        uint8 InjuryState, UAnimMontage* MontageToStop);
+
     /** Queues the grounded mode. The finalized transition owns collision and profile recovery. */
     UFUNCTION(BlueprintCallable, Category = "Sample|Mover|Ragdoll")
     void RequestRagdollRecovery();
@@ -364,6 +394,26 @@ public:
     void TraceRagdollObstacles();
 
 protected:
+    /** Plays the authored landing Foley event using its original volume mapping. */
+    UFUNCTION(BlueprintImplementableEvent, Category = "Sample|Mover|Presentation")
+    void PlayMoverLandingFoley(double VerticalVelocity);
+
+    /** Plays the authored jump Foley event using its original volume mapping. */
+    UFUNCTION(BlueprintImplementableEvent, Category = "Sample|Mover|Presentation")
+    void PlayMoverJumpFoley(double HorizontalSpeed);
+
+    /** Starts the authored sliding Foley event and stores its returned SlidingAudioComponent. */
+    UFUNCTION(BlueprintImplementableEvent, Category = "Sample|Mover|Presentation")
+    void StartMoverSlideFoley();
+
+    /** Fades the supplied valid component using the authored fade settings. Must execute synchronously. */
+    UFUNCTION(BlueprintImplementableEvent, Category = "Sample|Mover|Presentation")
+    void FadeMoverSlideFoley(UAudioComponent* AudioComponent);
+
+    /** Invokes the existing ragdoll exit event, including its collision, pose and recovery continuation. */
+    UFUNCTION(BlueprintImplementableEvent, Category = "Sample|Mover|Ragdoll")
+    void RunMoverRagdollExit();
+
     /** Releases active pairs before the pawn or its components tear down. */
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
     /** Binds sampled direction values and the migrated player events on local possession. */

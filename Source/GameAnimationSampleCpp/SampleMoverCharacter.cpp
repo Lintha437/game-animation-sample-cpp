@@ -4,6 +4,7 @@
 
 #include "AIController.h"
 #include "Animation/AnimInstance.h"
+#include "Components/AudioComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "DefaultMovementSet/CharacterMoverComponent.h"
 #include "DefaultMovementSet/NavMoverComponent.h"
@@ -118,6 +119,19 @@ namespace
             return Byte->GetPropertyValue(Value);
         }
         return 0;
+    }
+
+    const FMapProperty* FindMovementModeMap(const ASampleMoverCharacter& Pawn)
+    {
+        const auto* Map = FindFProperty<FMapProperty>(Pawn.GetClass(), TEXT("MovementModeMap"));
+        return Map && CastField<FNameProperty>(Map->KeyProp) ? Map : nullptr;
+    }
+
+    uint8 ReadMovementModeValue(const ASampleMoverCharacter& Pawn, const FMapProperty& Map, FName Mode)
+    {
+        FScriptMapHelper Entries(&Map, Map.ContainerPtrToValuePtr<void>(&Pawn));
+        const uint8* Value = Entries.FindValueFromHash(&Mode);
+        return Value ? static_cast<uint8>(ReadEnum(*Map.ValueProp, Value)) : 0;
     }
 
     const FStructProperty* FindSnapshot(const ASampleMoverCharacter& Pawn, FName Name)
@@ -322,15 +336,8 @@ namespace
 uint8 ASampleMoverCharacter::ResolveMovementModeValue() const
 {
     const auto* Mover = FindComponentByClass<UCharacterMoverComponent>();
-    const auto* Map = FindFProperty<FMapProperty>(GetClass(), TEXT("MovementModeMap"));
-    if (!Mover || !Map || !CastField<FNameProperty>(Map->KeyProp))
-    {
-        return 0;
-    }
-    const FName Mode = Mover->GetMovementModeName();
-    FScriptMapHelper Entries(Map, Map->ContainerPtrToValuePtr<void>(this));
-    const uint8* Value = Entries.FindValueFromHash(&Mode);
-    return Value ? static_cast<uint8>(ReadEnum(*Map->ValueProp, Value)) : 0;
+    const auto* Map = FindMovementModeMap(*this);
+    return Mover && Map ? ReadMovementModeValue(*this, *Map, Mover->GetMovementModeName()) : 0;
 }
 
 void ASampleMoverCharacter::InstallSandboxInputMapping()
@@ -1316,6 +1323,91 @@ void ASampleMoverCharacter::NotifyMoverModeFinalized(const FMoverSyncState& Sync
     Cached->SetPropertyValue_InContainer(this, Next);
 }
 
+bool ASampleMoverCharacter::TryHandleMoverModeTransition(FName PreviousMovementModeName, FName NewMovementModeName)
+{
+    const auto* Map = FindMovementModeMap(*this);
+    if (!Map || (!CastField<FEnumProperty>(Map->ValueProp) && !CastField<FByteProperty>(Map->ValueProp)))
+    {
+        return false;
+    }
+
+    const auto Previous = static_cast<EAuthoredMovementMode>(ReadMovementModeValue(*this, *Map, PreviousMovementModeName));
+    const auto Next = static_cast<EAuthoredMovementMode>(ReadMovementModeValue(*this, *Map, NewMovementModeName));
+    const bool bPlayLanding = Next == EAuthoredMovementMode::Grounded && Previous == EAuthoredMovementMode::Airborne;
+    const bool bEnterAirborne = Next == EAuthoredMovementMode::Airborne;
+    const bool bCheckJump = bEnterAirborne && Previous == EAuthoredMovementMode::Grounded;
+    const bool bStartSlide = Next == EAuthoredMovementMode::Sliding;
+    const bool bEndSlide = Previous == EAuthoredMovementMode::Sliding;
+    const auto* PreSim = bCheckJump ? GetPreSimInputs(*this) : nullptr;
+    if (bCheckJump && !PreSim)
+    {
+        return false;
+    }
+    const bool bPlayJump = bCheckJump && PreSim->bIsJumpJustPressed;
+
+    const auto* MoverField = FindFProperty<FObjectPropertyBase>(GetClass(), TEXT("CharacterMover"));
+    const auto* Mover = MoverField ? Cast<UCharacterMoverComponent>(MoverField->GetObjectPropertyValue_InContainer(this)) : nullptr;
+    const auto* SlideAudio = bEndSlide ? FindFProperty<FObjectPropertyBase>(GetClass(), TEXT("SlidingAudioComponent")) : nullptr;
+    const UClass* Class = GetClass();
+    // Validate every required hook before playing sound or changing crouch intent, so the caller can use its original graph on failure.
+    if (((bPlayLanding || bPlayJump) && !IsValid(Mover)) ||
+        (bPlayLanding && !Class->IsFunctionImplementedInScript(GET_FUNCTION_NAME_CHECKED(ASampleMoverCharacter, PlayMoverLandingFoley))) ||
+        (bPlayJump && !Class->IsFunctionImplementedInScript(GET_FUNCTION_NAME_CHECKED(ASampleMoverCharacter, PlayMoverJumpFoley))) ||
+        (bStartSlide && !Class->IsFunctionImplementedInScript(GET_FUNCTION_NAME_CHECKED(ASampleMoverCharacter, StartMoverSlideFoley))) ||
+        (bEndSlide && (!SlideAudio || !SlideAudio->PropertyClass->IsChildOf(UAudioComponent::StaticClass()) ||
+            !Class->IsFunctionImplementedInScript(GET_FUNCTION_NAME_CHECKED(ASampleMoverCharacter, FadeMoverSlideFoley)))))
+    {
+        return false;
+    }
+
+    if (bPlayLanding)
+    {
+        PlayMoverLandingFoley(Mover->GetVelocity().Z);
+    }
+    if (bEnterAirborne)
+    {
+        if (bPlayJump)
+        {
+            PlayMoverJumpFoley(Mover->GetVelocity().Size2D());
+        }
+        ClearAirborneCrouch();
+    }
+    if (bStartSlide)
+    {
+        StartMoverSlideFoley();
+    }
+
+    // The authored validated getter runs after the new-mode branch, including any new slide component assignment.
+    if (bEndSlide)
+    {
+        if (auto* Audio = Cast<UAudioComponent>(SlideAudio->GetObjectPropertyValue_InContainer(this)); IsValid(Audio))
+        {
+            FadeMoverSlideFoley(Audio);
+            ClearSlideCrouchForSprint();
+        }
+    }
+    return true;
+}
+
+bool ASampleMoverCharacter::TryHandleRagdollModeTransition(FName PreviousMovementModeName, FName NewMovementModeName)
+{
+    const bool bExitRagdoll = PreviousMovementModeName == RagdollMode;
+    if (bExitRagdoll && !GetClass()->IsFunctionImplementedInScript(
+        GET_FUNCTION_NAME_CHECKED(ASampleMoverCharacter, RunMoverRagdollExit)))
+    {
+        return false;
+    }
+    if (NewMovementModeName == RagdollMode)
+    {
+        ApplyRagdollCapsuleCollision();
+    }
+    if (bExitRagdoll)
+    {
+        RunMoverRagdollExit();
+    }
+    return true;
+}
+
 void ASampleMoverCharacter::ClearSlideCrouchForSprint()
 {
     if (ReadIntent(FindSnapshot(*this, MoverPlayerInputState), *this, MoverSprintIntent))
@@ -1883,6 +1975,37 @@ void ASampleMoverCharacter::BeginRagdollPhysics()
     }
     UKismetSystemLibrary::RetriggerableDelay(this, 0.25f, FLatentActionInfo(
         0, ReleaseRagdollFacingAction, GET_FUNCTION_NAME_STRING_CHECKED(ASampleMoverCharacter, ReleaseRagdollFacing), this));
+}
+
+bool ASampleMoverCharacter::TryTriggerRagdoll(bool bStopActiveMontages, const FMontageBlendSettings& MontageBlendOut,
+    uint8 InjuryState, UAnimMontage* MontageToStop)
+{
+    const FName InjuryName(TEXT("Ragdoll_InjuryState"));
+    const auto* InjuryByte = FindFProperty<FByteProperty>(GetClass(), InjuryName);
+    const auto* InjuryEnum = FindFProperty<FEnumProperty>(GetClass(), InjuryName);
+    const UEnum* InjuryType = InjuryByte ? InjuryByte->Enum.Get() : (InjuryEnum ? InjuryEnum->GetEnum() : nullptr);
+    const auto* Trigger = FindFunction(TEXT("TriggerRagdoll"));
+    const auto* Parameter = Trigger ? FindFProperty<FProperty>(Trigger, InjuryName) : nullptr;
+    const FProperty* InjuryField = InjuryByte ? static_cast<const FProperty*>(InjuryByte) : InjuryEnum;
+    if (!InjuryType || !InjuryType->IsValidEnumValue(InjuryState) || !Parameter || !InjuryField->SameType(Parameter))
+    {
+        return false;
+    }
+
+    if (bStopActiveMontages)
+    {
+        if (auto* Mesh = GetRagdollMesh(*this))
+        {
+            if (UAnimInstance* Anim = Mesh->GetAnimInstance())
+            {
+                Anim->Montage_StopWithBlendSettings(MontageBlendOut, MontageToStop);
+            }
+        }
+    }
+
+    SetEnumByte(GetClass(), this, InjuryName, InjuryState);
+    BeginRagdollPhysics();
+    return true;
 }
 
 void ASampleMoverCharacter::RequestRagdollRecovery()
