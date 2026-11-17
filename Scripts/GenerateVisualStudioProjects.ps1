@@ -72,3 +72,29 @@ foreach ($file in $projectEntries) {
         throw "$nativeProject is missing $file."
     }
 }
+
+$filterFile = "$nativeProject.filters"
+$filterDocument = [xml](Get-Content -Raw -LiteralPath $filterFile)
+$sourceFilters = @{}
+foreach ($entry in $filterDocument.SelectNodes("//*[local-name()='ClCompile' or local-name()='ClInclude'][@Include]")) {
+    $filterNode = $entry.SelectSingleNode("*[local-name()='Filter']")
+    if ($filterNode) {
+        $sourceFile = [IO.Path]::GetFullPath([IO.Path]::Combine(
+            [IO.Path]::GetDirectoryName($nativeProject), $entry.GetAttribute('Include')))
+        $sourceFilters[$sourceFile] = $filterNode.InnerText
+    }
+}
+
+$verifiedSourceFiles = 0
+foreach ($module in 'GameAnimationSampleCpp', 'GameAnimationSampleCppEditor') {
+    $moduleRoot = Join-Path $repositoryRoot "Source/$module"
+    foreach ($sourceFile in (Get-ChildItem -LiteralPath $moduleRoot -Recurse -File |
+            Where-Object { $_.Extension -in '.h', '.cpp' })) {
+        $expectedFilter = $sourceFile.DirectoryName.Substring($repositoryRoot.Length + 1)
+        if ($sourceFilters[$sourceFile.FullName] -ne $expectedFilter) {
+            throw "$filterFile is missing the source filter $expectedFilter for $($sourceFile.Name). Regenerate the solutions."
+        }
+        $verifiedSourceFiles++
+    }
+}
+Write-Output "Verified Visual Studio source filters for $verifiedSourceFiles module files."
