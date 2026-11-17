@@ -4,10 +4,13 @@
 #include "Blueprint/StateTreeEvaluatorBlueprintBase.h"
 #include "Blueprint/StateTreeTaskBlueprintBase.h"
 #include "GameFramework/Actor.h"
+#include "SmartObjectRuntime.h"
+#include "Templates/Atomic.h"
 #include "SampleSmartObjectTasks.generated.h"
 
 class AAIController;
 class UActorComponent;
+class USmartObjectSubsystem;
 
 /** Supplies navigation state to the retained Smart Object montage selection task. */
 UCLASS(Abstract, Blueprintable)
@@ -64,9 +67,39 @@ class GAMEANIMATIONSAMPLECPP_API USampleClaimSmartObjectTask : public UStateTree
     GENERATED_BODY()
 
 protected:
-    /** Attempts one normal-priority claim and leaves state completion to the interaction task. */
+    /** Claims a free slot, preferring the selected slot and then other slots of the same object. */
     virtual EStateTreeRunStatus EnterState(FStateTreeExecutionContext& Context,
         const FStateTreeTransitionResult& Transition) override;
+
+    /** Releases an untransferred claim when its owning state is left. */
+    virtual void ExitState(FStateTreeExecutionContext& Context, const FStateTreeTransitionResult& Transition) override;
+
+private:
+    friend class USampleReleaseSmartObjectTask;
+    friend class USampleUseSmartObjectTask;
+    friend class FSampleSmartObjectClaimArbitrationTest;
+
+    static FSmartObjectClaimHandle ArbitrateClaim(USmartObjectSubsystem& Subsystem,
+        const FSmartObjectSlotHandle& Slot, const AActor& Actor, AActor* Target);
+    bool TrackPendingClaim(USmartObjectSubsystem& Subsystem, const FSmartObjectClaimHandle& Claim);
+
+    /** Finds the native owner of this exact, still pending reservation in the supplied world. */
+    static USampleClaimSmartObjectTask* FindPendingClaim(const USmartObjectSubsystem* Subsystem,
+        const FSmartObjectClaimHandle& Claim);
+
+    /** Stops tracking the reservation before releasing it or transferring it to the engine task. */
+    void ForgetPendingClaim();
+    bool ReleasePendingClaim(bool bResetPlayerActivity);
+    void ResetFailedPlayerActivity() const;
+    void OnPendingClaimRevoked(const FSmartObjectClaimHandle& Claim);
+
+    TWeakObjectPtr<USmartObjectSubsystem> PendingSubsystem;
+    FSmartObjectClaimHandle PendingClaim;
+    FSmartObjectClaimHandle TransferredClaim;
+    FDelegateHandle PendingSlotListener;
+    TSharedPtr<TAtomic<bool>, ESPMode::ThreadSafe> PendingClaimRevoked;
+    TWeakObjectPtr<AActor> PendingActor;
+    uint64 PendingPlayerRequestId = 0;
 };
 
 /** Releases a bound Smart Object claim when the StateTree reaches its cleanup state. */
@@ -76,7 +109,7 @@ class GAMEANIMATIONSAMPLECPP_API USampleReleaseSmartObjectTask : public UStateTr
     GENERATED_BODY()
 
 protected:
-    /** Completes successfully only when the subsystem releases the supplied claim. */
+    /** Releases a pending native claim; cleanup of a completed or transferred claim is idempotent. */
     virtual EStateTreeRunStatus EnterState(FStateTreeExecutionContext& Context,
         const FStateTreeTransitionResult& Transition) override;
 };
@@ -88,7 +121,7 @@ class GAMEANIMATIONSAMPLECPP_API USampleUseSmartObjectTask : public UStateTreeTa
     GENERATED_BODY()
 
 protected:
-    /** Completes after successful dispatch. The controller's gameplay task owns the ongoing interaction. */
+    /** Transfers the reservation to the engine task before activation, or releases it on dispatch failure. */
     virtual EStateTreeRunStatus EnterState(FStateTreeExecutionContext& Context,
         const FStateTreeTransitionResult& Transition) override;
 };

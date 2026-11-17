@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Components/ActorComponent.h"
+#include "SmartObjectTypes.h"
 #include "SampleSmartObjectInteractionComponent.generated.h"
 
 class UStateTree;
@@ -50,6 +51,12 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Sample|Interaction")
     void ClearPlayerInteractionState();
 
+    /** Returns the identity of the matching accepted request, or zero if no request matches. */
+    uint64 GetPlayerInteractionRequestId(const AActor* Target, const FSmartObjectSlotHandle& RequestedSlot) const;
+
+    /** Cancels a failed authoritative claim only if the same accepted request is still active. */
+    void ResetPlayerInteractionAfterFailedClaim(uint64 RequestId);
+
     /**
      * Measures the owner against an authored interaction destination.
      * @param Destination The target slot's world transform.
@@ -72,6 +79,8 @@ protected:
     void RequestPlayerInteractionCancellation();
 
 private:
+    friend class FSampleSmartObjectClaimArbitrationTest;
+
     void HandlePlayerInteractionInput();
     void HandlePlayerInteractionCancellationInput();
     void SetPlayerInteractionState(bool bActive);
@@ -84,6 +93,10 @@ private:
     UFUNCTION(Client, Reliable)
     void ClientAcceptPlayerInteraction();
 
+    /** Clears an accepted request on the owning client even if its replicated flag never changed. */
+    UFUNCTION(Client, Reliable)
+    void ClientRejectPlayerInteraction();
+
     /** Runs the authored cancellation event on authority as well as the locally controlled pawn. */
     UFUNCTION(Server, Reliable)
     void ServerCancelPlayerInteraction();
@@ -93,6 +106,10 @@ private:
 
     UPROPERTY(Transient, ReplicatedUsing = OnRep_PlayerInteractionActive)
     bool bPlayerInteractionActive = false;
+
+    TWeakObjectPtr<AActor> PendingPlayerInteractionTarget;
+    FSmartObjectSlotHandle PendingPlayerInteractionSlot;
+    uint64 PlayerInteractionRequestId = 0;
 
     /** Enables native dispatch after the imported component's two input nodes have been replaced. */
     UPROPERTY(EditDefaultsOnly, Category = "Sample|Interaction")

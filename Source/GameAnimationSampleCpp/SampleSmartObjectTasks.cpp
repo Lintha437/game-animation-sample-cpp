@@ -1,6 +1,7 @@
 #include "SampleSmartObjectTasks.h"
 
 #include "AIController.h"
+#include "Async/Async.h"
 #include "Blueprint/AIBlueprintHelperLibrary.h"
 #include "Components/ActorComponent.h"
 #include "Engine/World.h"
@@ -13,6 +14,7 @@
 #include "NavigationSystem.h"
 #include "SampleCmcCharacter.h"
 #include "SampleMoverCharacter.h"
+#include "SampleSmartObjectInteractionComponent.h"
 #include "SmartObjectBlueprintFunctionLibrary.h"
 #include "SmartObjectComponent.h"
 #include "SmartObjectRequestTypes.h"
@@ -29,6 +31,10 @@ namespace
     const FName MoveCompletedName(TEXT("OnMovementCompleted"));
     const FName MontageFinishedName(TEXT("On Montage Finished"));
     const FName MontageFinishedDelegateName(TEXT("Owner Montage Finished"));
+
+    // StateTree tasks execute on the game thread. Weak entries do not extend their lifetime,
+    // and the subsystem comparison separates identical handles in different worlds.
+    TArray<TWeakObjectPtr<USampleClaimSmartObjectTask>> PendingClaimTasks;
 
     template <typename T>
     T* FindStruct(UObject& Task, FName Name, const UScriptStruct* Type)
@@ -108,6 +114,18 @@ namespace
             }
         }
         return Selected;
+    }
+
+    FSmartObjectClaimHandle ClaimFreeSlot(USmartObjectSubsystem& Subsystem,
+        const FSmartObjectSlotHandle& Slot, const AActor& Actor)
+    {
+        // CanBeClaimed alone permits overriding lower-priority reservations.
+        if (Slot.IsValid() && Subsystem.GetSlotState(Slot) == ESmartObjectSlotState::Free)
+        {
+            return Subsystem.MarkSlotAsClaimed(Slot, ESmartObjectClaimPriority::Normal,
+                FConstStructView::Make(FSmartObjectActorUserData(&Actor)));
+        }
+        return {};
     }
 }
 
@@ -276,21 +294,240 @@ EStateTreeRunStatus USampleClaimSmartObjectTask::EnterState(FStateTreeExecutionC
 {
     auto* Claim = FindStruct<FSmartObjectClaimHandle>(*this, TEXT("ClaimedHandle"), FSmartObjectClaimHandle::StaticStruct());
     const auto* Slot = FindStruct<FSmartObjectSlotHandle>(*this, TEXT("SlotToBeClaimed"), FSmartObjectSlotHandle::StaticStruct());
-    if (!Claim || !Slot)
+    Super::EnterState(Context, Transition);
+
+    // A sustained parent state can be reselected while its interaction child is active.
+    if (Transition.ChangeType == EStateTreeStateChangeType::Sustained && Claim && Claim->IsValid())
     {
+        if (PendingClaim == *Claim && PendingClaimRevoked && PendingClaimRevoked->Load())
+        {
+            ReleasePendingClaim(true);
+            Claim->Invalidate();
+            return EStateTreeRunStatus::Failed;
+        }
+        if (PendingClaim == *Claim || TransferredClaim == *Claim)
+        {
+            return EStateTreeRunStatus::Running;
+        }
+    }
+    ReleasePendingClaim(false);
+    TransferredClaim.Invalidate();
+
+    PendingActor = ReadActor(*this, TEXT("Actor"));
+    AActor* Actor = PendingActor.Get();
+    AActor* Target = ReadActor(*this, TEXT("SmartObject"));
+    PendingPlayerRequestId = 0;
+    if (Actor && Slot)
+    {
+        if (const auto* Component = Actor->FindComponentByClass<USampleSmartObjectInteractionComponent>())
+        {
+            PendingPlayerRequestId = Component->GetPlayerInteractionRequestId(Target, *Slot);
+        }
+    }
+    if (Claim)
+    {
+        Claim->Invalidate();
+    }
+    auto* Subsystem = USmartObjectSubsystem::GetCurrent(Context.GetWorld());
+    if (!Claim || !Slot || !IsValid(Actor) || !Subsystem)
+    {
+        ResetFailedPlayerActivity();
         return EStateTreeRunStatus::Failed;
     }
-    *Claim = USmartObjectBlueprintFunctionLibrary::MarkSmartObjectSlotAsClaimed(
-        Context.GetWorld(), *Slot, ReadActor(*this, TEXT("Actor")));
+
+    *Claim = ArbitrateClaim(*Subsystem, *Slot, *Actor, Target);
+    if (!Claim->IsValid())
+    {
+        ResetFailedPlayerActivity();
+        return EStateTreeRunStatus::Failed;
+    }
+
+    if (!TrackPendingClaim(*Subsystem, *Claim))
+    {
+        ReleasePendingClaim(true);
+        Claim->Invalidate();
+        return EStateTreeRunStatus::Failed;
+    }
     return EStateTreeRunStatus::Running;
+}
+
+FSmartObjectClaimHandle USampleClaimSmartObjectTask::ArbitrateClaim(USmartObjectSubsystem& Subsystem,
+    const FSmartObjectSlotHandle& Slot, const AActor& Actor, AActor* Target)
+{
+    FSmartObjectClaimHandle Claim = ClaimFreeSlot(Subsystem, Slot, Actor);
+    if (!Claim.IsValid() && IsValid(Target))
+    {
+        if (auto* Component = Target->FindComponentByClass<USmartObjectComponent>())
+        {
+            // The authored fallback uses the target itself as the filter's UserActor.
+            const FSmartObjectHandle Object = Slot.IsValid()
+                ? Slot.GetSmartObjectHandle() : Component->GetRegisteredHandle();
+            TArray<FSmartObjectRequestResult> Results;
+            USmartObjectBlueprintFunctionLibrary::FindSmartObjectsInComponent(
+                FSmartObjectRequestFilter{}, Component, Results, Target);
+            for (const FSmartObjectRequestResult& Result : Results)
+            {
+                if (Result.SlotHandle == Slot || Result.SlotHandle.GetSmartObjectHandle() != Object)
+                {
+                    continue;
+                }
+                Claim = ClaimFreeSlot(Subsystem, Result.SlotHandle, Actor);
+                if (Claim.IsValid())
+                {
+                    break;
+                }
+            }
+        }
+    }
+    return Claim;
+}
+
+bool USampleClaimSmartObjectTask::TrackPendingClaim(USmartObjectSubsystem& Subsystem,
+    const FSmartObjectClaimHandle& Claim)
+{
+    PendingClaim = Claim;
+    PendingSubsystem = &Subsystem;
+    if (FOnSmartObjectEvent* Events = Subsystem.GetSlotEventDelegate(PendingClaim.SlotHandle))
+    {
+        PendingClaimRevoked = MakeShared<TAtomic<bool>, ESPMode::ThreadSafe>(false);
+        const TWeakObjectPtr<USampleClaimSmartObjectTask> WeakTask(this);
+        const FSmartObjectClaimHandle ObservedClaim = PendingClaim;
+        const auto Revoked = PendingClaimRevoked;
+        PendingSlotListener = Events->AddLambda([WeakTask, ObservedClaim, Revoked](const FSmartObjectEventData& Event)
+        {
+            if (Event.SlotHandle == ObservedClaim.SlotHandle && Event.Reason == ESmartObjectChangeReason::OnReleased)
+            {
+                // The subsystem broadcasts inside the slot mutation. Record revocation immediately,
+                // then defer UObject and subsystem operations until outside that callback.
+                Revoked->Store(true);
+                AsyncTask(ENamedThreads::GameThread, [WeakTask, ObservedClaim]()
+                {
+                    if (auto* Task = WeakTask.Get())
+                    {
+                        Task->OnPendingClaimRevoked(ObservedClaim);
+                    }
+                });
+            }
+        });
+        PendingClaimTasks.RemoveAllSwap([](const auto& Task) { return !Task.IsValid(); });
+        PendingClaimTasks.AddUnique(TWeakObjectPtr<USampleClaimSmartObjectTask>(this));
+        return true;
+    }
+    return false;
+}
+
+void USampleClaimSmartObjectTask::ExitState(FStateTreeExecutionContext& Context,
+    const FStateTreeTransitionResult& Transition)
+{
+    if (Transition.ChangeType != EStateTreeStateChangeType::Sustained)
+    {
+        ReleasePendingClaim(true);
+        TransferredClaim.Invalidate();
+    }
+    Super::ExitState(Context, Transition);
+}
+
+USampleClaimSmartObjectTask* USampleClaimSmartObjectTask::FindPendingClaim(
+    const USmartObjectSubsystem* Subsystem, const FSmartObjectClaimHandle& Claim)
+{
+    if (Subsystem && Claim.IsValid())
+    {
+        for (const auto& Entry : PendingClaimTasks)
+        {
+            if (auto* Task = Entry.Get(); Task && Task->PendingSubsystem.Get() == Subsystem && Task->PendingClaim == Claim)
+            {
+                return Task;
+            }
+        }
+    }
+    return nullptr;
+}
+
+void USampleClaimSmartObjectTask::ForgetPendingClaim()
+{
+    if (auto* Subsystem = PendingSubsystem.Get(); Subsystem && PendingSlotListener.IsValid())
+    {
+        if (FOnSmartObjectEvent* Events = Subsystem->GetSlotEventDelegate(PendingClaim.SlotHandle))
+        {
+            Events->Remove(PendingSlotListener);
+        }
+    }
+    PendingSlotListener.Reset();
+    PendingClaimRevoked.Reset();
+    PendingClaimTasks.RemoveAllSwap([this](const auto& Task) { return !Task.IsValid() || Task.Get() == this; });
+    PendingClaim.Invalidate();
+    PendingSubsystem.Reset();
+}
+
+bool USampleClaimSmartObjectTask::ReleasePendingClaim(bool bResetPlayerActivity)
+{
+    if (!PendingClaim.IsValid())
+    {
+        return true;
+    }
+    auto* Subsystem = PendingSubsystem.Get();
+    const FSmartObjectClaimHandle Claim = PendingClaim;
+    const bool bRevoked = PendingClaimRevoked && PendingClaimRevoked->Load();
+    ForgetPendingClaim();
+    if (bResetPlayerActivity || bRevoked)
+    {
+        ResetFailedPlayerActivity();
+    }
+    if (bRevoked)
+    {
+        if (auto* Output = FindStruct<FSmartObjectClaimHandle>(*this, TEXT("ClaimedHandle"), FSmartObjectClaimHandle::StaticStruct());
+            Output && *Output == Claim)
+        {
+            Output->Invalidate();
+        }
+    }
+    if (!Subsystem || bRevoked)
+    {
+        return true;
+    }
+    const ESmartObjectSlotState State = Subsystem->GetSlotState(Claim.SlotHandle);
+    return (State != ESmartObjectSlotState::Claimed && State != ESmartObjectSlotState::Occupied)
+        || Subsystem->MarkSlotAsFree(Claim);
+}
+
+void USampleClaimSmartObjectTask::ResetFailedPlayerActivity() const
+{
+    if (AActor* Actor = PendingActor.Get())
+    {
+        if (auto* Component = Actor->FindComponentByClass<USampleSmartObjectInteractionComponent>())
+        {
+            Component->ResetPlayerInteractionAfterFailedClaim(PendingPlayerRequestId);
+        }
+    }
+}
+
+void USampleClaimSmartObjectTask::OnPendingClaimRevoked(const FSmartObjectClaimHandle& Claim)
+{
+    if (PendingClaim == Claim && PendingClaimRevoked && PendingClaimRevoked->Load())
+    {
+        // An external release or priority override revoked this reservation. Do not attempt
+        // another release: a different user may already own the same slot on the next call.
+        ForgetPendingClaim();
+        ResetFailedPlayerActivity();
+        if (auto* Output = FindStruct<FSmartObjectClaimHandle>(*this, TEXT("ClaimedHandle"), FSmartObjectClaimHandle::StaticStruct());
+            Output && *Output == Claim)
+        {
+            Output->Invalidate();
+        }
+        FinishTask(false);
+    }
 }
 
 EStateTreeRunStatus USampleReleaseSmartObjectTask::EnterState(FStateTreeExecutionContext& Context,
     const FStateTreeTransitionResult& Transition)
 {
     const auto* Claim = FindStruct<FSmartObjectClaimHandle>(*this, TEXT("Claimed Handle"), FSmartObjectClaimHandle::StaticStruct());
-    return Claim && Claim->IsValid() && USmartObjectBlueprintFunctionLibrary::MarkSmartObjectSlotAsFree(Context.GetWorld(), *Claim)
-        ? EStateTreeRunStatus::Succeeded : EStateTreeRunStatus::Failed;
+    if (!Claim || !Claim->IsValid())
+    {
+        return EStateTreeRunStatus::Failed;
+    }
+    auto* Pending = USampleClaimSmartObjectTask::FindPendingClaim(USmartObjectSubsystem::GetCurrent(Context.GetWorld()), *Claim);
+    return !Pending || Pending->ReleasePendingClaim(false) ? EStateTreeRunStatus::Succeeded : EStateTreeRunStatus::Failed;
 }
 
 EStateTreeRunStatus USampleUseSmartObjectTask::EnterState(FStateTreeExecutionContext& Context,
@@ -298,9 +535,20 @@ EStateTreeRunStatus USampleUseSmartObjectTask::EnterState(FStateTreeExecutionCon
 {
     auto* Controller = Cast<AAIController>(ReadActor(*this, TEXT("AIController")));
     const auto* Claim = FindStruct<FSmartObjectClaimHandle>(*this, TEXT("Claimed Handle"), FSmartObjectClaimHandle::StaticStruct());
-    if (!IsValid(Controller) || !Claim || !Claim->IsValid())
+    auto* Pending = Claim ? USampleClaimSmartObjectTask::FindPendingClaim(
+        USmartObjectSubsystem::GetCurrent(Context.GetWorld()), *Claim) : nullptr;
+    if (!Pending)
     {
         return EStateTreeRunStatus::Failed;
+    }
+    const auto FailDispatch = [Pending]()
+    {
+        Pending->ReleasePendingClaim(true);
+        return EStateTreeRunStatus::Failed;
+    };
+    if (!IsValid(Controller) || (Pending->PendingClaimRevoked && Pending->PendingClaimRevoked->Load()))
+    {
+        return FailDispatch();
     }
 
     // The engine task factory is reflected but its class header is private to Gameplay Interactions.
@@ -313,7 +561,7 @@ EStateTreeRunStatus USampleUseSmartObjectTask::EnterState(FStateTreeExecutionCon
     if (!ControllerParam || !ClaimParam || ClaimParam->Struct != FSmartObjectClaimHandle::StaticStruct() ||
         !LockParam || !ReturnParam)
     {
-        return EStateTreeRunStatus::Failed;
+        return FailDispatch();
     }
 
     FStructOnScope Args(Factory);
@@ -325,10 +573,19 @@ EStateTreeRunStatus USampleUseSmartObjectTask::EnterState(FStateTreeExecutionCon
     auto* Task = Cast<UGameplayTask>(ReturnParam->GetObjectPropertyValue_InContainer(Data));
     if (!Task)
     {
+        return FailDispatch();
+    }
+    // The factory has stored the handle on the engine task. Its OnDestroy releases it,
+    // including activation failure; native cleanup must stop before ReadyForActivation.
+    Pending->TransferredClaim = *Claim;
+    Pending->ForgetPendingClaim();
+    Task->ReadyForActivation();
+    if (Task->IsFinished())
+    {
+        Pending->ResetFailedPlayerActivity();
         return EStateTreeRunStatus::Failed;
     }
-    Task->ReadyForActivation();
-    return Task->IsFinished() ? EStateTreeRunStatus::Failed : EStateTreeRunStatus::Succeeded;
+    return EStateTreeRunStatus::Succeeded;
 }
 
 EStateTreeRunStatus USampleFindPatrolLocationTask::EnterState(FStateTreeExecutionContext& Context,

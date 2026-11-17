@@ -235,12 +235,21 @@ bool USampleSmartObjectInteractionComponent::TryStartPlayerInteraction()
     }
 
     UScriptStruct* Payload = PlayerInteractionPayload.LoadSynchronous();
-    if (!Tree || !Payload || !SendPlayerInteraction(*Tree, *Payload, Tag, *Target, Slot))
+    if (!Tree || !Payload)
     {
         return false;
     }
+
+    PendingPlayerInteractionTarget = Target;
+    PendingPlayerInteractionSlot = Slot;
+    ++PlayerInteractionRequestId;
     SetPlayerInteractionState(true);
-    return true;
+    if (!SendPlayerInteraction(*Tree, *Payload, Tag, *Target, Slot))
+    {
+        ClearPlayerInteractionState();
+        return false;
+    }
+    return bPlayerInteractionActive;
 }
 
 void USampleSmartObjectInteractionComponent::ServerRequestPlayerInteraction_Implementation()
@@ -256,6 +265,11 @@ void USampleSmartObjectInteractionComponent::ClientAcceptPlayerInteraction_Imple
 {
     SetPlayerInteractionState(true);
     OpenPlayerInteractionGate();
+}
+
+void USampleSmartObjectInteractionComponent::ClientRejectPlayerInteraction_Implementation()
+{
+    SetPlayerInteractionState(false);
 }
 
 void USampleSmartObjectInteractionComponent::ServerCancelPlayerInteraction_Implementation()
@@ -321,10 +335,34 @@ void USampleSmartObjectInteractionComponent::ClearPlayerInteractionState()
     if (GetOwner() && GetOwner()->HasAuthority())
     {
         SetPlayerInteractionState(false);
+        PendingPlayerInteractionTarget.Reset();
+        PendingPlayerInteractionSlot = {};
     }
     else if (const auto* State = FindFProperty<FBoolProperty>(GetClass(), PlayerInteractionState))
     {
         State->SetPropertyValue_InContainer(this, false);
+    }
+}
+
+uint64 USampleSmartObjectInteractionComponent::GetPlayerInteractionRequestId(
+    const AActor* Target, const FSmartObjectSlotHandle& RequestedSlot) const
+{
+    if (GetOwner() && GetOwner()->HasAuthority() && bPlayerInteractionActive &&
+        RequestedSlot.IsValid() && PendingPlayerInteractionSlot == RequestedSlot &&
+        (!Target || PendingPlayerInteractionTarget.Get() == Target))
+    {
+        return PlayerInteractionRequestId;
+    }
+    return 0;
+}
+
+void USampleSmartObjectInteractionComponent::ResetPlayerInteractionAfterFailedClaim(uint64 RequestId)
+{
+    if (GetOwner() && GetOwner()->HasAuthority() && bPlayerInteractionActive &&
+        RequestId != 0 && PlayerInteractionRequestId == RequestId)
+    {
+        ClearPlayerInteractionState();
+        ClientRejectPlayerInteraction();
     }
 }
 
