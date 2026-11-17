@@ -93,6 +93,7 @@ MIGRATIONS = (
     "mover_ragdoll_mode_transitions",
     "traversal_native_gameplay",
     "cmc_foley_volume",
+    "native_animation_notify_instances",
 )
 
 
@@ -126,6 +127,8 @@ def apply_batch(start, checkpoint):
 
 
 def apply(project, engine_root):
+    from retire_reference_notify_packages import retire_notify_packages
+
     if project.name != "GameAnimSampleCpp.uproject" or not project.is_file():
         raise ValueError("Select the native GameAnimSampleCpp.uproject descriptor.")
     editor = engine_root / "Engine/Binaries/Win64/UnrealEditor-Cmd.exe"
@@ -161,7 +164,8 @@ def apply(project, engine_root):
                 raise RuntimeError(f"The Editor returned an invalid stage checkpoint. See {log}")
             completed = next_stage
             print(f"Completed {completed}/{len(MIGRATIONS)} stages.", flush=True)
-    print(f"Reference asset migrations complete. Logs: {logs}")
+    retired = retire_notify_packages(project)
+    print(f"Reference asset migrations complete. Retired notify packages: {retired}. Logs: {logs}")
 
 
 def main():

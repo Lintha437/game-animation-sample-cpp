@@ -35,7 +35,7 @@ namespace
     bool ReadCollisionResponse(const UObject& Notify, ECollisionResponse& Response)
     {
         const FProperty* Property = FindFProperty<FProperty>(Notify.GetClass(), TEXT("New Response"));
-        int64 Value = INDEX_NONE;
+        int64 Value = Response;
         if (const auto* Byte = CastField<FByteProperty>(Property); Byte && Byte->Enum == StaticEnum<ECollisionResponse>())
         {
             Value = Byte->GetPropertyValue_InContainer(&Notify);
@@ -43,6 +43,10 @@ namespace
         else if (const auto* Enum = CastField<FEnumProperty>(Property); Enum && Enum->GetEnum() == StaticEnum<ECollisionResponse>())
         {
             Value = Enum->GetUnderlyingProperty()->GetSignedIntPropertyValue(Enum->ContainerPtrToValuePtr<void>(&Notify));
+        }
+        else if (Property)
+        {
+            return false;
         }
 
         if (!ensureMsgf(Value >= ECR_Ignore && Value <= ECR_Block,
@@ -70,10 +74,7 @@ void USampleOverrideMovementModeAnimNotifyState::NotifyBegin(USkeletalMeshCompon
     if (UCharacterMoverComponent* Mover = ResolveAuthoredMover(MeshComp))
     {
         const auto* Override = FindFProperty<FNameProperty>(GetClass(), TEXT("OverrideMovementMode"));
-        if (ensureMsgf(Override, TEXT("%s requires a name property named OverrideMovementMode"), *GetClass()->GetPathName()))
-        {
-            Mover->QueueNextMode(Override->GetPropertyValue_InContainer(this), false);
-        }
+        Mover->QueueNextMode(Override ? Override->GetPropertyValue_InContainer(this) : ModeOnBegin, false);
     }
 }
 
@@ -84,10 +85,9 @@ void USampleOverrideMovementModeAnimNotifyState::NotifyEnd(USkeletalMeshComponen
     {
         const auto* Override = FindFProperty<FNameProperty>(GetClass(), TEXT("OverrideMovementMode"));
         const auto* Ending = FindFProperty<FNameProperty>(GetClass(), TEXT("EndingMovementMode"));
-        if (ensureMsgf(Override && Ending, TEXT("%s requires both authored movement mode name properties"), *GetClass()->GetPathName()) &&
-            Mover->GetMovementModeName() == Override->GetPropertyValue_InContainer(this))
+        if (Mover->GetMovementModeName() == (Override ? Override->GetPropertyValue_InContainer(this) : ModeOnBegin))
         {
-            Mover->QueueNextMode(Ending->GetPropertyValue_InContainer(this), false);
+            Mover->QueueNextMode(Ending ? Ending->GetPropertyValue_InContainer(this) : ModeOnEnd, false);
         }
     }
 }
@@ -97,10 +97,10 @@ void USampleOverrideCapsuleCollisionAnimNotifyState::NotifyBegin(USkeletalMeshCo
 {
     if (UPrimitiveComponent* Root = ResolvePrimitiveRoot(MeshComp))
     {
-        ECollisionResponse Response;
-        if (ReadCollisionResponse(*this, Response))
+        ECollisionResponse EffectiveResponse = Response;
+        if (ReadCollisionResponse(*this, EffectiveResponse))
         {
-            Root->SetCollisionResponseToAllChannels(Response);
+            Root->SetCollisionResponseToAllChannels(EffectiveResponse);
         }
     }
 }
@@ -109,8 +109,7 @@ void USampleOverrideCapsuleCollisionAnimNotifyState::NotifyEnd(USkeletalMeshComp
     UAnimSequenceBase* Animation, const FAnimNotifyEventReference& EventReference)
 {
     const auto* Reset = FindFProperty<FBoolProperty>(GetClass(), TEXT("ResetOnEnd"));
-    if (ensureMsgf(Reset, TEXT("%s requires a boolean property named ResetOnEnd"), *GetClass()->GetPathName()) &&
-        Reset->GetPropertyValue_InContainer(this))
+    if (Reset ? Reset->GetPropertyValue_InContainer(this) : bRestoreCapsuleProfile)
     {
         if (UPrimitiveComponent* Root = ResolvePrimitiveRoot(MeshComp))
         {

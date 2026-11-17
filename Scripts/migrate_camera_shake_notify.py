@@ -24,6 +24,10 @@ def migrate():
         raise RuntimeError("Run this migration in the native sample project.")
 
     editor = unreal.BlueprintEditorLibrary
+    assets = unreal.get_editor_subsystem(unreal.EditorAssetSubsystem)
+    retirement = descriptor.parent / "Saved/BlueprintMigration/NativeAnimationNotifies/conversion.json"
+    if retirement.is_file() and not assets.does_asset_exist(ASSET):
+        return
     blueprint = unreal.load_asset(ASSET)
     parent = unreal.load_class(None, NATIVE_PARENT)
     if not blueprint or not parent:
@@ -81,7 +85,6 @@ def migrate():
     cdo = unreal.get_default_object(editor.generated_class(blueprint))
     if cdo.get_editor_property("shake") != original_shake:
         raise RuntimeError("The authored camera shake class changed.")
-    assets = unreal.get_editor_subsystem(unreal.EditorAssetSubsystem)
     if not assets.save_loaded_asset(blueprint, only_if_is_dirty=False):
         raise RuntimeError(f"Camera shake notify save failed. Original copy: {backup}")
     unreal.log("Native camera shake notify installed.")

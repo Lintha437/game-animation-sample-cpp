@@ -8,15 +8,22 @@ class UCharacterMoverComponent;
 
 /**
  * Queues the Mover mode changes authored by BP_NotifyState_OverrideMovementMode.
- * The imported subclass owns the serialized OverrideMovementMode and EndingMovementMode
- * name fields, including per-montage overrides. Notify instances hold no playback state.
+ * Each animation event owns its settings. Notify instances hold no playback state.
  */
-UCLASS(Abstract, Blueprintable)
+UCLASS(Blueprintable, meta=(DisplayName="Override Movement Mode"))
 class GAMEANIMATIONSAMPLECPP_API USampleOverrideMovementModeAnimNotifyState : public UAnimNotifyState
 {
     GENERATED_BODY()
 
 public:
+    /** Mode requested on entry. */
+    UPROPERTY(EditAnywhere, Category="Movement")
+    FName ModeOnBegin = TEXT("Traversing");
+
+    /** Mode requested on exit while the entry mode is still active. */
+    UPROPERTY(EditAnywhere, Category="Movement")
+    FName ModeOnEnd = NAME_None;
+
     /**
      * Queues the authored override for the next Mover simulation frame.
      * @param MeshComp Mesh owned by SandboxCharacter_Mover_C or a subclass, supplying its authored CharacterMover field.
@@ -56,15 +63,23 @@ public:
 
 /**
  * Applies the all-channel collision response authored by BP_NotifyState_OverrideCapsuleCollision.
- * The imported subclass retains its New Response enum and ResetOnEnd boolean, including
- * per-montage values. No component references or mutable playback state are retained.
+ * Each animation event owns its response and reset policy. No component references
+ * or mutable playback state are retained.
  */
-UCLASS(Abstract, Blueprintable)
+UCLASS(Blueprintable, meta=(DisplayName="Override Capsule Collision"))
 class GAMEANIMATIONSAMPLECPP_API USampleOverrideCapsuleCollisionAnimNotifyState : public UAnimNotifyState
 {
     GENERATED_BODY()
 
 public:
+    /** Response applied to every collision channel on entry. */
+    UPROPERTY(EditAnywhere, Category="Collision")
+    TEnumAsByte<ECollisionResponse> Response = ECR_Ignore;
+
+    /** Restore the CharacterCapsule profile when this event ends. */
+    UPROPERTY(EditAnywhere, Category="Collision")
+    bool bRestoreCapsuleProfile = true;
+
     /**
      * Sets all collision channels on the mesh owner's primitive root to the authored response.
      * @param MeshComp Mesh whose owner supplies the root component.
