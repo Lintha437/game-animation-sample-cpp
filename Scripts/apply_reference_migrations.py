@@ -95,6 +95,7 @@ MIGRATIONS = (
     "cmc_foley_volume",
     "native_animation_notify_instances",
     "native_mover_modes",
+    "native_actor_components",
 )
 
 
@@ -128,6 +129,7 @@ def apply_batch(start, checkpoint):
 
 
 def apply(project, engine_root):
+    from retire_reference_actor_components import retire_actor_component_packages
     from retire_reference_movement_modes import retire_movement_mode_packages
     from retire_reference_notify_packages import retire_notify_packages
 
@@ -168,7 +170,8 @@ def apply(project, engine_root):
             print(f"Completed {completed}/{len(MIGRATIONS)} stages.", flush=True)
     retired = retire_notify_packages(project)
     retired_modes = retire_movement_mode_packages(project)
-    print(f"Reference asset migrations complete. Retired notify packages: {retired}; mode packages: {retired_modes}. Logs: {logs}")
+    retired_components = retire_actor_component_packages(project)
+    print(f"Reference asset migrations complete. Retired notify packages: {retired}; mode packages: {retired_modes}; component packages: {retired_components}. Logs: {logs}")
 
 
 def main():

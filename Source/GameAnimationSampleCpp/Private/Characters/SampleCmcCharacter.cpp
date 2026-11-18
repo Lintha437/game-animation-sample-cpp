@@ -124,13 +124,19 @@ void ASampleCmcCharacter::ActivateSandboxCamera()
 
 void ASampleCmcCharacter::InitializeCmcRuntime()
 {
+    USampleAnimationTickComponent* PreMovement = nullptr;
     if (const auto* Field = FindFProperty<FObjectPropertyBase>(GetClass(), TEXT("AC_PreCMCTick")))
     {
-        if (auto* PreMovement = Cast<USampleAnimationTickComponent>(Field->GetObjectPropertyValue_InContainer(this)))
-        {
-            GetCharacterMovement()->AddTickPrerequisiteComponent(PreMovement);
-            PreMovement->BindTick(*this, GET_FUNCTION_NAME_CHECKED(ASampleCmcCharacter, UpdateBeforeCmcTick));
-        }
+        PreMovement = Cast<USampleAnimationTickComponent>(Field->GetObjectPropertyValue_InContainer(this));
+    }
+    if (!PreMovement)
+    {
+        PreMovement = FindComponentByClass<USampleAnimationTickComponent>();
+    }
+    if (PreMovement)
+    {
+        GetCharacterMovement()->AddTickPrerequisiteComponent(PreMovement);
+        PreMovement->BindTick(*this, GET_FUNCTION_NAME_CHECKED(ASampleCmcCharacter, UpdateBeforeCmcTick));
     }
     if (auto* CharacterMesh = GetMesh())
     {
