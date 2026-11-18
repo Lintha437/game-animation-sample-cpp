@@ -526,19 +526,25 @@ void ASampleMoverCharacter::InitializeRagdollRuntime()
 
     auto* Mesh = GetRagdollMesh(*this);
     auto* Physics = FindComponentByClass<UPhysicsControlComponent>();
+    USampleAnimationTickComponent* PostAnimation = nullptr;
     if (const auto* Field = FindFProperty<FObjectPropertyBase>(GetClass(), TEXT("AC_PostABPTick")))
     {
-        if (auto* PostAnimation = Cast<USampleAnimationTickComponent>(Field->GetObjectPropertyValue_InContainer(this)))
+        PostAnimation = Cast<USampleAnimationTickComponent>(Field->GetObjectPropertyValue_InContainer(this));
+    }
+    if (!PostAnimation)
+    {
+        PostAnimation = FindComponentByClass<USampleAnimationTickComponent>();
+    }
+    if (PostAnimation)
+    {
+        if (Mesh)
         {
-            if (Mesh)
-            {
-                PostAnimation->AddTickPrerequisiteComponent(Mesh);
-            }
-            PostAnimation->BindTick(*this, TEXT("PostABPTick"));
-            if (Physics)
-            {
-                Physics->AddTickPrerequisiteComponent(PostAnimation);
-            }
+            PostAnimation->AddTickPrerequisiteComponent(Mesh);
+        }
+        PostAnimation->BindTick(*this, TEXT("PostABPTick"));
+        if (Physics)
+        {
+            Physics->AddTickPrerequisiteComponent(PostAnimation);
         }
     }
     if (Mesh && Physics)

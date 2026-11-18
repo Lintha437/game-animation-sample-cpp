@@ -3,27 +3,34 @@
 #include "Components/ActorComponent.h"
 #include "SampleAnimationTickComponent.generated.h"
 
+/** Broadcast when a sample animation tick component executes its scheduled tick. */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FSampleAnimationTickSignature);
+
 /**
  * Executes the animation sandbox's pre-movement and post-animation tick dispatch.
  *
- * The existing component assets retain their separate tick groups, instance overrides,
- * prerequisites and zero-parameter Tick delegates. Native code owns the broadcast.
- * The inherited delegates keep serialized bindings valid while subscribers migrate.
+ * Instances retain their scheduled tick groups, prerequisites, and zero-parameter
+ * callback dispatch natively, while continuing to honor any legacy Blueprint
+ * `Tick` event dispatcher when loaded on unretired component subclasses.
  */
-UCLASS(Abstract, Blueprintable)
+UCLASS(Blueprintable, ClassGroup = (Sample), meta = (BlueprintSpawnableComponent))
 class GAMEANIMATIONSAMPLECPP_API USampleAnimationTickComponent : public UActorComponent
 {
     GENERATED_BODY()
 
 public:
-    /** Enables participation in Unreal's component tick scheduler. */
+    /** Enables participation in Unreal's component tick scheduler with the sandbox physics tick group. */
     USampleAnimationTickComponent();
 
-    /** Adds a reflected zero-argument callback to the existing asset delegate at most once. */
+    /** Native zero-parameter multicast delegate invoked on each component tick. */
+    UPROPERTY(BlueprintAssignable, Category = "Sample|Tick")
+    FSampleAnimationTickSignature OnTick;
+
+    /** Adds a reflected zero-argument callback to the active tick delegate at most once. */
     void BindTick(UObject& Receiver, FName Callback);
 
     /**
-     * Broadcasts the component's retained Tick delegate once per scheduled tick.
+     * Broadcasts the component's tick delegate once per scheduled tick.
      * @param DeltaTime Seconds since this component last ticked.
      * @param TickType World's current tick mode.
      * @param ThisTickFunction Scheduler-owned tick descriptor.

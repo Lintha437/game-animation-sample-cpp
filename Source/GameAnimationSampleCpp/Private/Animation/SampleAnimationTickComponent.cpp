@@ -5,6 +5,8 @@
 USampleAnimationTickComponent::USampleAnimationTickComponent()
 {
     PrimaryComponentTick.bCanEverTick = true;
+    PrimaryComponentTick.TickGroup = TG_DuringPhysics;
+    PrimaryComponentTick.EndTickGroup = TG_PrePhysics;
 }
 
 FMulticastScriptDelegate* USampleAnimationTickComponent::FindAuthoredTick()
@@ -17,12 +19,20 @@ FMulticastScriptDelegate* USampleAnimationTickComponent::FindAuthoredTick()
 void USampleAnimationTickComponent::BindTick(UObject& Receiver, FName Callback)
 {
     const UFunction* Function = Receiver.FindFunction(Callback);
-    auto* Delegate = FindAuthoredTick();
-    if (Delegate && Function && Function->NumParms == 0)
+    if (!Function || Function->NumParms != 0)
     {
-        FScriptDelegate Binding;
-        Binding.BindUFunction(&Receiver, Callback);
+        return;
+    }
+
+    FScriptDelegate Binding;
+    Binding.BindUFunction(&Receiver, Callback);
+    if (auto* Delegate = FindAuthoredTick())
+    {
         Delegate->AddUnique(Binding);
+    }
+    else
+    {
+        OnTick.AddUnique(Binding);
     }
 }
 
@@ -31,9 +41,10 @@ void USampleAnimationTickComponent::TickComponent(float DeltaTime, ELevelTick Ti
 {
     Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-    if (const auto* Delegate = FindAuthoredTick();
-        ensureMsgf(Delegate, TEXT("%s requires a zero-parameter Tick delegate"), *GetClass()->GetPathName()))
+    if (const auto* Delegate = FindAuthoredTick())
     {
         Delegate->ProcessDelegate<UObject>(nullptr);
+        return;
     }
+    OnTick.Broadcast();
 }

@@ -6,13 +6,24 @@
 struct FStreamableHandle;
 
 /** Resolves the sandbox's optional visual actor without changing the pawn's movement or animation state. */
-UCLASS(Blueprintable)
+UCLASS(Blueprintable, ClassGroup = (Sample), meta = (BlueprintSpawnableComponent))
 class GAMEANIMATIONSAMPLECPP_API USampleVisualOverrideComponent : public UActorComponent
 {
     GENERATED_BODY()
 
 public:
-    /** Updates tagged child actor components and the source mesh from the authored replicated class. */
+    /** Initializes visual override defaults to match the sandbox component configuration. */
+    USampleVisualOverrideComponent();
+
+    /** Currently selected visual override actor class applied to tagged child actor components. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, ReplicatedUsing = OnRep_SelectedVisualOverride,
+        Category = "Sample|Visual Override")
+    TSubclassOf<AActor> SelectedVisualOverride;
+
+    /** Registers replicated visual override state. */
+    virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+    /** Updates tagged child actor components and the source mesh from the active visual override class. */
     UFUNCTION(BlueprintCallable, Category = "Sample|Visual Override")
     void ApplyVisualOverride();
 
@@ -24,6 +35,9 @@ protected:
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
+    UFUNCTION()
+    void OnRep_SelectedVisualOverride();
+
     UFUNCTION()
     void HandleVisualSelectionChanged(FString VariableName);
 
