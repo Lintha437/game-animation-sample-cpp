@@ -2,6 +2,7 @@
 
 #include "Components/SceneComponent.h"
 #include "DefaultMovementSet/CharacterMoverComponent.h"
+#include "DefaultMovementSet/Settings/StanceSettings.h"
 #include "Engine/World.h"
 #include "GameplayTagContainer.h"
 #include "Kismet/BlueprintSpringMathLibrary.h"
@@ -55,9 +56,11 @@ namespace
             ? Field->GetFloatingPointPropertyValue(Field->ContainerPtrToValuePtr<void>(Data)) : 0.0;
     }
 
-    double ReadSampleModeNumber(const UObject& Object, FName Name)
+    double ReadSampleModeNumber(const UObject& Object, FName Name, double Fallback = 0.0)
     {
-        return ReadSampleModeNumber(Object.GetClass(), &Object, Name);
+        const auto* Field = FindFProperty<FNumericProperty>(Object.GetClass(), Name);
+        return Field && Field->IsFloatingPoint()
+            ? Field->GetFloatingPointPropertyValue(Field->ContainerPtrToValuePtr<void>(&Object)) : Fallback;
     }
 
     double ReadSampleModeNumber(const FInstancedStruct* Input, FName Name)
@@ -83,10 +86,10 @@ namespace
         return 0;
     }
 
-    bool ReadSampleModeFlag(const UObject& Object, FName Name)
+    bool ReadSampleModeFlag(const UObject& Object, FName Name, bool bFallback = false)
     {
         const auto* Field = FindFProperty<FBoolProperty>(Object.GetClass(), Name);
-        return Field && Field->GetPropertyValue_InContainer(&Object);
+        return Field ? Field->GetPropertyValue_InContainer(&Object) : bFallback;
     }
 
     void SetSampleModeFlag(UObject& Object, FName Name, bool bValue)
@@ -151,6 +154,17 @@ FTransitionEvalResult USampleMoverExitSlideTransition::Evaluate_Implementation(c
         ? FTransitionEvalResult(TEXT("Walking")) : FTransitionEvalResult::NoTransition;
 }
 
+USampleMoverWalkingMode::USampleMoverWalkingMode()
+{
+    MaxSpeedOverride = -1.0f;
+    Acceleration = 1000.0f;
+    Deceleration = 1500.0f;
+    TurningStrength = 8.0f;
+    FacingSmoothingTime = 0.5f;
+    SharedSettingsClasses.AddUnique(UStanceSettings::StaticClass());
+    Transitions.Add(CreateDefaultSubobject<USampleMoverEnterSlideTransition>(TEXT("EnterSlideTransition")));
+}
+
 void USampleMoverWalkingMode::Activate(const FMoverEventContext& Context, FName PrevModeName,
     const FMoverSimContext& SimContext, const FMoverTickStartData& StartState, FMoverSyncState* OutSyncState,
     FMoverAuxStateContext* OutAuxState)
@@ -175,6 +189,7 @@ void USampleMoverWalkingMode::BeginMoverLandingWindow()
 {
     if (const auto* Mover = GetMoverComponent(); Mover && Mover->GetMovementModeName() == TEXT("Falling"))
     {
+        bJustLanded = true;
         SetSampleModeFlag(*this, TEXT("JustLanded"), true);
         UKismetSystemLibrary::RetriggerableDelay(this, 0.2f, FLatentActionInfo(0, MoverLandingWindowAction,
             GET_FUNCTION_NAME_STRING_CHECKED(USampleMoverWalkingMode, ClearMoverLandingWindow), this));
@@ -183,6 +198,7 @@ void USampleMoverWalkingMode::BeginMoverLandingWindow()
 
 void USampleMoverWalkingMode::ClearMoverLandingWindow()
 {
+    bJustLanded = false;
     SetSampleModeFlag(*this, TEXT("JustLanded"), false);
 }
 
@@ -197,8 +213,8 @@ void USampleMoverWalkingMode::GenerateWalkMove_Implementation(FMoverTickStartDat
     const int64 Gait = ReadSampleModeGait(Input);
     const bool bIdle = !DefaultInput || DefaultInput->GetMoveInput().IsNearlyZero();
     const double Speed = InOutVelocity.Size2D();
-    const double RunSpeed = ReadSampleModeNumber(*this, TEXT("RunSpeed"));
-    const double SprintSpeed = ReadSampleModeNumber(*this, TEXT("SprintSpeed"));
+    const double TargetRunSpeed = ReadSampleModeNumber(*this, TEXT("RunSpeed"), WalkSettings.RunSpeed);
+    const double TargetSprintSpeed = ReadSampleModeNumber(*this, TEXT("SprintSpeed"), WalkSettings.SprintSpeed);
     const float CurrentOffset = static_cast<float>((CurrentFacing.Rotator() - DesiredFacing.Rotator()).GetNormalized().Yaw);
     const FQuat Facing = OffsetSampleMoverFacing(DesiredFacing, CurrentOffset, Input);
 
@@ -208,24 +224,33 @@ void USampleMoverWalkingMode::GenerateWalkMove_Implementation(FMoverTickStartDat
     {
         Velocity = InOutVelocity;
     }
-    else if (ReadSampleModeFlag(*this, TEXT("SlopeRelativeVelocity")))
+    else if (ReadSampleModeFlag(*this, TEXT("SlopeRelativeVelocity"), WalkSettings.bSlopeRelativeVelocity))
     {
         Velocity = FQuat::FindBetweenNormals(FVector::UpVector, GetSampleFloorNormal(Mover)).RotateVector(DesiredVelocity);
     }
 
-    const double GroundSpeed = Gait == 2 ? SprintSpeed : (Gait == 1 ? RunSpeed : ReadSampleModeNumber(*this, TEXT("WalkSpeed")));
-    MaxSpeedOverride = Mover && Mover->IsCrouching() ? ReadSampleModeNumber(*this, TEXT("CrouchSpeed")) : GroundSpeed;
-    const FName AccelerationName = Gait == 0 ? FName(TEXT("WalkAcceleration"))
-        : (Gait == 2 && Speed > RunSpeed ? FName(TEXT("SprintAcceleration")) : FName(TEXT("RunAcceleration")));
-    Acceleration = ReadSampleModeNumber(*this, AccelerationName);
+    const double GroundSpeed = Gait == 2
+        ? TargetSprintSpeed
+        : (Gait == 1 ? TargetRunSpeed : ReadSampleModeNumber(*this, TEXT("WalkSpeed"), WalkSettings.WalkSpeed));
+    MaxSpeedOverride = Mover && Mover->IsCrouching()
+        ? ReadSampleModeNumber(*this, TEXT("CrouchSpeed"), WalkSettings.CrouchSpeed) : GroundSpeed;
+    const double ActiveAcceleration = Gait == 0
+        ? ReadSampleModeNumber(*this, TEXT("WalkAcceleration"), WalkSettings.WalkAcceleration)
+        : (Gait == 2 && Speed > TargetRunSpeed
+            ? ReadSampleModeNumber(*this, TEXT("SprintAcceleration"), WalkSettings.SprintAcceleration)
+            : ReadSampleModeNumber(*this, TEXT("RunAcceleration"), WalkSettings.RunAcceleration));
+    Acceleration = ActiveAcceleration;
+    const bool bLandingBrake = bJustLanded || ReadSampleModeFlag(*this, TEXT("JustLanded"));
     Deceleration = bIdle
-        ? (ReadSampleModeFlag(*this, TEXT("JustLanded")) ? 20000.0 : ReadSampleModeNumber(*this, TEXT("StoppingDeceleration")))
-        : ReadSampleModeNumber(*this, TEXT("GaitChangeDeceleration"));
-    TurningStrength = MapSampleModeRange(Speed, RunSpeed, SprintSpeed,
-        ReadSampleModeNumber(*this, TEXT("Walk/RunTurnStrength")), ReadSampleModeNumber(*this, TEXT("SprintTurnStrength")));
-    const double MovingFacingTime = MapSampleModeRange(Speed, RunSpeed, SprintSpeed,
-        ReadSampleModeNumber(*this, TEXT("Walk/RunFacingTime")), ReadSampleModeNumber(*this, TEXT("SprintFacingTime")));
-    FacingSmoothingTime = bIdle ? ReadSampleModeNumber(*this, TEXT("IdleFacingTime"))
+        ? (bLandingBrake ? 20000.0 : ReadSampleModeNumber(*this, TEXT("StoppingDeceleration"), WalkSettings.StoppingDeceleration))
+        : ReadSampleModeNumber(*this, TEXT("GaitChangeDeceleration"), WalkSettings.GaitChangeDeceleration);
+    TurningStrength = MapSampleModeRange(Speed, TargetRunSpeed, TargetSprintSpeed,
+        ReadSampleModeNumber(*this, TEXT("Walk/RunTurnStrength"), WalkSettings.WalkRunTurnStrength),
+        ReadSampleModeNumber(*this, TEXT("SprintTurnStrength"), WalkSettings.SprintTurnStrength));
+    const double MovingFacingTime = MapSampleModeRange(Speed, TargetRunSpeed, TargetSprintSpeed,
+        ReadSampleModeNumber(*this, TEXT("Walk/RunFacingTime"), WalkSettings.WalkRunFacingTime),
+        ReadSampleModeNumber(*this, TEXT("SprintFacingTime"), WalkSettings.SprintFacingTime));
+    FacingSmoothingTime = bIdle ? ReadSampleModeNumber(*this, TEXT("IdleFacingTime"), WalkSettings.IdleFacingTime)
         : MapSampleModeRange(FMath::Abs(CurrentOffset), 90.0, 135.0, MovingFacingTime, 0.2);
 
     Super::GenerateWalkMove_Implementation(StartState, DeltaSeconds, SimContext, Velocity, Facing, CurrentFacing,
@@ -239,6 +264,17 @@ void USampleMoverWalkingMode::GenerateWalkMove_Implementation(FMoverTickStartDat
     {
         InOutAngularVelocityDegrees.Z = FMath::Clamp(InOutAngularVelocityDegrees.Z, ControlRate, 1000.0);
     }
+}
+
+USampleMoverSlidingMode::USampleMoverSlidingMode()
+{
+    MaxSpeedOverride = -1.0f;
+    Acceleration = 2000.0f;
+    Deceleration = 200.0f;
+    TurningStrength = 1.0f;
+    FacingSmoothingTime = 0.15f;
+    SharedSettingsClasses.AddUnique(UStanceSettings::StaticClass());
+    Transitions.Add(CreateDefaultSubobject<USampleMoverExitSlideTransition>(TEXT("ExitSlideTransition")));
 }
 
 void USampleMoverSlidingMode::Activate(const FMoverEventContext& Context, FName PrevModeName,
@@ -263,14 +299,16 @@ void USampleMoverSlidingMode::Activate_External(const FMoverEventContext& Contex
 
 void USampleMoverSlidingMode::BeginMoverSlideBoost()
 {
+    bInitialBoost = true;
     SetSampleModeFlag(*this, TEXT("InitialBoost"), true);
-    UKismetSystemLibrary::Delay(this, ReadSampleModeNumber(*this, TEXT("InitialBoostTime")),
+    UKismetSystemLibrary::Delay(this, ReadSampleModeNumber(*this, TEXT("InitialBoostTime"), SlideSettings.InitialBoostTime),
         FLatentActionInfo(0, MoverSlideBoostAction,
             GET_FUNCTION_NAME_STRING_CHECKED(USampleMoverSlidingMode, ClearMoverSlideBoost), this));
 }
 
 void USampleMoverSlidingMode::ClearMoverSlideBoost()
 {
+    bInitialBoost = false;
     SetSampleModeFlag(*this, TEXT("InitialBoost"), false);
 }
 
@@ -281,16 +319,22 @@ void USampleMoverSlidingMode::GenerateWalkMove_Implementation(FMoverTickStartDat
     const auto* Input = FindSampleMoverModeInput(StartState.InputCmd.InputCollection);
     const FVector FloorNormal = GetSampleFloorNormal(GetMoverComponent());
     const double Slope = FMath::RadiansToDegrees(FMath::Acos(FVector::DotProduct(FloorNormal, DesiredVelocity.GetSafeNormal()))) - 90.0;
-    const double Shallow = ReadSampleModeNumber(*this, TEXT("ShallowSlopeAngle"));
-    const double Steep = ReadSampleModeNumber(*this, TEXT("SteepSlopeAngle"));
-    const bool bBoost = ReadSampleModeFlag(*this, TEXT("InitialBoost"));
-    const double SlopeSpeed = Slope > -Shallow ? ReadSampleModeNumber(*this, TEXT("FlatGroundSpeed"))
-        : MapSampleModeRange(Slope, -Shallow, -Steep, ReadSampleModeNumber(*this, TEXT("ShallowSlopeSpeed")),
-            ReadSampleModeNumber(*this, TEXT("SteepSlopeSpeed")));
-    MaxSpeedOverride = bBoost ? ReadSampleModeNumber(*this, TEXT("InitialBoostSpeed")) : SlopeSpeed;
-    Acceleration = ReadSampleModeNumber(*this, bBoost ? FName(TEXT("InitialBoostAcceleration")) : FName(TEXT("AfterBoostAcceleration")));
-    Deceleration = MapSampleModeRange(Slope, Shallow, Steep, ReadSampleModeNumber(*this, TEXT("FlatGroundDeceleration")),
-        ReadSampleModeNumber(*this, TEXT("SteepSlopeDeceleration")));
+    const double Shallow = ReadSampleModeNumber(*this, TEXT("ShallowSlopeAngle"), SlideSettings.ShallowSlopeAngle);
+    const double Steep = ReadSampleModeNumber(*this, TEXT("SteepSlopeAngle"), SlideSettings.SteepSlopeAngle);
+    const bool bBoost = bInitialBoost || ReadSampleModeFlag(*this, TEXT("InitialBoost"));
+    const double SlopeSpeed = Slope > -Shallow
+        ? ReadSampleModeNumber(*this, TEXT("FlatGroundSpeed"), SlideSettings.FlatGroundSpeed)
+        : MapSampleModeRange(Slope, -Shallow, -Steep,
+            ReadSampleModeNumber(*this, TEXT("ShallowSlopeSpeed"), SlideSettings.ShallowSlopeSpeed),
+            ReadSampleModeNumber(*this, TEXT("SteepSlopeSpeed"), SlideSettings.SteepSlopeSpeed));
+    MaxSpeedOverride = bBoost
+        ? ReadSampleModeNumber(*this, TEXT("InitialBoostSpeed"), SlideSettings.InitialBoostSpeed) : SlopeSpeed;
+    Acceleration = bBoost
+        ? ReadSampleModeNumber(*this, TEXT("InitialBoostAcceleration"), SlideSettings.InitialBoostAcceleration)
+        : ReadSampleModeNumber(*this, TEXT("AfterBoostAcceleration"), SlideSettings.AfterBoostAcceleration);
+    Deceleration = MapSampleModeRange(Slope, Shallow, Steep,
+        ReadSampleModeNumber(*this, TEXT("FlatGroundDeceleration"), SlideSettings.FlatGroundDeceleration),
+        ReadSampleModeNumber(*this, TEXT("SteepSlopeDeceleration"), SlideSettings.SteepSlopeDeceleration));
 
     const double CurrentOffset = (CurrentFacing.Rotator() - DesiredFacing.Rotator()).GetNormalized().Yaw;
     const FQuat Facing = OffsetSampleMoverFacing(DesiredFacing, CurrentOffset, Input);

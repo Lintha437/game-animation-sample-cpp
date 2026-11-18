@@ -94,6 +94,7 @@ MIGRATIONS = (
     "traversal_native_gameplay",
     "cmc_foley_volume",
     "native_animation_notify_instances",
+    "native_mover_modes",
 )
 
 
@@ -127,6 +128,7 @@ def apply_batch(start, checkpoint):
 
 
 def apply(project, engine_root):
+    from retire_reference_movement_modes import retire_movement_mode_packages
     from retire_reference_notify_packages import retire_notify_packages
 
     if project.name != "GameAnimSampleCpp.uproject" or not project.is_file():
@@ -165,7 +167,8 @@ def apply(project, engine_root):
             completed = next_stage
             print(f"Completed {completed}/{len(MIGRATIONS)} stages.", flush=True)
     retired = retire_notify_packages(project)
-    print(f"Reference asset migrations complete. Retired notify packages: {retired}. Logs: {logs}")
+    retired_modes = retire_movement_mode_packages(project)
+    print(f"Reference asset migrations complete. Retired notify packages: {retired}; mode packages: {retired_modes}. Logs: {logs}")
 
 
 def main():
