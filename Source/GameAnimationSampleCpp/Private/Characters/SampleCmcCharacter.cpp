@@ -21,6 +21,7 @@
 #include "Traversal/SampleTraversalComponent.h"
 #include "UObject/StructOnScope.h"
 #include "UObject/UnrealType.h"
+#include "Utilities/SamplePropertyAccess.h"
 
 namespace
 {
@@ -55,23 +56,12 @@ namespace
     int64 ReadEnumValue(const UObject& Owner, FName Name, int64 DefaultValue)
     {
         const FProperty* Property = Owner.GetClass()->FindPropertyByName(Name);
-        if (const FEnumProperty* EnumProperty = CastField<FEnumProperty>(Property))
-        {
-            return EnumProperty->GetUnderlyingProperty()->GetSignedIntPropertyValue(
-                EnumProperty->ContainerPtrToValuePtr<void>(&Owner));
-        }
-        if (const FByteProperty* ByteProperty = CastField<FByteProperty>(Property))
-        {
-            return ByteProperty->GetPropertyValue_InContainer(&Owner);
-        }
-        return DefaultValue;
+        return Property ? SamplePropertyAccess::ReadEnum(*Property, Property->ContainerPtrToValuePtr<void>(&Owner)) : DefaultValue;
     }
 
     bool ReadInputIntent(const UObject& Owner, FName Name)
     {
-        const FStructProperty* InputState = FindFProperty<FStructProperty>(Owner.GetClass(), InputStateName);
-        const FBoolProperty* Intent = InputState ? FindFProperty<FBoolProperty>(InputState->Struct, Name) : nullptr;
-        return Intent && Intent->GetPropertyValue_InContainer(InputState->ContainerPtrToValuePtr<void>(&Owner));
+        return SamplePropertyAccess::ReadStructBool(SamplePropertyAccess::FindStructProperty(Owner, InputStateName), Owner, Name);
     }
 
     int64 ReadGait(const UObject& Owner)
@@ -81,16 +71,7 @@ namespace
 
     void WriteGait(UObject& Owner, int64 Gait)
     {
-        FProperty* Property = Owner.GetClass()->FindPropertyByName(GaitName);
-        if (FEnumProperty* EnumProperty = CastField<FEnumProperty>(Property))
-        {
-            EnumProperty->GetUnderlyingProperty()->SetIntPropertyValue(
-                EnumProperty->ContainerPtrToValuePtr<void>(&Owner), Gait);
-        }
-        else if (FByteProperty* ByteProperty = CastField<FByteProperty>(Property))
-        {
-            ByteProperty->SetPropertyValue_InContainer(&Owner, static_cast<uint8>(Gait));
-        }
+        SamplePropertyAccess::WriteEnumByte(Owner.GetClass(), &Owner, GaitName, static_cast<uint8>(Gait));
     }
 
     double GetActionMagnitude(const UEnhancedInputComponent* Input, const UInputAction* Action)

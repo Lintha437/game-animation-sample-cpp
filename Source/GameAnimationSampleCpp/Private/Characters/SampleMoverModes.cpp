@@ -12,6 +12,7 @@
 #include "MoverSimulationTypes.h"
 #include "UObject/UnrealType.h"
 #include "UserDefinedStructSupport.h"
+#include "Utilities/SamplePropertyAccess.h"
 
 namespace
 {
@@ -51,21 +52,17 @@ namespace
 
     double ReadSampleModeNumber(const UStruct* Type, const void* Data, FName Name)
     {
-        const auto* Field = Type ? FindFProperty<FNumericProperty>(Type, Name) : nullptr;
-        return Field && Field->IsFloatingPoint()
-            ? Field->GetFloatingPointPropertyValue(Field->ContainerPtrToValuePtr<void>(Data)) : 0.0;
+        return SamplePropertyAccess::ReadNumber(Type, Data, Name);
     }
 
     double ReadSampleModeNumber(const UObject& Object, FName Name, double Fallback = 0.0)
     {
-        const auto* Field = FindFProperty<FNumericProperty>(Object.GetClass(), Name);
-        return Field && Field->IsFloatingPoint()
-            ? Field->GetFloatingPointPropertyValue(Field->ContainerPtrToValuePtr<void>(&Object)) : Fallback;
+        return SamplePropertyAccess::ReadNumber(Object.GetClass(), &Object, Name, Fallback);
     }
 
     double ReadSampleModeNumber(const FInstancedStruct* Input, FName Name)
     {
-        return Input ? ReadSampleModeNumber(Input->GetScriptStruct(), Input->GetMemory(), Name) : 0.0;
+        return Input ? SamplePropertyAccess::ReadNumber(Input->GetScriptStruct(), Input->GetMemory(), Name) : 0.0;
     }
 
     int64 ReadSampleModeGait(const FInstancedStruct* Input)
@@ -75,29 +72,17 @@ namespace
             return 0;
         }
         const auto* Field = Input->GetScriptStruct()->FindPropertyByName(TEXT("Gait_5_13BB29FB446593C2412547A541C4C00B"));
-        if (const auto* Byte = CastField<FByteProperty>(Field))
-        {
-            return Byte->GetPropertyValue_InContainer(Input->GetMemory());
-        }
-        if (const auto* Enum = CastField<FEnumProperty>(Field))
-        {
-            return Enum->GetUnderlyingProperty()->GetSignedIntPropertyValue(Enum->ContainerPtrToValuePtr<void>(Input->GetMemory()));
-        }
-        return 0;
+        return Field ? SamplePropertyAccess::ReadEnum(*Field, Field->ContainerPtrToValuePtr<void>(Input->GetMemory())) : 0;
     }
 
     bool ReadSampleModeFlag(const UObject& Object, FName Name, bool bFallback = false)
     {
-        const auto* Field = FindFProperty<FBoolProperty>(Object.GetClass(), Name);
-        return Field ? Field->GetPropertyValue_InContainer(&Object) : bFallback;
+        return SamplePropertyAccess::ReadBool(Object, Name, bFallback);
     }
 
     void SetSampleModeFlag(UObject& Object, FName Name, bool bValue)
     {
-        if (const auto* Field = FindFProperty<FBoolProperty>(Object.GetClass(), Name))
-        {
-            Field->SetPropertyValue_InContainer(&Object, bValue);
-        }
+        SamplePropertyAccess::WriteBool(Object, Name, bValue);
     }
 
     FVector GetSampleFloorNormal(const UMoverComponent* Mover)
